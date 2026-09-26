@@ -19,6 +19,7 @@ The repository contains launcher code, test fixtures, patches, and build recipes
 - [Bundle layout and release procedure](docs/BUNDLING.md)
 - [EA app and NFS (2015)](docs/EA-APP.md)
 - [Current work and verification gates](docs/WORK-PLAN.md)
+- [Delivered build sizes, checksums and verification](docs/VERIFICATION.md)
 - [Compatibility source forks](docs/UPSTREAMS.md)
 
 ## Build the native starter
