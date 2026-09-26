@@ -9,7 +9,7 @@ This is an experimental project. Most Wanted (2005) can reach gameplay with corr
 | Game | Runtime | Current evidence |
 |---|---|---|
 | Most Wanted (2005), PC 1.3 | Wine + x87sidecar + mtld3d (Direct3D 9 to Metal) | Gameplay and analog throttle verified; maximum-quality menu verified; garage additions under investigation |
-| Need for Speed (2015) | Separate EA app prefix + Apple D3DMetal 4.0b2 | EA installation, login, and ownership verified; EA download in progress; game testing pending |
+| Need for Speed (2015) | Separate EA app prefix + Apple D3DMetal 4.0b2 | EA installation, login, and ownership verified; EA download and installation complete; game testing pending |
 
 The repository contains launcher code, test fixtures, patches, and build recipes. Game installations, Wine prefixes, personal saves, EA account data, and Apple runtime binaries are external inputs.
 
