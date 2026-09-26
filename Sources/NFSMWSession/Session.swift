@@ -28,6 +28,7 @@ struct Session {
           "Rosetta is required. Install Rosetta, then reopen Most Wanted.")
       }
       let game = try GameInstaller(paths: paths, manifest: manifest).prepare(
+        importing: mode == "--import-game" ? configuration : nil,
         initializePrefix: preparePrefix)
       try stopServer(prefix: paths.prefix)
       try GuestIsolation.restrict(prefix: paths.prefix, root: paths.support)
@@ -37,7 +38,7 @@ struct Session {
         let action = try JSONDecoder().decode(
           SaveRequest.self, from: BoundedFile.read(configuration, limit: 262_144))
         try SaveStore(paths: paths).perform(action)
-      } else if let configuration {
+      } else if let configuration, mode != "--import-game" {
         settings = try JSONDecoder().decode(
           GameSettings.self, from: BoundedFile.read(configuration, limit: 1_048_576))
         try settings.validate()

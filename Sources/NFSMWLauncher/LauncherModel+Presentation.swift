@@ -41,7 +41,7 @@ extension LauncherModel {
     } catch { return error.localizedDescription }
   }
 
-  var canLaunch: Bool { !phase.isBusy && settingsIssue == nil }
+  var canLaunch: Bool { !phase.isBusy && phase != .needsGameData && settingsIssue == nil }
 
   var careerSummary: String {
     let count = saveEditor.profiles.count

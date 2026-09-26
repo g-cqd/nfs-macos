@@ -35,6 +35,13 @@ struct PlayView: View {
         )
         .font(.caption).foregroundStyle(.secondary)
       }
+      Section("Game data") {
+        Text(
+          "Use your installed Most Wanted (2005) PC 1.3 folder. The app copies the required files and applies its compatibility fixes."
+        )
+        .font(.callout).foregroundStyle(.secondary)
+        Button("Import game data…", action: model.importGameData)
+      }
     }
     .formStyle(.grouped)
   }

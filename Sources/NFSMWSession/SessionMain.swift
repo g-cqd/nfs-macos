@@ -8,11 +8,11 @@ struct SessionMain {
     do {
       let arguments = CommandLine.arguments
       guard [5, 7].contains(arguments.count),
-        ["--prepare", "--play", "--configure", "--save"].contains(arguments[1]),
+        ["--prepare", "--play", "--configure", "--save", "--import-game"].contains(arguments[1]),
         arguments[3] == "--support"
       else {
         throw LauncherError.operation(
-          "Usage: NFSMWSession --prepare|--play|--configure <app> --support <player-folder> [--settings <json>]"
+          "Usage: NFSMWSession <mode> <app> --support <player-folder> [--settings <json> | --save-request <json> | --game-data <folder>]"
         )
       }
       let paths = try AppPaths(
@@ -20,13 +20,18 @@ struct SessionMain {
         support: URL(fileURLWithPath: arguments[4]))
       var configuration: URL?
       if arguments.count == 7 {
-        guard arguments[5] == (arguments[1] == "--save" ? "--save-request" : "--settings") else {
+        let flag =
+          arguments[1] == "--import-game"
+          ? "--game-data" : (arguments[1] == "--save" ? "--save-request" : "--settings")
+        guard arguments[5] == flag else {
           throw LauncherError.operation("Unexpected request argument.")
         }
         configuration = URL(fileURLWithPath: arguments[6])
       }
-      guard !["--configure", "--save"].contains(arguments[1]) || configuration != nil else {
-        throw LauncherError.operation("No settings were provided.")
+      guard
+        !["--configure", "--save", "--import-game"].contains(arguments[1]) || configuration != nil
+      else {
+        throw LauncherError.operation("The request is missing its settings or game-data folder.")
       }
       let result = try Session(paths: paths, output: .standardOutput).run(
         mode: arguments[1], configuration: configuration)

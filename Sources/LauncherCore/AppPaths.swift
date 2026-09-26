@@ -31,6 +31,13 @@ package struct AppPaths {
   package var saves: URL { data.appendingPathComponent("Saves") }
   package var currentGame: URL { data.appendingPathComponent("Current/Game") }
 
+  /// Indicates whether setup can proceed; the session verifies files before installation.
+  package var hasGameData: Bool {
+    [template, currentGame].contains {
+      FileManager.default.fileExists(atPath: $0.appendingPathComponent("speed.exe").path)
+    }
+  }
+
   /// The private working copy for a validated manifest version.
   package func game(version: String) -> URL {
     data.appendingPathComponent("Versions").appendingPathComponent(version).appendingPathComponent(
