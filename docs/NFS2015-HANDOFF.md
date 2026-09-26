@@ -82,9 +82,12 @@ Excluding the observed heap/string hot calls retained 7,404 records spanning
 
 One `Rtl` function returning NTSTATUS, `RtlQueryProcessDebugInformation`,
 returned `0xc000000b` (`STATUS_INVALID_CID`) from caller RVA `0x055d8813`.
-This requires its numeric process-ID input to interpret: Wine's Windows
-conformance test expects this status when given a thread ID. It is unresolved,
-not a demonstrated defect. An `Nt`-name-only failure filter would miss it.
+A subsequent scalar-only capture established that the game passed its thread
+ID (`0x09d0`), while its process ID was `0x09cc`; its mask was `0x14`. Wine's
+Windows conformance test expects this status for a thread ID. This lead is
+therefore ruled out for the observed call. An `Nt`-name-only failure filter
+would have missed the return, so future status analysis must use API contracts.
+The same run then exited `-6` from the known caller.
 
 The separate [address-ceiling probe](../tools/ea-app/Diagnostics/address-probes/README.md)
 passed its valid narrow/wide/narrow comparison with the original runtime.

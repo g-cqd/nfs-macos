@@ -109,3 +109,63 @@ The decoded runtime function at `0x1455d8690` through `0x1455d87b1` checks the B
 The exit return address belongs to a jump chain in transformed code, rather than a nearby ordinary API call followed by a clear error branch. The nonzero breakpoint address is a function entry followed by a jump into transformed code. A memory snapshot does not establish whether the CPU reached that address or whether missing breakpoint delivery caused termination.
 
 This attempt again exited `-6` and launched a successor. The retry chain was stopped, and the original untraced launcher was restored.
+
+## Argument-free API tail collector
+
+`collect-api-tail.py` accepts only the diagnostic relay's `MetaCall` and `MetaRet` records. Ordinary relay output and any line containing API arguments are rejected. The diagnostic Wine build must omit argument formatting at the source; this collector is not a substitute for that build.
+
+The caller supplies a fresh lifecycle file produced by `watch-nfs.exe`. The collector validates its decimal and hexadecimal process IDs, accepts at most 64 NFS IDs, and discards records from every other process. Records arriving before the observer identifies a process are discarded. Use a new lifecycle filename for each run so stale process IDs cannot be mistaken for current ones.
+
+The collector owns an 8 MiB byte ring. It atomically writes at most 1 MiB of recent complete JSONL records on the first exit API call per process and when input closes. The output begins with per-process first/last Wine timestamps and call/return/record counts, plus discarded-line and evicted-record counts. These counters describe the accepted observation interval; they do not claim that every startup call was captured. The parent diagnostic must stop the retry chain and close the stream after the selected attempt.
+
+Run the collector after starting a fresh lifecycle observer, connecting only the argument-free diagnostic relay stream to its input:
+
+```sh
+python3 Diagnostics/collect-api-tail.py \
+  --pid-source Logs/fresh-nfs-lifecycle.txt \
+  --output Logs/nfs-api-tail.jsonl
+```
+
+`check-api-tail.py` was written before implementation. It verifies strict metadata parsing, secret-bearing input rejection, process filtering, observer limits, ring wrapping and eviction, tail retention, and the persisted-size limit. The checks pass. The collector does not start, stop, or modify Wine or the game.
+
+### Metadata experiment result
+
+The tested x64 `ntdll.dll` SHA-256 was `1a8b2c3dd66348431077f3e2ad3f8aec46cc71e2fde7498b04f299a92806d653`. Its synthetic probe preserved the tested return values and emitted no supplied sentinel string. The runtime also contained the previously tested register-state persistence change. Native mapped-file inspection confirmed that NFS loaded this ntdll and D3DMetal from the diagnostic clone.
+
+Wine's process-specific debug syntax enabled relay only for `NFS16.exe`: `-all,NFS16.exe:+relay,NFS16.exe:+pid,NFS16.exe:+timestamp`. Temporary `RelayFromInclude=NFS16.exe;kernel32;kernelbase` retained game calls and the forwarding calls needed to observe NT allocation status. EA and its 32-bit helper had relay disabled. The original relay registry values were restored after the experiment.
+
+The first real NFS process exited `0xfffffffa` after 54,608 milliseconds of observation. Its final call was again `KERNEL32.TerminateProcess`, with return address `0x144bdf5a6`. The collector accepted 1,074,916 records from that process over 54.185 seconds, retained an 8 MiB ring, and persisted 1,017,043 bytes at the first termination call. The persisted tail contains 7,879 records covering the final 0.342 seconds. Early and evicted records are not available for analysis. The collector reached 98.7% CPU in one process sample, so this instrumentation can perturb timing.
+
+The retained sequence establishes these API outcomes:
+
+- Three `NtAllocateVirtualMemory` calls returned success. The retained tail contains neither `STATUS_NO_MEMORY` nor `STATUS_CONFLICTING_ADDRESSES` from an allocation API.
+- File opens and reads immediately before the exception-handler sequence returned success. No file paths or contents were captured.
+- `RtlAddVectoredExceptionHandler` returned a nonzero handle, followed by a successful `VirtualAlloc`.
+- Two helper threads each completed `WaitForSingleObject`, `SuspendThread`, `GetThreadContext`, `SetThreadContext`, a second `GetThreadContext`, `ResumeThread`, and `SetEvent`. Both main-thread `SignalObjectAndWait` calls returned `WAIT_OBJECT_0`.
+- The main thread successfully removed the exception handler and freed the allocation, then successfully called `CreateProcessW` before requesting termination.
+
+The two helper handshakes occurred about six milliseconds apart. The metadata trace does not identify the code executed between them. It does not prove that the nonzero hardware-breakpoint address executed or that a breakpoint exception was delivered. The expected class-7 `NtSetInformationThread` failure remained present. Raw return-register bits must be interpreted using each API's return type; high unused bits in a Boolean return are not an NTSTATUS failure.
+
+The collector was stopped after its first termination snapshot, and the isolated prefix was stopped to prevent another retry. The original untraced EA runtime was then reopened. This experiment found no failing API boundary in the retained interval and did not fix game startup.
+
+### Reduced-volume metadata result
+
+A second capture excluded the heap, string, and critical-section calls that dominated the first tail. It kept context, allocation, protection, thread, process, query, and exception-handler calls. The runtime, process restriction, and collector limits remained the same.
+
+The second capture accepted 95,307 records over 42.038 seconds. Its 1,018,932-byte tail retained 7,404 records spanning 38.024 seconds. The first full process exited `-6` after 42,452 milliseconds of observation, again from return address `0x144bdf5a6`. The collector was stopped at that first exit, and the successor was stopped with the isolated prefix.
+
+All 505 retained `NtAllocateVirtualMemory` returns, four `NtMapViewOfSection` returns, and 150 `NtProtectVirtualMemory` returns indicated success. All 505 corresponding game `VirtualAlloc` returns were nonzero. Of those, 500 came from return address `0x14560324b`; returned addresses included a descending series from `0x7ff001da0000` through `0x7ff000000000`, followed by addresses below `0x200000000`. The trace does not record allocation arguments or prove that every allocated page was accessed.
+
+Among `Nt`-prefixed API returns, the only nonzero NTSTATUS in this retained tail was the already explained `NtSetInformationThread` class-7 result, seen twice. A separate `RtlQueryProcessDebugInformation` return was `STATUS_INVALID_CID` (`0xc000000b`), at timestamp `39617.267`, from game return RVA `0x055d8813`. This API also returns NTSTATUS and must not be omitted from failure analysis merely because its name starts with `Rtl`. Its arguments were not captured, so the trace does not establish whether the process ID was valid or whether this was an intentional invalid-ID query.
+
+The two context-helper handshakes, exception-handler cleanup, successful successor creation, and final termination remained present. The longer interval supplies a specific query boundary to investigate, but it does not establish the cause of termination. It does not exclude a bad value returned inside an output buffer, a missing exception, or a check inside game code.
+
+Afterward, the original relay registry values and untraced EA runtime were restored. All collectors and observers from these two runs were stopped. No new Wine prefix was created. Future disposable probe prefixes must use `tempfile.mkdtemp` inside a private per-session directory with an ownership marker; the installed EA prefix remains exclusively owned by this diagnostic track.
+
+### Debug-query argument check
+
+`collect-debug-query.py` reuses the bounded collector with a parser restricted to five exact scalar signatures: `RtlCreateQueryDebugBuffer`, `RtlQueryProcessDebugInformation`, `RtlDestroyQueryDebugBuffer`, `KERNEL32.TerminateProcess`, and `ntdll.NtTerminateProcess`. Wine's export specifications mark their arguments as integers or pointers, with no string formatting. The parser enforces exact argument counts and widths, rejects every other API and all argument strings, and retains only observer-confirmed NFS process IDs. `check-debug-query.py` failed before implementation and passed afterward; the existing collector checks also remained green.
+
+One run used the original runtime with relay enabled only for these exports and only in NFS. The actual NFS process ID was `0x09cc`, and its main thread ID was `0x09d0`. The trace captured `RtlQueryProcessDebugInformation(0x09d0, 0x14, buffer)`, which returned `STATUS_INVALID_CID`. The first argument was therefore the caller's thread ID, not the game's process ID. Wine's Windows-conformance test expects that status for this invalid-ID case. The preceding buffer allocation succeeded, and buffer destruction returned success.
+
+The game requested the same `-6` exit 24.223 seconds after the query returned. The complete scalar capture retained seven records in 1,352 bytes without eviction. This resolves that query failure as expected invalid-ID behavior; it does not identify the startup failure. The retry chain and collector were stopped, and the normal registry and untraced EA launcher were restored.

@@ -136,8 +136,9 @@ def encoded(record):
 class Collector:
     """Keep NFS metadata and fixed-size counters, discarding every other record."""
 
-    def __init__(self, ring_capacity=RING_LIMIT):
+    def __init__(self, ring_capacity=RING_LIMIT, record_parser=parse_record):
         self.ring = TraceRing(ring_capacity)
+        self.record_parser = record_parser
         self.allowed_pids = set()
         self.stats = {}
         self.exits_snapshotted = set()
@@ -151,7 +152,7 @@ class Collector:
         self.allowed_pids = combined
 
     def feed_line(self, line):
-        record = parse_record(line)
+        record = self.record_parser(line)
         if record is None or record["pid"] not in self.allowed_pids:
             self.discarded_lines += 1
             return False
@@ -198,12 +199,12 @@ def write_snapshot(path, data):
             temporary.unlink(missing_ok=True)
 
 
-def main():
+def main(record_parser=parse_record):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pid-source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    collector = Collector()
+    collector = Collector(record_parser=record_parser)
     next_refresh = 0.0
     while True:
         now = time.monotonic()
