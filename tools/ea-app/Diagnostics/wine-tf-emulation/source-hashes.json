@@ -1,0 +1,26 @@
+{
+  "server/thread.c": {
+    "base": "18217174bd8b4bd2aed734d5a34ea38d7acac558857ca506d9909ad05caa801d",
+    "candidate": "21a409032edeb0fded7bb9dfae02b61f15debef3d33c3b9c5ae31fd7ffe0537b"
+  },
+  "server/thread.h": {
+    "base": "bc1387face1e647a02ed9d00b2a545a16d81ab36454894a92e7585a7b00a098e",
+    "candidate": "1f7e4bf00db75c227d9b9b27ca35e2ac7491254e506b8c9aaa821e059fccd9ba"
+  },
+  "server/mach.c": {
+    "base": "4b4a0cac7a2970b30cc0c908f8c943867167a9adb68d35697873acff5f8477f0",
+    "candidate": "fa45011992b075192b4a813f1282de633e558419a5d9632011b9ca5c618db49e"
+  },
+  "dlls/ntdll/unix/signal_x86_64.c": {
+    "base": "0ca0ee1124c894dbf9bb74c0a1abc97a8a25fec13e04ce80316a260df84062ad",
+    "candidate": "6bbd4727607c76edfcc9b0b40e965ffbb94a5111ba41988309289871bc3df224"
+  },
+  "dlls/ntdll/unix/virtual.c": {
+    "base": "1c160c713825d92333540c6fd8d88d629fdff3a086b74ec635bf13a6397bf10c",
+    "candidate": "4ace654f3599c846489ddbbebf5b208ca43891e6bc7ba6a75cb1d8f3824088e4"
+  },
+  "dlls/ntdll/unix/unix_private.h": {
+    "base": "63260aaced58efdecd48c229b563f851ddea1cb3fff803d453fc9fd5fa0e4629",
+    "candidate": "429b4a148beabedfacbba2499aa26cb243f5e9b1b47fc6d183450bdbb5dc8b8d"
+  }
+}

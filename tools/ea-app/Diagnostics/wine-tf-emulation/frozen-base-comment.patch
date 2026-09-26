@@ -1,0 +1,11 @@
+--- a/server/mach.c
++++ b/server/mach.c
+@@ -191,7 +191,7 @@
+ 
+     if (is_rosetta())
+     {
+-        /* Keep accepted context writes across suspension; this cache does not deliver breakpoint exceptions. */
++        /* Keep accepted context writes across suspension. Rosetta still cannot deliver hardware breakpoints. */
+         switch (context->machine)
+         {
+         case IMAGE_FILE_MACHINE_I386:
