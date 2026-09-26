@@ -11,6 +11,7 @@ final class LauncherModel {
   private(set) var request = 0
   var settings = GameSettings()
   let saveEditor = SaveEditorModel()
+  let rosetta: RosettaSetup
   var tab = "Play"
   var discardConfirmation = false
   private var appliedSettings = GameSettings()
@@ -26,8 +27,10 @@ final class LauncherModel {
 
   init(
     maximumDisplayPreset: @escaping @MainActor () -> ResolutionPreset? = DisplayQuality
-      .maximumPreset
+      .maximumPreset,
+    rosetta: RosettaSetup = RosettaSetup()
   ) {
+    self.rosetta = rosetta
     self.maximumDisplayPreset = maximumDisplayPreset
     displayPreset = maximumDisplayPreset()
   }
@@ -49,6 +52,18 @@ final class LauncherModel {
     var draft: URL?
     var gameData: URL?
     do {
+      if operation == "--install-rosetta" {
+        phase = .installingRosetta
+        await rosetta.install()
+      } else {
+        await rosetta.refresh()
+      }
+      try Task.checkCancellation()
+      guard rosetta.isAvailable else {
+        phase = .needsRosetta
+        return
+      }
+      if ["--install-rosetta", "--refresh-rosetta"].contains(operation) { operation = "--prepare" }
       let home = FileManager.default.homeDirectoryForCurrentUser
       var support = home.appendingPathComponent("Library/Application Support/NFSMW")
       #if DEBUG
@@ -162,6 +177,20 @@ final class LauncherModel {
   }
   func importSetup() { enqueue("--import-setup") }
   func importGameData() { enqueue("--import-game") }
+  func installRosetta() { enqueue("--install-rosetta") }
+  func refreshRosetta() {
+    guard phase == .needsRosetta else { return }
+    enqueue("--refresh-rosetta")
+  }
+
+  func watchApplicationActivation() async {
+    for await _ in NotificationCenter.default.notifications(
+      named: NSApplication.didBecomeActiveNotification
+    ).map({ _ in true }) {
+      guard !Task.isCancelled else { return }
+      refreshRosetta()
+    }
+  }
   func exportSetup() { enqueue("--export-setup") }
   func importSave() { enqueue("--import") }
   func exportSave() { enqueue("--export") }

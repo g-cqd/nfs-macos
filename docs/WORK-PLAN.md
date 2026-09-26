@@ -14,6 +14,10 @@ Failing tests preceded implementation. The complete suite passes 70 tests, inclu
 
 The maximum-quality light-streak startup crash is fixed and its menu was verified. Adding a Porsche still crashes at 0x45d380 despite correct native visual parts. A bounded exception recorder is prepared; investigate the caller before changing more save fields. Keep the production career untouched. Rebuild and audit a candidate app after the import changes; do not label the garage feature or sustained 120 FPS as verified.
 
+## 4. Rosetta onboarding and distribution signing
+
+Both app editions detect missing Rosetta before invoking Wine, offer Apple's installation request, and refresh after installation or app activation. The 75-test Swift suite, release build, strict formatting, Intel-only helper build, and packaging regressions pass. Developer ID signing includes all 51 Mach-O files and the nested Rosetta helper app. A fresh signed-runtime import and Wine setup completed after scoping executable-memory and library-validation exceptions to the two Wine loaders. First-install prompt verification still requires a Mac without Rosetta. Notarization submissions are in progress; the delivery report records their final status.
+
 ## Parallel: Need for Speed (2015)
 
 The isolated EA app is installed and the user signed in. The library confirms ownership. Download through EA after its storage check, then have the user perform the game interaction tests. D3DMetal 4.0b2 is Apple-signed and newest locally available; newest downloadable Apple build is unverified.

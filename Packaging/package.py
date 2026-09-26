@@ -13,6 +13,7 @@ import tarfile
 from widescreen_compat import patched_widescreen
 from game_data import omit_original_data
 from optimize_runtime import optimize
+from rosetta_request import build_rosetta_request
 
 PROJECT = Path(__file__).resolve().parent.parent
 TOOLS = PROJECT.parent
@@ -112,6 +113,7 @@ def main(include_game_data=True):
     clone(binary_dir / "NFSMWLauncher", contents / "MacOS/NFSMWLauncher")
     clone(binary_dir / "NFSMWSession", contents / "Helpers/NFSMWSession")
     clone(TOOLS / "x87sidecar-nfsmw-20260926", contents / "Helpers/x87sidecar")
+    build_rosetta_request(APP)
     wine = contents / "SharedSupport/Wine"
     clone(RUNTIME, wine)
     clone(TOOLS / "wine-cursor-build/loader/wine", wine / "lib/wine/x86_64-unix/wine")
@@ -176,7 +178,7 @@ def main(include_game_data=True):
         gameDataIncluded=include_game_data), indent=2) + "\n")
     info = dict(CFBundleExecutable="NFSMWLauncher", CFBundleIdentifier="local.nfsmw.mac",
         CFBundleName="Most Wanted", CFBundleDisplayName="Need for Speed Most Wanted",
-        CFBundlePackageType="APPL", CFBundleShortVersionString="1.0", CFBundleVersion="4",
+        CFBundlePackageType="APPL", CFBundleShortVersionString="1.0", CFBundleVersion="5",
         LSMinimumSystemVersion="15.0", LSArchitecturePriority=["arm64"], NSHighResolutionCapable=True,
         LSSupportsGameMode=True, LSApplicationCategoryType="public.app-category.racing-games",
         NSHumanReadableCopyright="Unofficial local macOS package. Component notices are included.")

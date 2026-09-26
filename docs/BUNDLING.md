@@ -7,6 +7,7 @@ Most Wanted.app/Contents/
   MacOS/NFSMWLauncher
   Helpers/NFSMWSession
   Helpers/x87sidecar
+  Helpers/Rosetta Request.app
   SharedSupport/Wine/
   Resources/Game/
   Resources/game-manifest.json
@@ -40,6 +41,29 @@ The helper holds a process lock and records the game PID plus kernel start time.
 These external runtime and source archives must exist before full packaging. Keep their origins and hashes in the generated provenance. The supported game executable SHA-256 is `bde12bdd158b7f861078ad4527f5a656f34c6068e4a2120f28044f92f0fa158c`.
 
 The packager copies only the declared game folders, compatibility files, and runtime components. It strips unused renderers, developer headers, static libraries, and tools. It applies the hash-gated WidescreenFix patch, fixes simulation rate at 120, writes per-file hashes, and includes notices and corresponding modified sources. It does not copy personal saves or an existing Wine prefix.
+
+## Rosetta setup
+
+Both editions check Intel execution before preparing or launching Wine. If Rosetta is absent, the Play screen offers **Install Rosetta…** and **Refresh**. Installation opens an Intel-only helper through Launch Services so macOS presents its own installation request. The starter checks again after the request and whenever it becomes active. Cancelling or failing the installation keeps Play disabled and leaves the setup retryable. An external installation is detected by Refresh; no app restart is required.
+
+The helper exits immediately when Rosetta is available. It contains no game data and requests no administrator privileges itself. Tests cover unavailable/available states, external installation, cancellation, failure/retry, and gating Wine. This development Mac already has Rosetta; the actual first-install system dialog still requires verification on a Mac without it.
+
+## Developer ID signing
+
+Pass `--identity` with a valid **Developer ID Application** name or fingerprint to `build.py` or `sign.py`. The default remains ad-hoc signing. Distribution signing uses hardened runtime and secure timestamps, signs nested helpers and apps before the outer bundle, and regenerates runtime hashes after signing.
+
+Only the two Wine executables receive `allow-unsigned-executable-memory` and `disable-library-validation`. Wine must map executable Windows modules without Apple signatures. Without the second exception, the signed build repeatedly faults on denied PE executable mappings during wineboot; the same direct startup completes with the exception. The native starter, session helper and x87sidecar retain library validation and receive no entitlement exceptions. No `get-task-allow`, debugger, or executable-page-protection exception is used.
+
+Notarization uses a Keychain profile, never a password in source or build arguments:
+
+```sh
+xcrun notarytool submit "Build/Most Wanted Import.zip" --keychain-profile nfs-macos --wait
+xcrun stapler staple "Build/Most Wanted Import.app"
+xcrun stapler validate "Build/Most Wanted Import.app"
+spctl --assess --type execute --verbose=2 "Build/Most Wanted Import.app"
+```
+
+Recreate the ZIP, verify its entries, and regenerate SHA-256 after stapling. Check Apple's submission result before labeling a build notarized.
 
 ## Import your game data
 
@@ -83,7 +107,7 @@ The optimizer uses existing LLVM tooling; if `llvm-strip` is absent it keeps PE 
 6. Verify imported saves and current profile mappings. Preserve the user's newest progress before switching sessions.
 7. Archive only the verified candidate with macOS metadata preserved, verify every ZIP entry, compute SHA-256, and label unresolved limits accurately.
 
-The optimized bundled candidate audit passed 1,423 game files, 49 runtime/helper hashes and 50 Mach-O files. The import candidate passed 12 bundled compatibility files and retained all 1,423 inventory entries. The user verified the menu and car with the optimized full runtime after a real-file import. Repeat audits after any binary change. Ad-hoc signing is currently available, Developer ID notarization is not. Game Mode metadata is included, but actual Game Mode activation has not been verified.
+The optimized bundled candidate audit passed 1,423 game files, 49 runtime/helper hashes and 50 Mach-O files. The import candidate passed 12 bundled compatibility files and retained all 1,423 inventory entries. The user verified the menu and car with the optimized full runtime after a real-file import. Repeat audits after any binary change. Developer ID signing is available; see VERIFICATION.md for the notarization status of delivered artifacts. Game Mode metadata is included, but actual Game Mode activation has not been verified.
 
 ## Performance builds
 

@@ -5,10 +5,15 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import struct
 from game_data import bundled_entries
 
 app = Path(sys.argv[1]).resolve()
 assert app.is_dir() and app.suffix == ".app"
+probe = app/'Contents/Helpers/Rosetta Request.app/Contents/MacOS/RosettaRequest'
+with probe.open('rb') as stream:
+    magic, cpu = struct.unpack('<II', stream.read(8))
+assert magic == 0xfeedfacf and cpu == 0x01000007, 'Rosetta request helper must be Intel-only'
 pins = json.loads((app / "Contents/Resources/runtime-files.json").read_text())
 for relative, expected in pins.items():
     assert hashlib.sha256((app / relative).read_bytes()).hexdigest() == expected, relative

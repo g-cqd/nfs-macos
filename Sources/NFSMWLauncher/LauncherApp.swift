@@ -10,6 +10,7 @@ struct LauncherApp: App {
         .task(id: model.request) { await model.launch() }
         .task { await model.watchControllerConnections() }
         .task { await model.watchControllerDisconnections() }
+        .task { await model.watchApplicationActivation() }
     }
     .defaultSize(width: 900, height: 760)
   }

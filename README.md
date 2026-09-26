@@ -32,7 +32,7 @@ xcrun swift build -c release -Xswiftc -warnings-as-errors
 xcrun swift-format lint --strict --recursive Sources Tests
 ```
 
-Packaging also requires Python 3.11 or newer and the pinned external inputs described in [Bundling](docs/BUNDLING.md). A clean source checkout alone does not contain these runtime/game inputs. The app is currently ad-hoc signed, not notarized. Guest drive isolation is implemented; App Sandbox confinement is not enabled.
+Packaging also requires Python 3.11 or newer and the pinned external inputs described in [Bundling](docs/BUNDLING.md). A clean source checkout alone does not contain these runtime/game inputs. Developer ID signing is available with `--identity`; see [Verification](docs/VERIFICATION.md) for delivered notarization status. Guest drive isolation is implemented; App Sandbox confinement is not enabled.
 
 ## Build the complete app or an import edition
 
@@ -41,6 +41,6 @@ python3 Packaging/build.py --game-data bundled --output "Build/Most Wanted Bundl
 python3 Packaging/build.py --game-data import --output "Build/Most Wanted Import.app"
 ```
 
-Each command builds, tests, signs, audits, and creates a verified ZIP with a SHA-256 sidecar. The import edition asks for your supported PC 1.3 game folder on first use. Both use the pinned external assembly inputs documented in [Bundling](docs/BUNDLING.md).
+Each command builds, tests, signs, audits, and creates a verified ZIP with a SHA-256 sidecar. Both editions offer Rosetta installation and recheck automatically when you return to the starter. The import edition asks for your supported PC 1.3 game folder on first use. Both use the pinned external assembly inputs documented in [Bundling](docs/BUNDLING.md).
 
 The current size reduction preserves every original game asset: the full candidate is about 684 MB smaller (15.83%) after removing runtime debug information and a duplicate source archive.

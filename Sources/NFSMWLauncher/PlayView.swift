@@ -5,6 +5,7 @@ struct PlayView: View {
 
   var body: some View {
     Form {
+      if !model.rosetta.isAvailable { RosettaSetupView(model: model) }
       Section {
         VStack(alignment: .leading, spacing: 8) {
           Text("MOST WANTED").font(.largeTitle.bold().italic())
