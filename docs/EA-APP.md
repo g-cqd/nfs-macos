@@ -17,7 +17,7 @@ D3DMetal 4.0b2 is the newest runtime found locally. Apple's current downloadable
 
 EA's login page returned HTTP 200 but drew no content. Chromium's separate GPU process crashed in D3DMetal's `WineSwapchainCallbacks::InitializeForHWND`. Add `--in-process-gpu` for `EADesktop.exe` only, through this Wine bundle's compatibility rule. The sign-in page then rendered correctly. Leave the game's renderer selection separate.
 
-The EA launcher uses a versioned installation directory. Discover the installed `EADesktop.exe` path after EA updates. Keep network tracing disabled before account login. Credentials and verification codes belong in EA's own UI; never commit account logs, cookies, tokens or prefixes.
+The portable launcher follows EA’s stable Windows junction so EA can update its versioned installation directory. See [the launcher and setup note](../tools/ea-app/README.md). Keep network tracing disabled before account login. Credentials and verification codes belong in EA's own UI; never commit account logs, cookies, tokens or prefixes.
 
 ## NFS (2015)
 
