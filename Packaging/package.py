@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Assemble the pinned local installation; never modify its source directories."""
+import argparse
 import hashlib
 import json
 import os
@@ -10,6 +11,8 @@ import shutil
 import subprocess
 import tarfile
 from widescreen_compat import patched_widescreen
+from game_data import omit_original_data
+from optimize_runtime import optimize
 
 PROJECT = Path(__file__).resolve().parent.parent
 TOOLS = PROJECT.parent
@@ -59,7 +62,6 @@ def collect_sources(resources):
         if license_file.exists(): shutil.copyfile(license_file, notices / (name + ".txt"))
     clone(TOOLS / "x87sidecar-src/benchmarks/bench_native_boundary.c", sources / "bench_native_boundary.c")
     clone(PROJECT / "Packaging/WineGameInfo.plist", sources / "WineGameInfo.plist")
-    clone(TOOLS / "diagnostics/cursor-source/wine-d82e36650b0.tar.gz", sources / "wine-d82e36650b0-source.tar.gz")
     clone(TOOLS / "diagnostics/cursor-source/cursor-recovery.patch", sources / "wine-cursor.patch")
     for name in ["LICENSE", "COPYING.LIB", "AUTHORS"]:
         shutil.copyfile(TOOLS / "wine-cursor-src" / name, notices / ("Wine-" + name + ".txt"))
@@ -92,11 +94,11 @@ def collect_sources(resources):
     clone(PROJECT / "Evidence/DependencySources", sources / "Wine-dependencies")
     clone(PROJECT / "Packaging/dependency-sources.json", sources / "dependency-sources.json")
     subprocess.run(["/usr/bin/tar", "-czf", str(sources / "NFSMW-launcher-source.tar.gz"),
-        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
+        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "README.md", "docs", "tools", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
     return revisions
 
 
-def main():
+def main(include_game_data=True):
     if digest(GAME / "speed.exe") != EXE_HASH: raise ValueError("Unexpected game executable")
     if DESTINATION.exists(): raise FileExistsError("Keep or move the previous Build app before packaging again")
     if APP.exists(): raise FileExistsError("Keep or move the previous Build app before packaging again")
@@ -125,6 +127,7 @@ def main():
         if item.name not in {"wine", "wineserver"}: item.unlink()
     for item in wine.rglob("*"):
         if item.is_file() and (item.suffix == ".a" or item.name == ".DS_Store"): item.unlink()
+    (resources / "size-optimization.json").write_text(json.dumps(optimize(wine), indent=2) + "\n")
 
     template = resources / "Game"
     template.mkdir()
@@ -150,7 +153,10 @@ def main():
         if item.is_file():
             entries.append(dict(path=item.relative_to(template).as_posix(), size=item.stat().st_size, sha256=digest(item)))
     version = hashlib.sha256(json.dumps(entries, sort_keys=True).encode()).hexdigest()[:24]
-    (resources / "game-manifest.json").write_text(json.dumps(dict(version=version, gameFiles=entries), indent=2) + "\n")
+    (resources / "game-manifest.json").write_text(json.dumps(dict(version=version, gameFiles=entries,
+        gameDataIncluded=include_game_data), indent=2) + "\n")
+    if not include_game_data:
+        omit_original_data(template, entries)
     defaults = resources / "Defaults"
     defaults.mkdir()
     clone(PROJECT / "Packaging/settings.reg", defaults / "settings.reg")
@@ -166,10 +172,11 @@ def main():
         gameModeOptIn=True, appSandboxEnabled=False, hostDriveMappings=False,
         x87="4048fcf plus exact f80 boundary conversion and empty-tag cache",
         minimumMacOS="15.0", architecture="Apple Silicon with Rosetta", capFPS=120,
-        sustained120FPSVerified=False, personalSavesIncluded=False), indent=2) + "\n")
+        sustained120FPSVerified=False, personalSavesIncluded=False,
+        gameDataIncluded=include_game_data), indent=2) + "\n")
     info = dict(CFBundleExecutable="NFSMWLauncher", CFBundleIdentifier="local.nfsmw.mac",
         CFBundleName="Most Wanted", CFBundleDisplayName="Need for Speed Most Wanted",
-        CFBundlePackageType="APPL", CFBundleShortVersionString="1.0", CFBundleVersion="3",
+        CFBundlePackageType="APPL", CFBundleShortVersionString="1.0", CFBundleVersion="4",
         LSMinimumSystemVersion="15.0", LSArchitecturePriority=["arm64"], NSHighResolutionCapable=True,
         LSSupportsGameMode=True, LSApplicationCategoryType="public.app-category.racing-games",
         NSHumanReadableCopyright="Unofficial local macOS package. Component notices are included.")
@@ -179,4 +186,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--without-game-data", action="store_true",
+                       help="Include the runtime and fixes; import the user's PC game folder on first use")
+    modes.add_argument("--with-game-data", action="store_true", help="Include the complete game (default)")
+    parser.add_argument("--output", type=Path, default=DESTINATION)
+    options = parser.parse_args()
+    DESTINATION = options.output.resolve()
+    if DESTINATION.suffix != ".app": parser.error("--output must end in .app")
+    APP = DESTINATION.parent / ("." + DESTINATION.name + "-assembling")
+    main(include_game_data=not options.without_game_data)

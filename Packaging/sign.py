@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import stat
 import subprocess
+import argparse
 
 PROJECT = Path(__file__).resolve().parent.parent
 APP = PROJECT / "Build/Need for Speed Most Wanted.app"
@@ -13,7 +14,7 @@ MAGIC = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafec
 
 def main():
     subprocess.run(["/usr/bin/tar", "-czf", str(APP / "Contents/Resources/Sources/NFSMW-launcher-source.tar.gz"),
-        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
+        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "README.md", "docs", "tools", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
     code = []
     changes = []
     for path in sorted(APP.rglob("*")):
@@ -55,4 +56,9 @@ def main():
     print("Verified ad-hoc signatures for the app and", len(code), "nested code files")
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("app", nargs="?", type=Path, default=APP)
+    APP = parser.parse_args().app.resolve()
+    if APP.suffix != ".app" or not APP.is_dir(): parser.error("Choose an existing .app")
+    main()
