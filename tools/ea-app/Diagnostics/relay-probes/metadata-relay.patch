@@ -1,0 +1,66 @@
+--- a/dlls/ntdll/relay.c
++++ b/dlls/ntdll/relay.c
+@@ -285,6 +285,8 @@
+         return wine_dbg_sprintf( "%s.%u", data->dllname, data->base + ordinal );
+ }
+ 
++/* The x64 metadata diagnostic never reads argument values or pointed-to strings. */
++#if !defined(__x86_64__)
+ static void trace_string_a( INT_PTR ptr )
+ {
+     if (!IS_INTARG( ptr )) TRACE( "%08Ix %s", ptr, debugstr_a( (char *)ptr ));
+@@ -296,6 +298,8 @@
+     if (!IS_INTARG( ptr )) TRACE( "%08Ix %s", ptr, debugstr_w( (WCHAR *)ptr ));
+     else TRACE( "%08Ix", ptr );
+ }
++
++#endif
+ 
+ #ifdef __i386__
+ 
+@@ -688,33 +692,10 @@
+     struct relay_entry_point *entry_point = data->entry_points + ordinal;
+     unsigned int i;
+ 
+-    TRACE( "\1Call %s(", func_name( data, ordinal ));
+-
+-    for (i = 0; !is_ret_val( arg_types[i] ); i++)
+-    {
+-        switch (arg_types[i])
+-        {
+-        case 's': /* str */
+-            trace_string_a( stack[i] );
+-            break;
+-        case 'w': /* wstr */
+-            trace_string_w( stack[i] );
+-            break;
+-        case 'f': /* float */
+-            TRACE( "%g", *(const float *)&stack[i] );
+-            break;
+-        case 'd': /* double */
+-            TRACE( "%g", *(const double *)&stack[i] );
+-            break;
+-        case 'i': /* long */
+-        default:
+-            TRACE( "%08Ix", stack[i] );
+-            break;
+-        }
+-        if (!is_ret_val( arg_types[i+1] )) TRACE( "," );
+-    }
++    /* Preserve the relay calling convention without formatting argument payloads. */
++    for (i = 0; !is_ret_val( arg_types[i] ); i++) {}
+     *nb_args = i;
+-    TRACE( ") ret=%08Ix\n", stack[-1] );
++    TRACE( "\1MetaCall %s() ret=%08Ix\n", func_name( data, ordinal ), stack[-1] );
+     return entry_point->orig_func;
+ }
+ 
+@@ -724,7 +705,7 @@
+ void WINAPI relay_trace_exit( struct relay_descr *descr, unsigned int idx,
+                               INT_PTR retaddr, INT_PTR retval )
+ {
+-    TRACE( "\1Ret  %s() retval=%08Ix ret=%08Ix\n",
++    TRACE( "\1MetaRet %s() retval=%08Ix ret=%08Ix\n",
+            func_name( descr->private, LOWORD(idx) ), retval, retaddr );
+ }
+ 
