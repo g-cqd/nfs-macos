@@ -1,0 +1,15 @@
+.build/
+Build/
+Evidence/
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+*.app/
+*.zip
+*.dmg
+*.tar.gz
+*.tar.xz
+.env
+Prefix/
+Runtime/

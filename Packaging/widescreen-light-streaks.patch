@@ -1,0 +1,13 @@
+diff --git a/source/NFSMostWanted.WidescreenFix/Resolution.ixx b/source/NFSMostWanted.WidescreenFix/Resolution.ixx
+index cb8a7ff..edbd5ee 100644
+--- a/source/NFSMostWanted.WidescreenFix/Resolution.ixx
++++ b/source/NFSMostWanted.WidescreenFix/Resolution.ixx
+@@ -279,7 +279,7 @@ public:
+             pattern = hook::pattern("89 3D ? ? ? ? 89 3D ? ? ? ? 89 3D ? ? ? ? 89 35 ? ? ? ? 89 3D ? ? ? ? 89 35");
+             injector::MakeNOP(pattern.get_first(), 6, true);
+ 
+-            pattern = hook::pattern("89 35 ? ? ? ? 89 35 ? ? ? ? 89 35 ? ? ? ? 89 35 ? ? ? ? 89 35 ? ? ? ? 89 35 ? ? ? ? 89 35");
++            pattern = hook::pattern("89 35 1C 18 90 00 89 35 08 18 90 00 89 35 28 18 90 00");
+             injector::MakeNOP(pattern.get_first(), 6, true);
+ 
+             pattern = hook::pattern("A1 ? ? ? ? 83 F8 ? 0F 87 ? ? ? ? FF 24 85 ? ? ? ? 8B 44 24 ? 8B 4C 24 ? ? ? ? ? ? ? ? ? ? ? ? ? C2");

@@ -1,0 +1,43 @@
+import Foundation
+
+/// A shell-free child process invocation.
+package struct ProcessCommand {
+  package let executable: URL
+  package let arguments: [String]
+  package let directory: URL
+  package let environment: [String: String]
+
+  package init(executable: URL, arguments: [String], directory: URL, environment: [String: String])
+  {
+    self.executable = executable
+    self.arguments = arguments
+    self.directory = directory
+    self.environment = environment
+  }
+
+  /// Runs on a synchronous helper process, never on the launcher's UI or cooperative executor.
+  /// - Returns: The child's actual exit status.
+  package func run(output: FileHandle, onStart: (Int32) throws(LauncherError) -> Void = { _ in })
+    throws(LauncherError) -> Int32
+  {
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.currentDirectoryURL = directory
+    process.environment = environment
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = output
+    process.standardError = output
+    do { try process.run() } catch {
+      throw .operation(
+        "Could not start \(executable.lastPathComponent): \(error.localizedDescription)")
+    }
+    do { try onStart(process.processIdentifier) } catch {
+      // Keep session ownership until the child exits even if its record could not be written.
+      process.waitUntilExit()
+      throw error
+    }
+    process.waitUntilExit()
+    return process.terminationStatus
+  }
+}

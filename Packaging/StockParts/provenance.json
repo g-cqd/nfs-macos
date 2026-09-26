@@ -1,0 +1,9 @@
+{
+  "captureSHA256": "6bd0c53d2d34ed2f4e2163ed348fdefc12c177a01b5825dcc917c1f36672be41",
+  "records": 101,
+  "partsPerRecord": 139,
+  "globalPartsMD5": "4a6fde28dfb6c0a2792f2a6644604af6",
+  "gameSHA256": "bde12bdd158b7f861078ad4527f5a656f34c6068e4a2120f28044f92f0fa158c",
+  "fixture": "Tests/LauncherCoreTests/Fixtures/stock-capture.csv",
+  "method": "PC 1.3 native FECarRecord_GetType, RideInfo_Init, RideInfo_SetStockParts, RideInfo_GetPart, CarPartDatabase_GetPartIndex"
+}

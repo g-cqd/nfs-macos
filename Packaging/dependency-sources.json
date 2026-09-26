@@ -1,0 +1,95 @@
+[
+  {
+    "name": "gnutls",
+    "urls": [
+      "https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz",
+      "https://www.mirrorservice.org/sites/ftp.gnupg.org/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz"
+    ],
+    "sha256": "ffed8ec1bf09c2426d4f14aae377de4753b53e537d685e604e99a8b16ca9c97e"
+  },
+  {
+    "name": "p11-kit",
+    "urls": [
+      "https://github.com/p11-glue/p11-kit/releases/download/0.26.5/p11-kit-0.26.5.tar.xz"
+    ],
+    "sha256": "f2cc09111e44bf3fea58f023180b33acea90aa82d042d6fbb623fbc5ba033bb7"
+  },
+  {
+    "name": "sdl2-compat",
+    "urls": [
+      "https://github.com/libsdl-org/sdl2-compat/releases/download/release-2.32.70/sdl2-compat-2.32.70.tar.gz"
+    ],
+    "sha256": "998fa62557eb46ffe7e5c3e2c123bc332f7df9d9f593b3ceed88ed1158428a44"
+  },
+  {
+    "name": "sdl3",
+    "urls": [
+      "https://github.com/libsdl-org/SDL/releases/download/release-3.4.14/SDL3-3.4.14.tar.gz"
+    ],
+    "sha256": "30d4aa2b3037718142b32dffd4e72f917ebb6cc5227150e7bb9c45efb2153aeb"
+  },
+  {
+    "name": "libtasn1",
+    "urls": [
+      "https://ftp.gnu.org/gnu/libtasn1/libtasn1-4.21.0.tar.gz",
+      "https://ftp.gnu.org/gnu/libtasn1/libtasn1-4.21.0.tar.gz"
+    ],
+    "sha256": "1d8a444a223cc5464240777346e125de51d8e6abf0b8bac742ac84609167dc87"
+  },
+  {
+    "name": "gettext",
+    "urls": [
+      "https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.gz",
+      "https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.gz"
+    ],
+    "sha256": "85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a"
+  },
+  {
+    "name": "libunistring",
+    "urls": [
+      "https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.2.tar.gz",
+      "https://ftp.gnu.org/gnu/libunistring/libunistring-1.4.2.tar.gz"
+    ],
+    "sha256": "e82664b170064e62331962126b259d452d53b227bb4a93ab20040d846fec01d8"
+  },
+  {
+    "name": "freetype",
+    "urls": [
+      "https://downloads.sourceforge.net/project/freetype/freetype2/2.14.3/freetype-2.14.3.tar.xz",
+      "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz"
+    ],
+    "sha256": "36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f"
+  },
+  {
+    "name": "nettle",
+    "urls": [
+      "https://ftp.gnu.org/gnu/nettle/nettle-4.0.tar.gz",
+      "https://ftp.gnu.org/gnu/nettle/nettle-4.0.tar.gz"
+    ],
+    "sha256": "3addbc00da01846b232fb3bc453538ea5468da43033f21bb345cb1e9073f5094"
+  },
+  {
+    "name": "libpng",
+    "urls": [
+      "https://downloads.sourceforge.net/project/libpng/libpng16/1.6.58/libpng-1.6.58.tar.xz",
+      "https://sourceforge.mirrorservice.org/l/li/libpng/libpng16/1.6.58/libpng-1.6.58.tar.xz"
+    ],
+    "sha256": "28eb403f51f0f7405249132cecfe82ea5c0ef97f1b32c5a65828814ae0d34775"
+  },
+  {
+    "name": "libidn2",
+    "urls": [
+      "https://ftp.gnu.org/gnu/libidn/libidn2-2.3.8.tar.gz",
+      "https://ftpmirror.gnu.org/libidn/libidn2-2.3.8.tar.gz"
+    ],
+    "sha256": "f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a"
+  },
+  {
+    "name": "gmp",
+    "urls": [
+      "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz",
+      "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
+    ],
+    "sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+  }
+]

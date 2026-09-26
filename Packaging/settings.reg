@@ -1,0 +1,53 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\EA Games\Need for Speed Most Wanted]
+"Install Dir"="C:\\NFSMW\\"
+"InstallDir"="C:\\NFSMW\\"
+"Path"="C:\\NFSMW\\"
+"Language"="English US"
+"FirstTime"=dword:00000000
+"g_CarEnvironmentMapEnable"=dword:00000003
+"g_CarEnvironmentMapUpdateData"=dword:00000001
+"g_RoadReflectionEnable"=dword:00000003
+"g_MotionBlurEnable"=dword:00000001
+"g_ParticleSystemEnable"=dword:00000001
+"g_WorldLodLevel"=dword:00000003
+"g_CarLodLevel"=dword:00000001
+"g_OverBrightEnable"=dword:00000001
+"g_FSAALevel"=dword:00000002
+"g_RainEnable"=dword:00000001
+"g_TextureFiltering"=dword:00000002
+"g_RacingResolution"=dword:8690041a
+"g_PerformanceLevel"=dword:00000005
+"g_VSyncOn"=dword:00000000
+"g_ShadowDetail"=dword:00000002
+"g_VisualTreatment"=dword:00000001
+"VERSION"=dword:00000001
+"StreamingInstall"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\EA GAMES\Need for Speed Most Wanted]
+"Install Dir"="C:\\NFSMW"
+"Language"="English"
+"Locale"="en_us"
+"CD Drive"="D:\\"
+"Region"="NA"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Electronic Arts\EA Games\Need for Speed Most Wanted]
+"Install Dir"="C:\\NFSMW"
+"Language"="English"
+"Locale"="en_us"
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders]
+"Personal"="C:\\NFSMWSaves"
+
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders]
+"Personal"="C:\\NFSMWSaves"
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\WineBus]
+"DisableHidraw"=dword:00000001
+
+[HKEY_CURRENT_USER\Software\Wine\Mac Driver]
+"RetinaMode"="N"
+
+[HKEY_CURRENT_USER\Software\Wine]
+"Version"="win10"

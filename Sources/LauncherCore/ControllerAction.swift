@@ -1,0 +1,81 @@
+package struct ControllerAction: Identifiable, Sendable {
+  package let id: String
+  package let title: String
+  package let group: String
+  package let defaultBinding: String
+  private init(_ id: String, _ title: String, _ group: String, _ binding: String) {
+    self.id = id
+    self.title = title
+    self.group = group
+    self.defaultBinding = binding
+  }
+  package static let groups = ["Driving", "Race interface", "Camera", "Menus", "Debug camera"]
+  package static let all: [ControllerAction] = [
+    .init("FRONTENDACTION_UP", "Up", "Menus", "XINPUT_GAMEPAD_DPAD_UP"),
+    .init("FRONTENDACTION_DOWN", "Down", "Menus", "XINPUT_GAMEPAD_DPAD_DOWN"),
+    .init("FRONTENDACTION_LEFT", "Left", "Menus", "XINPUT_GAMEPAD_DPAD_LEFT"),
+    .init("FRONTENDACTION_RIGHT", "Right", "Menus", "XINPUT_GAMEPAD_DPAD_RIGHT"),
+    .init("FRONTENDACTION_UP_ALT", "Up Alt", "Menus", "XINPUT_GAMEPAD_LS_UP"),
+    .init("FRONTENDACTION_DOWN_ALT", "Down Alt", "Menus", "XINPUT_GAMEPAD_LS_DOWN"),
+    .init("FRONTENDACTION_LEFT_ALT", "Left Alt", "Menus", "XINPUT_GAMEPAD_LS_LEFT"),
+    .init("FRONTENDACTION_RIGHT_ALT", "Right Alt", "Menus", "XINPUT_GAMEPAD_LS_RIGHT"),
+    .init("FRONTENDACTION_ACCEPT", "Accept", "Menus", "XINPUT_GAMEPAD_A"),
+    .init("FRONTENDACTION_CANCEL", "Back", "Menus", "XINPUT_GAMEPAD_B"),
+    .init("FRONTENDACTION_RUP", "Rup", "Menus", "XINPUT_GAMEPAD_RS_UP"),
+    .init("FRONTENDACTION_RDOWN", "Rdown", "Menus", "XINPUT_GAMEPAD_RS_DOWN"),
+    .init("FRONTENDACTION_RLEFT", "Rleft", "Menus", "XINPUT_GAMEPAD_RS_LEFT"),
+    .init("FRONTENDACTION_RRIGHT", "Rright", "Menus", "XINPUT_GAMEPAD_RS_RIGHT"),
+    .init("FRONTENDACTION_BUTTON0", "Button0", "Menus", "XINPUT_GAMEPAD_RIGHT_SHOULDER"),
+    .init("FRONTENDACTION_BUTTON1", "Button1", "Menus", "XINPUT_GAMEPAD_LEFT_SHOULDER"),
+    .init("FRONTENDACTION_BUTTON2", "Button2", "Menus", "XINPUT_GAMEPAD_LEFT_THUMB"),
+    .init("FRONTENDACTION_BUTTON3", "Button3", "Menus", "XINPUT_GAMEPAD_RIGHT_THUMB"),
+    .init("FRONTENDACTION_BUTTON4", "Button4", "Menus", "XINPUT_GAMEPAD_X"),
+    .init("FRONTENDACTION_BUTTON5", "Button5", "Menus", "XINPUT_GAMEPAD_Y"),
+    .init("FRONTENDACTION_LTRIGGER", "Ltrigger", "Menus", "XINPUT_GAMEPAD_LT"),
+    .init("FRONTENDACTION_RTRIGGER", "Rtrigger", "Menus", "XINPUT_GAMEPAD_RT"),
+    .init("FRONTENDACTION_START", "Start", "Menus", "XINPUT_GAMEPAD_START"),
+    .init("GAMEACTION_GAS", "Throttle", "Driving", "XINPUT_GAMEPAD_RT"),
+    .init("GAMEACTION_BRAKE", "Brake / reverse", "Driving", "XINPUT_GAMEPAD_LT"),
+    .init("GAMEACTION_STEERLEFT", "Steer left", "Driving", "XINPUT_GAMEPAD_LS_LEFT"),
+    .init("GAMEACTION_STEERRIGHT", "Steer right", "Driving", "XINPUT_GAMEPAD_LS_RIGHT"),
+    .init("GAMEACTION_TURNLEFT", "Turn left", "Driving", "XINPUT_GAMEPAD_LS_LEFT"),
+    .init("GAMEACTION_TURNRIGHT", "Turn right", "Driving", "XINPUT_GAMEPAD_LS_RIGHT"),
+    .init("GAMEACTION_HANDBRAKE", "Handbrake", "Driving", "XINPUT_GAMEPAD_A"),
+    .init("GAMEACTION_NOS", "Nitrous", "Driving", "XINPUT_GAMEPAD_B"),
+    .init("GAMEACTION_GAMEBREAKER", "Speedbreaker", "Driving", "XINPUT_GAMEPAD_X"),
+    .init("GAMEACTION_SHIFTUP", "Shift up", "Driving", "XINPUT_GAMEPAD_RS_UP"),
+    .init("GAMEACTION_SHIFTDOWN", "Shift down", "Driving", "XINPUT_GAMEPAD_RS_DOWN"),
+    .init("GAMEACTION_RESET", "Reset car", "Driving", "XINPUT_GAMEPAD_BACK"),
+    .init("HUDACTION_PAUSEREQUEST", "Pause", "Race interface", "XINPUT_GAMEPAD_START"),
+    .init("HUDACTION_ENGAGE_EVENT", "Enter event", "Race interface", "XINPUT_GAMEPAD_DPAD_UP"),
+    .init("HUDACTION_PAD_LEFT", "World map", "Race interface", "XINPUT_GAMEPAD_DPAD_LEFT"),
+    .init("HUDACTION_PAD_DOWN", "Messages", "Race interface", "XINPUT_GAMEPAD_DPAD_DOWN"),
+    .init("HUDACTION_PAD_RIGHT", "Blacklist", "Race interface", "XINPUT_GAMEPAD_DPAD_RIGHT"),
+    .init("HUDACTION_SKIPNIS", "Skip cinematic", "Race interface", "XINPUT_GAMEPAD_A"),
+    .init("HUDACTION_NEXTSONG", "Next song", "Race interface", "XINPUT_GAMEPAD_RIGHT_THUMB"),
+    .init("CAMERAACTION_CHANGE", "Change camera", "Camera", "XINPUT_GAMEPAD_RIGHT_SHOULDER"),
+    .init("CAMERAACTION_LOOKBACK", "Look behind", "Camera", "XINPUT_GAMEPAD_LEFT_SHOULDER"),
+    .init("CAMERAACTION_DEBUG", "Debug", "Camera", "XINPUT_GAMEPAD_BACK"),
+    .init("DEBUGACTION_DROPCAR", "Dropcar", "Debug camera", "XINPUT_GAMEPAD_START"),
+    .init("DEBUGACTION_MOVE_FORWARD", "Move Forward", "Debug camera", "XINPUT_GAMEPAD_LS_UP"),
+    .init("DEBUGACTION_MOVE_BACK", "Move Back", "Debug camera", "XINPUT_GAMEPAD_LS_DOWN"),
+    .init("DEBUGACTION_MOVE_LEFT", "Move Left", "Debug camera", "XINPUT_GAMEPAD_LS_LEFT"),
+    .init("DEBUGACTION_MOVE_RIGHT", "Move Right", "Debug camera", "XINPUT_GAMEPAD_LS_RIGHT"),
+    .init("DEBUGACTION_MOVE_UP", "Move Up", "Debug camera", "XINPUT_GAMEPAD_RIGHT_SHOULDER"),
+    .init("DEBUGACTION_MOVE_DOWN", "Move Down", "Debug camera", "XINPUT_GAMEPAD_LEFT_SHOULDER"),
+    .init("DEBUGACTION_LOOK_UP", "Look Up", "Debug camera", "XINPUT_GAMEPAD_RS_DOWN"),
+    .init("DEBUGACTION_LOOK_DOWN", "Look Down", "Debug camera", "XINPUT_GAMEPAD_RS_UP"),
+    .init("DEBUGACTION_LOOK_LEFT", "Look Left", "Debug camera", "XINPUT_GAMEPAD_RS_LEFT"),
+    .init("DEBUGACTION_LOOK_RIGHT", "Look Right", "Debug camera", "XINPUT_GAMEPAD_RS_RIGHT"),
+    .init("DEBUGACTION_TURBO", "Turbo", "Debug camera", "XINPUT_GAMEPAD_LT"),
+    .init("DEBUGACTION_SUPER_TURBO", "Super Turbo", "Debug camera", "XINPUT_GAMEPAD_RT"),
+    .init("DEBUGACTION_LOOK_D_UP", "Look D Up", "Debug camera", "XINPUT_GAMEPAD_DPAD_UP"),
+    .init("DEBUGACTION_LOOK_D_DOWN", "Look D Down", "Debug camera", "XINPUT_GAMEPAD_DPAD_DOWN"),
+    .init("DEBUGACTION_LOOK_D_LEFT", "Look D Left", "Debug camera", "XINPUT_GAMEPAD_DPAD_LEFT"),
+    .init("DEBUGACTION_LOOK_D_RIGHT", "Look D Right", "Debug camera", "XINPUT_GAMEPAD_DPAD_RIGHT"),
+    .init("DEBUGACTION_MOVE_D_FORWARD", "Move D Forward", "Debug camera", "XINPUT_GAMEPAD_Y"),
+    .init("DEBUGACTION_MOVE_D_BACK", "Move D Back", "Debug camera", "XINPUT_GAMEPAD_A"),
+    .init("DEBUGACTION_MOVE_D_LEFT", "Move D Left", "Debug camera", "XINPUT_GAMEPAD_X"),
+    .init("DEBUGACTION_MOVE_D_RIGHT", "Move D Right", "Debug camera", "XINPUT_GAMEPAD_B"),
+  ]
+}
