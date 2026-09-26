@@ -21,18 +21,18 @@ SIGNATURES = {
 RECORD = re.compile(
     rb"(\d{1,12}\.\d{3}):([0-9a-fA-F]{4,8}):([0-9a-fA-F]{4,8}):"
     rb"(Call|Ret ) ([A-Za-z0-9_]{1,40}\.[A-Za-z0-9_]{1,80})"
-    rb"\(([0-9a-fA-F,]{0,64})\)(?: retval=([0-9a-fA-F]{1,16}))?"
+    rb"\(([0-9a-fA-F,]{0,84})\)(?: retval=([0-9a-fA-F]{1,16}))?"
     rb" ret=([0-9a-fA-F]{1,16})\r?\n?"
 )
 
 
-def parse_record(line):
-    """Reject every record outside the five scalar signatures and field bounds."""
+def _parse_record(line, signatures):
+    """Reject every record outside a static scalar profile and its field bounds."""
     match = RECORD.fullmatch(line)
     if match is None:
         return None
     api = match[5].decode("ascii")
-    widths = SIGNATURES.get(api)
+    widths = signatures.get(api)
     if widths is None:
         return None
     returned = match[4] == b"Ret "
@@ -59,12 +59,27 @@ def parse_record(line):
     }
 
 
-def main():
+def make_parser(signatures):
+    """Freeze a static profile of numeric argument widths; never dereference them."""
+    profile = dict(signatures)
+    for api, widths in profile.items():
+        if re.fullmatch(r"[A-Za-z0-9_]{1,40}\.[A-Za-z0-9_]{1,80}", api) is None:
+            raise ValueError("Invalid scalar API name")
+        if not 1 <= len(widths) <= 5 or any(width not in (8, 16) for width in widths):
+            raise ValueError("Invalid scalar argument widths")
+        profile[api] = tuple(widths)
+    return lambda line: _parse_record(line, profile)
+
+
+parse_record = make_parser(SIGNATURES)
+
+
+def main(record_parser=parse_record):
     path = Path(__file__).with_name("collect-api-tail.py")
     spec = importlib.util.spec_from_file_location("bounded_api_tail", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.main(record_parser=parse_record)
+    module.main(record_parser=record_parser)
 
 
 if __name__ == "__main__":

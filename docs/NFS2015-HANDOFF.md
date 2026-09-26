@@ -94,3 +94,44 @@ passed its valid narrow/wide/narrow comparison with the original runtime.
 The wider permitted range did not cause allocation failure. Initial controls
 near the address ceiling failed themselves and were inconclusive. No ceiling
 patch was applied to the game runtime.
+
+## Coordinated Rosetta feasibility findings
+
+The **mtld3d-x87 worker** supplied a corrected, reviewed
+[feasibility report and exact probe sources](../tools/ea-app/Diagnostics/rosetta-feasibility/README.md).
+Its stepping matrix passes 27 of 30 boundary cases; all three MOV-SS cases show
+an extra trap compared with Intel’s specified suppression. PUSHFQ observing an
+intentionally set architectural TF is expected behavior, not a Rosetta defect.
+An internal stepping mechanism still needs separate guest-state semantics.
+
+Its executable-page matrix finds one reproducible stale-code case out of four:
+a page initially allocated RW and subsequently executed RWX continues returning
+old code after successful WriteProcessMemory and FlushInstructionCache on two
+warmed, parked threads. A checked RW→RWX transition restores updated execution.
+The current helper tests initial AllocationProtect rather than current Protect
+and does not check its protection-operation results. Our team owns an isolated
+repair and expanded tests; the supplying worker will review a stable snapshot.
+Game relevance remains under investigation. No production fix is claimed.
+
+## Code-write relevance capture
+
+The original-runtime scalar capture retained all 309 accepted records without
+eviction: 154 VirtualProtect calls, 154 successful returns and the same `-6`
+termination. No WriteProcessMemory, NtWriteVirtualMemory, FlushInstructionCache,
+NtFlushInstructionCache or VirtualProtectEx appeared in the selected game and
+Windows forwarding-module scope. Direct stores, direct syscalls, excluded
+modules and events before observer registration remain outside that evidence.
+The standalone write-plus-flush failure is therefore not connected to NFS by
+this capture.
+
+The helper repeatedly requested RWX then RX protection for a 14-byte range near
+termination. Protection requests alone do not prove that code bytes changed.
+The [collector and results](../tools/ea-app/Diagnostics/README.md#code-write-and-instruction-cache-relevance)
+record the exact scope. Original launch settings were restored afterward.
+
+The isolated invalidation repair now passes the four-case execution matrix,
+14 native range checks and 32 controlled API checks under ASan/UBSan. An
+identically rebuilt unpatched runtime reproduces the native failures. The
+candidate preserves mixed current region permissions and reports protection
+errors; independent review remains pending. No game comparison or NFS startup
+fix is claimed.

@@ -2,7 +2,7 @@
 
 ## Files safe to publish
 
-`Launch EA app.command` contains only launcher configuration. Publishable diagnostic files are `Diagnostics/watch-nfs.c`, `Diagnostics/capture-nfs-code.c`, `Diagnostics/filter-context.py`, `Diagnostics/check-context-filter.py`, and `Diagnostics/README.md`. They contain diagnostic source and sanitized findings, without account data. The launcher expects this local layout:
+`Launch EA app.command` contains only launcher configuration. `Diagnostics/` contains the observation tools, bounded trace collectors, regression checks and owned-code probes described in its README. These are publishable source files and sanitized findings, without account data. The launcher expects this local layout:
 
 ```text
 Launch EA app.command

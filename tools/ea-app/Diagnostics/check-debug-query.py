@@ -20,6 +20,23 @@ calls = {
     "ntdll.NtTerminateProcess": "ffffffffffffffff,fffffffa",
 }
 prefix = b"39617.267:05dc:05e0:"
+for profile in ({"bad-name.X": (8,)}, {"valid.X": ()},
+                {"valid.X": (4,)}, {"valid.X": (16,) * 6}):
+    try:
+        module.make_parser(profile)
+    except ValueError:
+        rejected = True
+    else:
+        rejected = False
+    assert rejected, profile
+
+widths = [8, 8]
+profile = {"ntdll.RtlCreateQueryDebugBuffer": widths}
+frozen = module.make_parser(profile)
+widths.clear()
+profile.clear()
+assert frozen(prefix + b"Call ntdll.RtlCreateQueryDebugBuffer(0,0) ret=1\n") is not None
+
 for api, arguments in calls.items():
     call = prefix + f"Call {api}({arguments}) ret=1455d8813\n".encode()
     result = module.parse_record(call)
