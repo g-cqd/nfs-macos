@@ -7,6 +7,7 @@ Most Wanted.app/Contents/
   MacOS/NFSMWLauncher
   Helpers/NFSMWSession
   Helpers/x87sidecar
+  Helpers/Rosetta Request.app
   SharedSupport/Wine/
   Resources/Game/
   Resources/game-manifest.json
@@ -41,6 +42,61 @@ These external runtime and source archives must exist before full packaging. Kee
 
 The packager copies only the declared game folders, compatibility files, and runtime components. It strips unused renderers, developer headers, static libraries, and tools. It applies the hash-gated WidescreenFix patch, fixes simulation rate at 120, writes per-file hashes, and includes notices and corresponding modified sources. It does not copy personal saves or an existing Wine prefix.
 
+## Rosetta setup
+
+Both editions check Intel execution before preparing or launching Wine. If Rosetta is absent, the Play screen offers **Install Rosetta…** and **Refresh**. Installation opens an Intel-only helper through Launch Services so macOS presents its own installation request. The starter checks again after the request and whenever it becomes active. Cancelling or failing the installation keeps Play disabled and leaves the setup retryable. An external installation is detected by Refresh; no app restart is required.
+
+The helper exits immediately when Rosetta is available. It contains no game data and requests no administrator privileges itself. Tests cover unavailable/available states, external installation, cancellation, failure/retry, and gating Wine. This development Mac already has Rosetta; the actual first-install system dialog still requires verification on a Mac without it.
+
+## Developer ID signing
+
+Pass `--identity` with a valid **Developer ID Application** name or fingerprint to `build.py` or `sign.py`. The default remains ad-hoc signing. Distribution signing uses hardened runtime and secure timestamps, signs nested helpers and apps before the outer bundle, and regenerates runtime hashes after signing.
+
+Only the two Wine executables receive `allow-unsigned-executable-memory` and `disable-library-validation`. Wine must map executable Windows modules without Apple signatures. Without the second exception, the signed build repeatedly faults on denied PE executable mappings during wineboot; the same direct startup completes with the exception. The native starter, session helper and x87sidecar retain library validation and receive no entitlement exceptions. No `get-task-allow`, debugger, or executable-page-protection exception is used.
+
+Notarization uses a Keychain profile, never a password in source or build arguments:
+
+```sh
+xcrun notarytool submit "Build/Most Wanted Import.zip" --keychain-profile nfs-macos --wait
+xcrun stapler staple "Build/Most Wanted Import.app"
+xcrun stapler validate "Build/Most Wanted Import.app"
+spctl --assess --type execute --verbose=2 "Build/Most Wanted Import.app"
+```
+
+Recreate the ZIP, verify its entries, and regenerate SHA-256 after stapling. Check Apple's submission result before labeling a build notarized.
+
+## Import your game data
+
+In the starter, open Play and select **Import game data**. Choose an installed Most Wanted (2005) PC 1.3 folder containing `speed.exe`. The current compatibility build accepts the exact asset hashes in its manifest; unsupported executables or modified assets produce an explicit error. ISO images and installer archives must be installed/extracted into a compatible game folder first.
+
+The app copies only required original assets from that folder and uses its own compatibility files. Your source folder and careers remain unchanged. The imported copy remains active on later launches; an app update verifies its original assets again and updates the bundled compatibility files.
+
+## Build either variant
+
+Use Python 3.11 or newer. Both commands run the tests, release build, formatter, packaging regressions, signing, dependency/hash audit, ZIP verification, and SHA-256 generation:
+
+```sh
+python3 Packaging/build.py --game-data bundled --output "Build/Most Wanted Bundled.app"
+python3 Packaging/build.py --game-data import --output "Build/Most Wanted Import.app"
+```
+
+| Mode | Included | First use |
+|---|---|---|
+| `bundled` | Whole game, Wine, mtld3d, x87sidecar, launcher, compatibility files, notices and sources | Prepare the player folder and play |
+| `import` | Same runtime, launcher and fixes; no original game assets | Select **Import game data…** and choose the supported PC installation |
+
+Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Choose an unused output name; previous builds are preserved. The low-level `package.py` also accepts `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
+
+Both modes currently need the pinned local assembly inputs above, including the source game installation used to generate the complete import inventory. The import variant retains that inventory but omits the original payload. Builds do not include personal careers or an existing Wine prefix.
+
+## Bundle size reduction
+
+The release packager removes PE debug information with `llvm-strip --strip-debug` only after checking that the Wine marker, entry point, runtime section contents/addresses/flags, and non-debug data directories match. A failed comparison keeps the original file. Separate PDB/dSYM artifacts and a redundant unmodified Wine source archive are omitted; the corresponding modified Wine source remains included. Original runtime/source/debug working directories are untouched.
+
+On the 2026-09-26 candidate, the Wine payload changed from **1,085,198,699 to 454,360,344 bytes**. Debug information was removed from **1,531 PE files**. The full signed app changed from **4,323,756,750 to 3,639,192,107 bytes**, a **684,564,643-byte (15.83%)** reduction. These measurements compare the previous app with the import-enabled candidate before final documentation refresh. All **1,411 original game files** have identical sizes and SHA-256 hashes. No rendering or frame-rate improvement is claimed from this change.
+
+The optimizer uses existing LLVM tooling; if `llvm-strip` is absent it keeps PE debug information and reports that fact. It does not remove textures, movies, languages, cars, or tracks.
+
 ## Release procedure
 
 1. Run Swift Testing, the WidescreenFix regression, strict concurrency/warnings-as-errors build, and formatting checks.
@@ -51,7 +107,7 @@ The packager copies only the declared game folders, compatibility files, and run
 6. Verify imported saves and current profile mappings. Preserve the user's newest progress before switching sessions.
 7. Archive only the verified candidate with macOS metadata preserved, verify every ZIP entry, compute SHA-256, and label unresolved limits accurately.
 
-Previous bundle audits passed 1,423 game files, 51 runtime/helper hashes and 52 Mach-O files. Those results apply to those builds only; repeat after any binary change. Ad-hoc signing is currently available, Developer ID notarization is not. Game Mode metadata is included, but actual Game Mode activation has not been verified.
+The optimized bundled candidate audit passed 1,423 game files, 49 runtime/helper hashes and 50 Mach-O files. The import candidate passed 12 bundled compatibility files and retained all 1,423 inventory entries. The user verified the menu and car with the optimized full runtime after a real-file import. Repeat audits after any binary change. Developer ID signing is available; see VERIFICATION.md for the notarization status of delivered artifacts. Game Mode metadata is included, but actual Game Mode activation has not been verified.
 
 ## Performance builds
 

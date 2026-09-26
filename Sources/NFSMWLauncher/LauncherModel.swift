@@ -11,6 +11,7 @@ final class LauncherModel {
   private(set) var request = 0
   var settings = GameSettings()
   let saveEditor = SaveEditorModel()
+  let rosetta: RosettaSetup
   var tab = "Play"
   var discardConfirmation = false
   private var appliedSettings = GameSettings()
@@ -26,8 +27,10 @@ final class LauncherModel {
 
   init(
     maximumDisplayPreset: @escaping @MainActor () -> ResolutionPreset? = DisplayQuality
-      .maximumPreset
+      .maximumPreset,
+    rosetta: RosettaSetup = RosettaSetup()
   ) {
+    self.rosetta = rosetta
     self.maximumDisplayPreset = maximumDisplayPreset
     displayPreset = maximumDisplayPreset()
   }
@@ -47,7 +50,20 @@ final class LauncherModel {
   func launch() async {
     phase = operation == "--play" ? .playing : .preparing
     var draft: URL?
+    var gameData: URL?
     do {
+      if operation == "--install-rosetta" {
+        phase = .installingRosetta
+        await rosetta.install()
+      } else {
+        await rosetta.refresh()
+      }
+      try Task.checkCancellation()
+      guard rosetta.isAvailable else {
+        phase = .needsRosetta
+        return
+      }
+      if ["--install-rosetta", "--refresh-rosetta"].contains(operation) { operation = "--prepare" }
       let home = FileManager.default.homeDirectoryForCurrentUser
       var support = home.appendingPathComponent("Library/Application Support/NFSMW")
       #if DEBUG
@@ -59,6 +75,18 @@ final class LauncherModel {
         bundle: Bundle.main.bundleURL,
         support: support)
       self.paths = paths
+      if operation == "--prepare", !paths.hasGameData {
+        phase = .needsGameData
+        return
+      }
+      if operation == "--import-game" {
+        guard let selected = await readGameDataFolder() else {
+          phase = paths.hasGameData ? .finished : .needsGameData
+          return
+        }
+        try Task.checkCancellation()
+        gameData = selected
+      }
       if operation == "--import-setup" {
         if let imported = try await readSetupProfile() { settings = imported }
         phase = .finished
@@ -90,7 +118,7 @@ final class LauncherModel {
       try Data().write(to: logURL, options: .withoutOverwriting)
       let log = try FileHandle(forWritingTo: logURL)
       defer { do { try log.close() } catch { print("Could not close the launch log: \(error)") } }
-      if operation != "--prepare" {
+      if operation != "--prepare", operation != "--import-game" {
         let url = paths.support.appendingPathComponent("settings-request-\(UUID().uuidString).json")
         if operation == "--save", let saveRequest {
           try JSONEncoder().encode(saveRequest).write(to: url, options: .atomic)
@@ -101,18 +129,18 @@ final class LauncherModel {
         draft = url
       }
       let status = try await runSession(
-        paths: paths, mode: operation, configuration: draft, output: log)
+        paths: paths, mode: operation, configuration: gameData ?? draft, output: log)
       guard !Task.isCancelled else { return }
       guard status == 0 else { throw failure(status: status) }
       let snapshot = try JSONDecoder().decode(
         LauncherSnapshot.self,
         from: BoundedFile.read(paths.support.appendingPathComponent("launcher-state.json")))
-      if operation != "--save" {
+      if operation != "--save", operation != "--import-game" {
         settings = snapshot.settings
         appliedSettings = snapshot.settings
       }
       saveEditor.load(snapshot.profiles)
-      if operation != "--save" {
+      if operation != "--save", operation != "--import-game" {
         mappings = snapshot.mappings
       } else {
         mappings.merge(snapshot.mappings) { existing, _ in existing }
@@ -148,6 +176,21 @@ final class LauncherModel {
       || !settings.mappingEdits.isEmpty
   }
   func importSetup() { enqueue("--import-setup") }
+  func importGameData() { enqueue("--import-game") }
+  func installRosetta() { enqueue("--install-rosetta") }
+  func refreshRosetta() {
+    guard phase == .needsRosetta else { return }
+    enqueue("--refresh-rosetta")
+  }
+
+  func watchApplicationActivation() async {
+    for await _ in NotificationCenter.default.notifications(
+      named: NSApplication.didBecomeActiveNotification
+    ).map({ _ in true }) {
+      guard !Task.isCancelled else { return }
+      refreshRosetta()
+    }
+  }
   func exportSetup() { enqueue("--export-setup") }
   func importSave() { enqueue("--import") }
   func exportSave() { enqueue("--export") }
@@ -311,7 +354,9 @@ final class LauncherModel {
     process.arguments = [mode, paths.bundle.path, "--support", paths.support.path]
     if let configuration {
       process.arguments?.append(contentsOf: [
-        mode == "--save" ? "--save-request" : "--settings", configuration.path,
+        mode == "--import-game"
+          ? "--game-data" : (mode == "--save" ? "--save-request" : "--settings"),
+        configuration.path,
       ])
     }
     process.currentDirectoryURL = paths.bundle.deletingLastPathComponent()

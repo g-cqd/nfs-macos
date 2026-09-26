@@ -1,4 +1,3 @@
-import CryptoKit
 import Darwin
 import Foundation
 
@@ -14,16 +13,41 @@ package struct GameInstaller {
   }
 
   /// Must run while holding the session lock, on the synchronous session helper.
+  /// - Parameter source: An installed PC folder to verify and copy; nil retains the current origin.
   /// - Parameter initializePrefix: Initializes the unpublished prefix; must stop its Wine server before returning.
   /// - Returns: The verified generation's working directory.
   /// - Throws: A preparation failure; existing saves and the active generation remain available.
   /// - Complexity: O(payload bytes) for a new generation, O(1) for an existing generation.
-  package func prepare(initializePrefix: (URL) throws -> Void) throws(LauncherError) -> URL {
+  package func prepare(importing source: URL? = nil, initializePrefix: (URL) throws -> Void)
+    throws(LauncherError) -> URL
+  {
     do {
       try manifest.validate()
       try files.createDirectory(at: paths.support, withIntermediateDirectories: true)
+      let current = try currentGeneration()
+      if let current, source == nil, current.metadata.bundleVersion == manifest.version {
+        guard files.fileExists(atPath: current.game.appendingPathComponent("speed.exe").path),
+          files.fileExists(atPath: paths.prefix.path), files.fileExists(atPath: paths.saves.path)
+        else {
+          throw LauncherError.operation(
+            "Player data is incomplete. Keep this folder and check the session log.")
+        }
+        return current.game
+      }
+      let originalData = source ?? (current?.metadata.imported == true ? current?.game : nil)
+      if let originalData {
+        let values = try originalData.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard originalData.isFileURL, values.isDirectory == true, values.isSymbolicLink != true
+        else {
+          throw LauncherError.operation(
+            "Select an installed Most Wanted PC folder, without symbolic links.")
+        }
+      }
+      let origin = originalData?.standardizedFileURL.resolvingSymlinksInPath()
+      let version = origin == nil ? manifest.version : "import-" + UUID().uuidString
+      let metadata = GameGeneration(bundleVersion: manifest.version, imported: origin != nil)
       if !files.fileExists(atPath: paths.data.path) {
-        try initialize(initializePrefix)
+        try initialize(version: version, originalData: origin, metadata: metadata, initializePrefix)
       } else {
         guard files.fileExists(atPath: paths.prefix.path),
           files.fileExists(atPath: paths.saves.path)
@@ -31,26 +55,29 @@ package struct GameInstaller {
           throw LauncherError.operation(
             "Player data is incomplete. Keep this folder and check the session log.")
         }
-        try updateGeneration()
+        try updateGeneration(version: version, originalData: origin, metadata: metadata)
       }
-      return paths.game(version: manifest.version)
+      return paths.game(version: version)
     } catch let error as LauncherError { throw error } catch {
       throw .operation("Could not prepare the game: \(error.localizedDescription)")
     }
   }
 
-  private func initialize(_ initializePrefix: (URL) throws -> Void) throws {
+  private func initialize(
+    version: String, originalData: URL?, metadata: GameGeneration,
+    _ initializePrefix: (URL) throws -> Void
+  ) throws {
     let stage = paths.support.appendingPathComponent(".preparing")
     if files.fileExists(atPath: stage.path) { try files.removeItem(at: stage) }
     try files.createDirectory(at: stage, withIntermediateDirectories: false)
     do {
-      let game = stage.appendingPathComponent("Versions/\(manifest.version)/Game")
-      try copyVerifiedGame(to: game)
+      let game = stage.appendingPathComponent("Versions/\(version)/Game")
+      try copyVerifiedGame(to: game, originalData: originalData, metadata: metadata)
       try files.createDirectory(
         at: stage.appendingPathComponent("Saves"), withIntermediateDirectories: false)
       try files.createSymbolicLink(
         atPath: stage.appendingPathComponent("Current").path,
-        withDestinationPath: "Versions/\(manifest.version)")
+        withDestinationPath: "Versions/\(version)")
       let prefix = stage.appendingPathComponent("Prefix")
       try initializePrefix(prefix)
       try files.createDirectory(
@@ -70,26 +97,17 @@ package struct GameInstaller {
     }
   }
 
-  private func updateGeneration() throws {
-    let generation = paths.game(version: manifest.version).deletingLastPathComponent()
+  private func updateGeneration(version: String, originalData: URL?, metadata: GameGeneration)
+    throws
+  {
+    let generation = paths.game(version: version).deletingLastPathComponent()
     let current = paths.data.appendingPathComponent("Current")
-    let existingTarget = try files.destinationOfSymbolicLink(atPath: current.path)
-    guard existingTarget.hasPrefix("Versions/"), existingTarget.split(separator: "/").count == 2
-    else {
-      throw LauncherError.operation("The active game generation is invalid.")
-    }
-    if existingTarget == "Versions/\(manifest.version)" {
-      guard files.fileExists(atPath: generation.appendingPathComponent("Game/speed.exe").path)
-      else {
-        throw LauncherError.operation("The installed game executable is missing.")
-      }
-      return
-    }
     if !files.fileExists(atPath: generation.path) {
       let stage = paths.data.appendingPathComponent("Versions/.preparing")
       if files.fileExists(atPath: stage.path) { try files.removeItem(at: stage) }
       do {
-        try copyVerifiedGame(to: stage.appendingPathComponent("Game"))
+        try copyVerifiedGame(
+          to: stage.appendingPathComponent("Game"), originalData: originalData, metadata: metadata)
         for name in [
           "mtld3d.conf", "scripts/NFS_XtendedInput.ini", "scripts/NFSMostWanted.WidescreenFix.ini",
           "scripts/XtendedInputMaps",
@@ -114,7 +132,7 @@ package struct GameInstaller {
     }
     let link = paths.data.appendingPathComponent(".current-\(UUID().uuidString)")
     try files.createSymbolicLink(
-      atPath: link.path, withDestinationPath: "Versions/\(manifest.version)")
+      atPath: link.path, withDestinationPath: "Versions/\(version)")
     // Both paths share a parent; rename publishes one complete generation atomically.
     guard rename(link.path, current.path) == 0 else {
       let code = errno
@@ -123,38 +141,42 @@ package struct GameInstaller {
     }
   }
 
-  private func copyVerifiedGame(to destination: URL) throws {
-    try files.createDirectory(at: destination, withIntermediateDirectories: true)
-    for file in manifest.gameFiles {
-      let source = paths.template.appendingPathComponent(file.path)
-      let values = try source.resourceValues(forKeys: [
-        .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
-      ])
-      guard values.isRegularFile == true, values.isSymbolicLink != true,
-        values.fileSize == file.size,
-        source.resolvingSymlinksInPath().path.hasPrefix(paths.template.path + "/")
-      else {
-        throw LauncherError.operation("Missing or invalid game file: \(file.path)")
-      }
-      let target = destination.appendingPathComponent(file.path)
-      try files.createDirectory(
-        at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try files.copyItem(at: source, to: target)
-      guard try digest(of: target) == file.sha256 else {
-        throw LauncherError.operation("Game file verification failed: \(file.path)")
-      }
+  private func currentGeneration() throws -> (game: URL, metadata: GameGeneration)? {
+    guard files.fileExists(atPath: paths.data.path) else { return nil }
+    let target = try files.destinationOfSymbolicLink(
+      atPath: paths.data.appendingPathComponent("Current").path)
+    try ManifestFile.validate(path: target)
+    let components = target.split(separator: "/")
+    guard components.count == 2, components[0] == "Versions" else {
+      throw LauncherError.operation("The active game generation is invalid.")
     }
+    let name = String(components[1])
+    let game = paths.game(version: name)
+    guard game.resolvingSymlinksInPath().path == game.standardizedFileURL.path else {
+      throw LauncherError.operation("The active game generation contains a symbolic link.")
+    }
+    let metadataURL = game.deletingLastPathComponent().appendingPathComponent("origin.json")
+    let metadata: GameGeneration
+    if files.fileExists(atPath: metadataURL.path) {
+      metadata = try JSONDecoder().decode(
+        GameGeneration.self, from: BoundedFile.read(metadataURL, limit: 4096))
+    } else {
+      metadata = GameGeneration(bundleVersion: name, imported: false)
+    }
+    return (game, metadata)
   }
 
-  private func digest(of url: URL) throws -> String {
-    let handle = try FileHandle(forReadingFrom: url)
-    defer {
-      do { try handle.close() } catch { print("Could not close verification input: \(error)") }
+  private func copyVerifiedGame(to destination: URL, originalData: URL?, metadata: GameGeneration)
+    throws
+  {
+    try files.createDirectory(at: destination, withIntermediateDirectories: true)
+    for file in manifest.gameFiles {
+      let root =
+        GameDataFiles.contains(file.path) ? (originalData ?? paths.template) : paths.template
+      try VerifiedGameFile.copy(file, from: root, to: destination.appendingPathComponent(file.path))
     }
-    var hash = SHA256()
-    while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
-      hash.update(data: data)
-    }
-    return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    try JSONEncoder().encode(metadata).write(
+      to: destination.deletingLastPathComponent().appendingPathComponent("origin.json"),
+      options: .withoutOverwriting)
   }
 }

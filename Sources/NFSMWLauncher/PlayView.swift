@@ -5,12 +5,20 @@ struct PlayView: View {
 
   var body: some View {
     Form {
+      if !model.rosetta.isAvailable { RosettaSetupView(model: model) }
       Section {
         VStack(alignment: .leading, spacing: 8) {
           Text("MOST WANTED").font(.largeTitle.bold().italic())
           Text("Pick up your career. Make the next race yours.").foregroundStyle(.secondary)
         }
         .padding(.vertical, 12)
+      }
+      Section("Game data") {
+        Text(
+          "Use your installed Most Wanted (2005) PC 1.3 folder. The app copies the required files and applies its compatibility fixes."
+        )
+        .font(.callout).foregroundStyle(.secondary)
+        Button("Import game data…", action: model.importGameData)
       }
       Section("Next launch") {
         LabeledContent("Display", value: model.displaySummary)
@@ -35,6 +43,7 @@ struct PlayView: View {
         )
         .font(.caption).foregroundStyle(.secondary)
       }
+
     }
     .formStyle(.grouped)
   }

@@ -5,15 +5,21 @@ import json
 from pathlib import Path
 import stat
 import subprocess
+import argparse
+import plistlib
+import tempfile
+from signing_policy import resolve_identity, executable_entitlements
 
 PROJECT = Path(__file__).resolve().parent.parent
 APP = PROJECT / "Build/Need for Speed Most Wanted.app"
 MAGIC = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafeca"]}
 
 
-def main():
+def main(identity='-'):
+    listing = subprocess.check_output(['/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning'], text=True) if identity != '-' else ''
+    identity = resolve_identity(identity, listing)
     subprocess.run(["/usr/bin/tar", "-czf", str(APP / "Contents/Resources/Sources/NFSMW-launcher-source.tar.gz"),
-        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
+        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "README.md", "docs", "tools", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
     code = []
     changes = []
     for path in sorted(APP.rglob("*")):
@@ -40,19 +46,39 @@ def main():
                 raise ValueError("External library dependency: " + dependency)
 
     subprocess.run(["/usr/bin/xattr", "-cr", str(APP)], check=True)
+    def sign(path):
+        command = ['/usr/bin/codesign', '--force', '--sign', identity]
+        command += ['--timestamp=none'] if identity == '-' else ['--options', 'runtime', '--timestamp']
+        entitlements = executable_entitlements(path.relative_to(APP).as_posix()) if path != APP else {}
+        if identity != '-' and entitlements:
+            with tempfile.NamedTemporaryFile(suffix='.plist') as temporary:
+                temporary.write(plistlib.dumps(entitlements)); temporary.flush()
+                subprocess.run(command + ['--entitlements', temporary.name, str(path)], check=True)
+        else:
+            subprocess.run(command + [str(path)], check=True)
     for path in code:
         if path.parent == APP / "Contents/MacOS": continue
-        subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(path)], check=True)
+        sign(path)
+    for nested in sorted(APP.rglob('*.app'), key=lambda path: len(path.parts), reverse=True):
+        if nested.is_dir(): sign(nested)
     pins = {}
     for path in code:
         if path.parent == APP / "Contents/MacOS": continue
         with path.open("rb") as stream: pins[str(path.relative_to(APP))] = hashlib.file_digest(stream, "sha256").hexdigest()
     (APP / "Contents/Resources/runtime-files.json").write_text(json.dumps(pins, indent=2) + "\n")
-    subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(APP)], check=True)
+    sign(APP)
     subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(APP)], check=True)
     (PROJECT / "Evidence/signing.json").write_text(json.dumps(dict(
-        signature="ad-hoc", notarized=False, nestedCodeCount=len(code), removedSearchPaths=changes), indent=2) + "\n")
-    print("Verified ad-hoc signatures for the app and", len(code), "nested code files")
+        signature="ad-hoc" if identity == '-' else 'Developer ID', notarized=False,
+        hardenedRuntime=identity != '-', nestedCodeCount=len(code), removedSearchPaths=changes), indent=2) + "\n")
+    print("Verified", 'ad-hoc' if identity == '-' else 'Developer ID', "signatures for the app and", len(code), "nested code files")
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("app", nargs="?", type=Path, default=APP)
+    parser.add_argument('--identity', default='-', help='Developer ID Application name or SHA-1; default is ad-hoc')
+    options = parser.parse_args()
+    APP = options.app.resolve()
+    if APP.suffix != ".app" or not APP.is_dir(): parser.error("Choose an existing .app")
+    main(options.identity)

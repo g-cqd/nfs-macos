@@ -5,9 +5,15 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import struct
+from game_data import bundled_entries
 
 app = Path(sys.argv[1]).resolve()
 assert app.is_dir() and app.suffix == ".app"
+probe = app/'Contents/Helpers/Rosetta Request.app/Contents/MacOS/RosettaRequest'
+with probe.open('rb') as stream:
+    magic, cpu = struct.unpack('<II', stream.read(8))
+assert magic == 0xfeedfacf and cpu == 0x01000007, 'Rosetta request helper must be Intel-only'
 pins = json.loads((app / "Contents/Resources/runtime-files.json").read_text())
 for relative, expected in pins.items():
     assert hashlib.sha256((app / relative).read_bytes()).hexdigest() == expected, relative
@@ -35,12 +41,15 @@ for path in app.rglob("*"):
             report["developmentRpaths"].append(lines[index + 2].strip())
 assert not any(report[key] for key in ["externalDependencies", "externalLinks", "developmentRpaths"]), report
 manifest = json.loads((app / "Contents/Resources/game-manifest.json").read_text())
-for entry in manifest["gameFiles"]:
+entries = bundled_entries(manifest)
+for entry in entries:
     path = app / "Contents/Resources/Game" / entry["path"]
     assert path.stat().st_size == entry["size"], entry["path"]
     with path.open("rb") as stream: checksum = hashlib.file_digest(stream, "sha256").hexdigest()
     assert checksum == entry["sha256"], entry["path"]
-report["verifiedGameFiles"] = len(manifest["gameFiles"])
+report["verifiedGameFiles"] = len(entries)
+report["gameDataIncluded"] = manifest.get("gameDataIncluded", True)
+report["importInventoryFiles"] = len(manifest["gameFiles"])
 report["gameVersion"] = manifest["version"]
 subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)], check=True)
 print(json.dumps(report, indent=2))
