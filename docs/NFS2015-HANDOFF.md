@@ -133,5 +133,38 @@ The isolated invalidation repair now passes the four-case execution matrix,
 14 native range checks and 32 controlled API checks under ASan/UBSan. An
 identically rebuilt unpatched runtime reproduces the native failures. The
 candidate preserves mixed current region permissions and reports protection
-errors; independent review remains pending. No game comparison or NFS startup
-fix is claimed.
+errors. Independent review found no blocking defect in the production helper
+within its documented stable-layout scope. The [patch, portable contract tests
+and native probes](../tools/ea-app/Diagnostics/wine-invalidation/README.md) are
+retained with attribution and exact hashes. A separate cross-process probe
+passes five checks on the candidate; the original executes stale code.
+
+## Rebuilt-runtime integration remains unresolved
+
+EA did not create the full NFS process during the invalidation-candidate trial.
+The matching unpatched rebuild also failed to create it: no full game was seen
+at 183 seconds, and the actual stop occurred at 209 seconds. The original
+runtime launched NFS again, which exited `-6`. Both rebuilds retained the
+original PE ntdll and the previously tested register-state wineserver.
+
+This does not isolate the invalidation patch as the cause of the failed
+handoff. The candidate kept EA at “Launching game”; the unpatched rebuild
+returned EA to Home. Neither produced a full-game exit comparison. The
+[detailed launch record](../tools/ea-app/Diagnostics/README.md#reviewed-invalidation-candidate-and-original-control)
+distinguishes observed exits from deliberately stopped successor processes.
+The original EA runtime and registry were restored, and the private control
+runtime was removed after its processes stopped.
+
+The user requested a separate latest-Wine comparison. As checked on September
+26, 2026, [WineHQ](https://www.winehq.org/) lists Wine 11.18 as the latest
+development release, published September 18. The isolated track uses the
+[Gcenx macOS build](https://github.com/Gcenx/macOS_Wine_builds/releases/tag/11.18),
+with its release asset digest verified before extraction. Both Wine and
+wineserver report 11.18. A fresh-prefix smoke test is in progress.
+
+The shipped winemac library does not export the private window/Metal APIs that
+the inspected DXMT renderer expects. A compatible D3D11 integration is still
+required before the game comparison. Current mtld3d handles D3D8/9. No NFS
+startup success is claimed. At the user's request, a separate Astra agent is
+reviewing the evidence and coordinating bounded startup profiling with the EA
+launch owner.

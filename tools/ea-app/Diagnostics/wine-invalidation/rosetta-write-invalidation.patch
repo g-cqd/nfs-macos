@@ -1,0 +1,72 @@
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -6840,26 +6840,43 @@
+  * toggle the executable bit (from inside the target process) on/off for any executable
+  * pages that were modified, to force Rosetta to re-translate it.
+  */
+-static void toggle_executable_pages_for_rosetta( HANDLE process, void *addr, SIZE_T size )
++static NTSTATUS toggle_executable_pages_for_rosetta( HANDLE process, void *addr, SIZE_T size )
+ {
+     MEMORY_BASIC_INFORMATION info;
++    ULONG_PTR cursor = (ULONG_PTR)addr, region_base;
+     NTSTATUS status;
+-    SIZE_T ret;
++    SIZE_T ret, region_size;
+ 
+-    if (!is_apple_silicon())
+-        return;
++    if (!size || !is_apple_silicon()) return STATUS_SUCCESS;
++    if (size > ~(ULONG_PTR)0 - cursor) return STATUS_INVALID_PARAMETER;
+ 
+-    status = NtQueryVirtualMemory( process, addr, MemoryBasicInformation, &info, sizeof(info), &ret );
+-
+-    if (!status && (info.AllocationProtect & 0xf0))
++    while (size)
+     {
+-        DWORD origprot, noexec;
+-        noexec = info.AllocationProtect & ~0xf0;
+-        if (!noexec) noexec = PAGE_NOACCESS;
+-
+-        NtProtectVirtualMemory( process, &addr, &size, noexec, &origprot );
+-        NtProtectVirtualMemory( process, &addr, &size, origprot, &noexec );
++        status = NtQueryVirtualMemory( process, (void *)cursor, MemoryBasicInformation,
++                                       &info, sizeof(info), &ret );
++        if (status) return status;
++        region_base = (ULONG_PTR)info.BaseAddress;
++        if (region_base > cursor || info.RegionSize <= cursor - region_base)
++            return STATUS_INVALID_ADDRESS;
++        region_size = min( size, info.RegionSize - (cursor - region_base) );
++
++        if (info.Protect & 0xf0)
++        {
++            DWORD origprot, noexec = (info.Protect & ~0xff) | ((info.Protect & 0xf0) >> 4);
++            void *base = (void *)cursor;
++            SIZE_T protect_size = region_size;
++
++            /* Preserve access and modifiers while removing execute permission. The
++             * caller must coordinate concurrent execution and protection changes. */
++            status = NtProtectVirtualMemory( process, &base, &protect_size, noexec, &origprot );
++            if (status) return status;
++            status = NtProtectVirtualMemory( process, &base, &protect_size, origprot, &noexec );
++            if (status) return status;
++        }
++        cursor += region_size;
++        size -= region_size;
+     }
++    return STATUS_SUCCESS;
+ }
+ #endif
+ 
+@@ -6885,7 +6902,11 @@
+         SERVER_END_REQ;
+ 
+ #ifdef __APPLE__
+-        toggle_executable_pages_for_rosetta( process, addr, size );
++        {
++            NTSTATUS flush_status = toggle_executable_pages_for_rosetta( process, addr, size );
++            /* The server's written count remains valid even if invalidation fails. */
++            if (!status) status = flush_status;
++        }
+ #endif
+     }
+     else

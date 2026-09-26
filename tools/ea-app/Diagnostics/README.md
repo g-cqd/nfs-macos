@@ -181,3 +181,23 @@ The records contain 154 `VirtualProtect` calls, 154 successful returns, and the 
 No `WriteProcessMemory`, `NtWriteVirtualMemory`, `FlushInstructionCache`, `NtFlushInstructionCache`, or `VirtualProtectEx` call appeared in this accepted scope. This does not establish that the standalone write-plus-flush stale-code reproduction occurs in NFS. It also does not rule out direct stores, direct system calls, calls from excluded modules, or events before observer registration. Protection changes alone do not prove that code bytes were written.
 
 The collector and retry chain were stopped after the first failure. The original relay registry values and untraced EA runtime were restored. No new Wine prefix or runtime clone was created for this attempt.
+
+### Reviewed invalidation candidate and original control
+
+A separate reviewed candidate repaired independently reproduced code-invalidation and protection-transition defects. Its Unix `ntdll.so` SHA-256 was `67b2eb1e04c0a8166d8c5e92a3c0dee58f9e4cb456002fee6d4c7f86c44fe8ba`; its adjacent server was the earlier register-state candidate, SHA-256 `d7fc4c934c0bf70a45bc1e32d4508ce1f5ce8ba9cdb7b3cf4e49576178e07659`. Its PE ntdll retained the original hash. EA mapped the candidate Unix and PE ntdll files and D3DMetal from that runtime clone. The original launcher file was not changed.
+
+One assistant-issued launch used the candidate with NFS-only numeric exit tracing. Bootstrap process `0x074c` exited `100010`, as the original launch bridge had done in earlier observations. EA then remained at “Launching game…” without creating the full NFS process. The user also reported trying to launch during this stall. The candidate was stopped at the user's request after roughly two minutes and twenty seconds of waiting after the bootstrap exit. The exit collector contained no accepted full-game records. This attempt therefore produced no candidate game-exit comparison.
+
+After restoring the original runtime and registry, one untraced control launch began at `2026-09-26T22:01:29Z`. Its bootstrap process `0x07b4` exited `100010`, and the full game process `0x09e4` appeared. That process exited `-6` after 27,812 milliseconds of observation. Its identified successor `0x059c` was deliberately stopped with the lab's `taskkill /pid 1436 /f`; the successor's exit `1` was caused by that cleanup and is not a game diagnostic result. EA remained running and signed in.
+
+The control supports a launcher-stage incompatibility in the tested candidate environment; it does not establish which candidate change caused the stall. The candidate never reached the full-game stage in this attempt. No additional candidate launch was made. Candidate source and runtime were retained unchanged for review, while the original runtime, relay registry values, and EA session remained active with no NFS or observer process.
+
+### Matching unpatched rebuild control
+
+A private `tempfile.mkdtemp` session with an ownership marker received an APFS clone of the candidate runtime. Only that clone's Unix ntdll was replaced with the identically rebuilt unpatched binary, SHA-256 `88981bce904cc0236b0e69fa86196f1d541a061381dd2fed79600dabf7067125`. The adjacent server retained hash `d7fc4c934c0bf70a45bc1e32d4508ce1f5ce8ba9cdb7b3cf4e49576178e07659`; graphics libraries and PE ntdll were unchanged. EA's mapped paths confirmed the private clone. The retained candidate and unpatched control binary were not modified.
+
+One untraced launch began at `2026-09-26T22:05:05Z`. Bootstrap process `0x07d8` exited `100010`; no full NFS process was observed. By approximately 80 seconds, EA had returned to Home without the launching overlay. No full NFS process was present at the 183-second check. The actual stop timestamp was `22:08:34Z`, 209 seconds after launch, so the intended 180-second stop was not enforced exactly. This timing overrun does not supply a game-startup result.
+
+Both patched and unpatched rebuilt runtimes failed to reach the full-game process, while the original runtime did reach it. The handoff failure therefore does not isolate the invalidation patch. A shared rebuild or runtime-integration difference remains unresolved. The differing EA UI behavior also prevents treating the two failed handoffs as identical in every respect.
+
+The private clone was removed only after its prefix processes stopped and `lsof` showed no open files under the marked session. The original untraced EA runtime and original registry remained in use afterward. No new Wine prefix was created, and no candidate source or retained runtime was deleted.
