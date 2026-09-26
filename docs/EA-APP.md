@@ -23,4 +23,4 @@ The portable launcher follows EA’s stable Windows junction so EA can update it
 
 The [official game page](https://www.ea.com/games/need-for-speed/need-for-speed) lists DirectX 11, a persistent internet connection and 30 GB free disk space. EA's actual download dialog currently reports about 16 GB for this account's selected installation. Check both the installation requirement and real available storage; macOS Storage and `df` may report different available/purgeable space.
 
-Game download and gameplay verification are in progress. EA login working does not prove the game renders or meets a frame-rate target. Save game-specific settings and measurements here after an actual run.
+The EA installation completed on 2026-09-26. The installed game occupies 14,296,824 KiB (13.6 GiB), with a 64-bit `NFS16.exe`. Initial execution mapped the Apple D3DMetal 4.0b2, GPTK DXGI, and D3D11 libraries, but had not created a visible game window. The user reported a possible Wine crash; diagnosis is in progress. EA login and installation do not prove gameplay works or meets a frame-rate target.

@@ -24,7 +24,7 @@ The Wine runtime, Windows prefix, game installation, logs, screenshots, and acco
 - Its `libd3dshared.dylib` SHA-256: `1582e7ceef7f495df4bebf7f06a49aef130233f8a2e9a8971e35affafeb76ec0`.
 - The runtime bundle selects D3DMetal for 64-bit DXGI applications. It supplies different implementations for 32-bit DXGI and Direct3D 9; D3DMetal is not the Direct3D 9 backend.
 - EA app installer: `13.796.0.6309`, downloaded from EA on 2026-09-26. Installation completed with exit code zero.
-- EA sign-in and library pages were visibly verified. Need for Speed (2015) download started. Game execution has not yet been verified.
+- EA sign-in and library pages were visibly verified. Need for Speed (2015) installation completed. Game execution has not yet been verified.
 
 `4.0b2` is the newest runtime found locally. Apple Docs confirms Game Porting Toolkit 4, but the available documentation index does not establish the newest downloadable evaluation-runtime release. Do not describe this build as the latest Apple release without checking Apple's current download catalog.
 
@@ -48,6 +48,8 @@ The Windows path `C:\Program Files\Electronic Arts\EA Desktop\EA Desktop\EALaunc
 ## Need for Speed (2015)
 
 EA lists Windows, DirectX 11, a persistent internet connection, and 30 GB free space. In this installation, EA Download Manager displayed an 11.7 GB transfer. The transferred size and installed size are different; check available storage before starting.
+
+EA reported installation complete on 2026-09-26. The installed game occupied 14,296,824 KiB (about 13.6 GiB), measured with `du -sk`. Its final `NFS16.exe` is a 64-bit Windows executable.
 
 Install games in the isolated prefix, such as `C:\Program Files\EA Games\Need for Speed`. Confirm entitlement in EA app and let the user handle any purchase or subscription.
 

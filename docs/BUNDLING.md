@@ -83,7 +83,7 @@ The optimizer uses existing LLVM tooling; if `llvm-strip` is absent it keeps PE 
 6. Verify imported saves and current profile mappings. Preserve the user's newest progress before switching sessions.
 7. Archive only the verified candidate with macOS metadata preserved, verify every ZIP entry, compute SHA-256, and label unresolved limits accurately.
 
-Previous bundle audits passed 1,423 game files, 51 runtime/helper hashes and 52 Mach-O files. Those results apply to those builds only; repeat after any binary change. Ad-hoc signing is currently available, Developer ID notarization is not. Game Mode metadata is included, but actual Game Mode activation has not been verified.
+The optimized bundled candidate audit passed 1,423 game files, 49 runtime/helper hashes and 50 Mach-O files. The import candidate passed 12 bundled compatibility files and retained all 1,423 inventory entries. The user verified the menu and car with the optimized full runtime after a real-file import. Repeat audits after any binary change. Ad-hoc signing is currently available, Developer ID notarization is not. Game Mode metadata is included, but actual Game Mode activation has not been verified.
 
 ## Performance builds
 
