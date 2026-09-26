@@ -2,7 +2,7 @@
 
 ## Proven on this Mac
 
-- EA is signed in; the installed 64-bit game loads Apple D3DMetal 4.0b2, but exits before creating a game window.
+- EA is signed in. The original Wine 11.0/CX runtime loads Apple D3DMetal 4.0b2, but NFS exits before creating a game window. A separate Wine 11.18/DXVK attempt also exits `-6` before a visible window; its early module snapshot confirms the new runtime, but does not establish later graphics activity.
 - Game code explicitly requests `TerminateProcess(-6)`, usually from return RVA `0x04bdf5a6`. An eventual `-5` uses RVA `0x075ca521`.
 - The current Wine/Rosetta path loses accepted debug-register state after a thread resumes. An isolated server candidate corrects that: the state probe changes from 24 checks / 1 failure to 24 / 0. The actual game also retains both observed register configurations, but still exits.
 - A separate TF probe under the original runtime passes 7/7 checks: exactly three `EXCEPTION_SINGLE_STEP` events at expected instruction boundaries, followed by normal return. Its disabled-TF control fails the three exception checks. This establishes a stepping mechanism, not transparent DR emulation.
@@ -23,7 +23,7 @@ LLVM's [Mach exception handling source](https://github.com/llvm/llvm-project/blo
 - [Experimental server state patch](../tools/ea-app/Diagnostics/rosetta-debug-state-experimental.patch)
 - [Game observation and privacy limits](../tools/ea-app/Diagnostics/README.md)
 
-The normal EA runtime is restored with tracing disabled. The experimental candidate is not in either delivered Most Wanted app. No game files, captured code bytes, account data, or binaries belong in this repository.
+The original EA runtime is preserved and stopped. EA is currently signed in under the separate Wine 11.18 clone described below. The experimental candidate is not in either delivered Most Wanted app. No game files, captured code bytes, account data, or binaries belong in this repository.
 
 ## Argument-free trace, 2026-09-26
 
@@ -160,11 +160,70 @@ The user requested a separate latest-Wine comparison. As checked on September
 development release, published September 18. The isolated track uses the
 [Gcenx macOS build](https://github.com/Gcenx/macOS_Wine_builds/releases/tag/11.18),
 with its release asset digest verified before extraction. Both Wine and
-wineserver report 11.18. A fresh-prefix smoke test is in progress.
+wineserver report 11.18. Fresh-prefix console and visible Notepad smoke tests
+passed; [provenance and renderer requirements](../tools/ea-app/Diagnostics/WINE-11.18.md)
+record their scope and remaining checks.
 
 The shipped winemac library does not export the private window/Metal APIs that
-the inspected DXMT renderer expects. A compatible D3D11 integration is still
-required before the game comparison. Current mtld3d handles D3D8/9. No NFS
-startup success is claimed. At the user's request, a separate Astra agent is
-reviewing the evidence and coordinating bounded startup profiling with the EA
-launch owner.
+the inspected DXMT renderer expects. Verified DXVK-macOS files instead passed
+a D3D11 feature-level 11_0 device, exact rendered-pixel readback and 180
+nonfailed Present calls. A visible blue test window was checked separately.
+Explicit selection of the private Vulkan ICD eliminated an initially discovered
+global MoltenVK duplicate; a follow-up checked all matching loaded modules.
+Current mtld3d handles D3D8/9. No NFS startup success is claimed.
+
+The fresh EA installer had an independently confirmed command-line quoting
+error, then reached a 32-bit CLR startup hang after that correction. The same
+owned CLR activation source hangs in its 32-bit build and succeeds in its
+64-bit build. Portable Mono is found; no missing-dependency diagnosis is made.
+A uniquely owned APFS copy of the already-installed EA prefix allowed the
+runtime comparison without repeating the installer. Original prefix processes
+stopped before copying, host user-folder links were redirected privately, and
+original hive hashes remained unchanged. Wine 11.18 updated only the copy
+successfully. EA rendered with `--in-process-gpu`; the user signed in, and a
+restart retained login.
+
+The first new-runtime launch at 23:04:59 UTC on September 26 still failed.
+Bootstrap `0x06cc` exited `100010`; full NFS `0x094c` (native PID 53554)
+exited `-6` after 26,840 ms of observation. No game window was observed. The
+identified successor was stopped deliberately, and EA remained signed in.
+The full process's early mapping confirmed Wine 11.18 and the cloned game.
+The marker collector, validated immediately beforehand on the owned D3D11
+probe, retained zero NFS markers with explicitly incomplete coverage. Neither
+that absence nor the early module list proves that no graphics call occurred.
+The new-runtime exit caller has not been established.
+
+## Astra startup profiling
+
+Two bounded launches of the original runtime still exited `-6`. An early-armed
+native sample succeeded after an owned Windows control verified the collector.
+The second run consumed 29.36 CPU seconds over 39.999 seconds of resource
+observations, with observed peak RSS 409.97 MiB. These are diagnostic
+observations with uncontrolled concurrent workloads, not a speed comparison.
+
+Repeated Wine dispatcher and unresolved translated frames also appeared in the
+control. They do not establish an x87 fault, a particular hot function, or the
+exit cause. The [Astra report](../tools/ea-app/Diagnostics/ASTRA-STARTUP-PROFILE.md)
+records timing, sampling limitations and the next D3D11 creation boundary.
+Temporary profiling helpers and the control prefix were removed; raw samples
+remain private.
+
+The [DXVK marker collector](../tools/ea-app/Diagnostics/DXVK-COLLECTOR.md) passes
+19 focused checks, including permanent ambiguity after malformed or oversized
+observer records and a failed writer-query cleanup deadline. It retains only allowed markers and numeric metadata with
+bounded input, output and collection time. Buffered file markers do not prove
+which process emitted them, and feature-level selection precedes device
+construction. No missing marker is treated as proof that a call did not occur.
+
+## Bounded breakpoint diagnostic
+
+The independently reviewed [v6 source patch and probes](../tools/ea-app/Diagnostics/wine-tf-emulation/README.md)
+pass 52 delivery checks and 13 supplementary cases, including eight explicit
+unsupported stops. The source bundle pins the register-state prerequisite,
+all six before/after hashes, and the tested version of each control. The
+portable runner passes four cleanup/error checks.
+
+This is an opt-in diagnostic with instruction and elapsed-time limits, not
+general breakpoint emulation. It has not been established as the cause or fix
+for NFS startup, and rebuilt-runtime integration remains unresolved. No game
+was launched with this diagnostic.
