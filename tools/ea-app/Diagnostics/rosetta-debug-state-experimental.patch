@@ -1,0 +1,92 @@
+--- a/server/thread.h
++++ b/server/thread.h
+@@ -60,6 +60,9 @@
+     struct list            mutex_list;    /* list of currently owned mutexes */
+     struct list            d3dkmt_mutexes;/* list of currently owned d3dkmt mutexes */
+     unsigned int           system_regs;   /* which system regs have been set */
++#ifdef __APPLE__
++    unsigned __int64       rosetta_debug_regs[6]; /* virtual DR0-3, DR6 and DR7, owned by this thread */
++#endif
+     struct msg_queue      *queue;         /* message queue */
+     struct thread_wait    *wait;          /* current wait condition if sleeping */
+     struct list            system_apc;    /* queue of system async procedure calls */
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -407,6 +407,9 @@
+     thread->teb             = 0;
+     thread->entry_point     = 0;
+     thread->system_regs     = 0;
++#ifdef __APPLE__
++    memset( thread->rosetta_debug_regs, 0, sizeof(thread->rosetta_debug_regs) );
++#endif
+     thread->queue           = NULL;
+     thread->wait            = NULL;
+     thread->error           = 0;
+--- a/server/mach.c
++++ b/server/mach.c
+@@ -191,8 +191,29 @@
+ 
+     if (is_rosetta())
+     {
+-        /* getting debug registers of a translated process is not supported cross-process, return all zeroes */
+-        memset( &context->debug, 0, sizeof(context->debug) );
++        /* Keep accepted context writes across suspension; this cache does not deliver breakpoint exceptions. */
++        switch (context->machine)
++        {
++        case IMAGE_FILE_MACHINE_I386:
++            context->debug.i386_regs.dr0 = thread->rosetta_debug_regs[0];
++            context->debug.i386_regs.dr1 = thread->rosetta_debug_regs[1];
++            context->debug.i386_regs.dr2 = thread->rosetta_debug_regs[2];
++            context->debug.i386_regs.dr3 = thread->rosetta_debug_regs[3];
++            context->debug.i386_regs.dr6 = thread->rosetta_debug_regs[4];
++            context->debug.i386_regs.dr7 = thread->rosetta_debug_regs[5];
++            break;
++        case IMAGE_FILE_MACHINE_AMD64:
++            context->debug.x86_64_regs.dr0 = thread->rosetta_debug_regs[0];
++            context->debug.x86_64_regs.dr1 = thread->rosetta_debug_regs[1];
++            context->debug.x86_64_regs.dr2 = thread->rosetta_debug_regs[2];
++            context->debug.x86_64_regs.dr3 = thread->rosetta_debug_regs[3];
++            context->debug.x86_64_regs.dr6 = thread->rosetta_debug_regs[4];
++            context->debug.x86_64_regs.dr7 = thread->rosetta_debug_regs[5];
++            break;
++        default:
++            set_error( STATUS_INVALID_PARAMETER );
++            return;
++        }
+         context->flags |= SERVER_CTX_DEBUG_REGISTERS;
+         return;
+     }
+@@ -277,10 +298,29 @@
+ 
+     if (is_rosetta())
+     {
+-        /* Setting debug registers of a translated process is not supported cross-process
+-         * (and even in-process, setting debug registers never has the desired effect).
+-         */
+-        set_error( STATUS_UNSUCCESSFUL );
++        /* The target thread owns this virtual state; no caller-handle cache or hardware support is implied. */
++        switch (context->machine)
++        {
++        case IMAGE_FILE_MACHINE_I386:
++            thread->rosetta_debug_regs[0] = context->debug.i386_regs.dr0;
++            thread->rosetta_debug_regs[1] = context->debug.i386_regs.dr1;
++            thread->rosetta_debug_regs[2] = context->debug.i386_regs.dr2;
++            thread->rosetta_debug_regs[3] = context->debug.i386_regs.dr3;
++            thread->rosetta_debug_regs[4] = context->debug.i386_regs.dr6;
++            thread->rosetta_debug_regs[5] = context->debug.i386_regs.dr7;
++            break;
++        case IMAGE_FILE_MACHINE_AMD64:
++            thread->rosetta_debug_regs[0] = context->debug.x86_64_regs.dr0;
++            thread->rosetta_debug_regs[1] = context->debug.x86_64_regs.dr1;
++            thread->rosetta_debug_regs[2] = context->debug.x86_64_regs.dr2;
++            thread->rosetta_debug_regs[3] = context->debug.x86_64_regs.dr3;
++            thread->rosetta_debug_regs[4] = context->debug.x86_64_regs.dr6;
++            thread->rosetta_debug_regs[5] = context->debug.x86_64_regs.dr7;
++            break;
++        default:
++            set_error( STATUS_INVALID_PARAMETER );
++            break;
++        }
+         return;
+     }
+ 
