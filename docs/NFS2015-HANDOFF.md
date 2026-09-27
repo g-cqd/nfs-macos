@@ -227,3 +227,54 @@ This is an opt-in diagnostic with instruction and elapsed-time limits, not
 general breakpoint emulation. It has not been established as the cause or fix
 for NFS startup, and rebuilt-runtime integration remains unresolved. No game
 was launched with this diagnostic.
+
+## Latest external observation
+
+The September 27 capture joined an already-running attempt. Windows PID 52
+exited `-6` after 9,018 ms of observation; successor 1272 also exited `-6`.
+Separate native snapshots confirmed private Wine 11.18 and D3D11/DXGI modules,
+without proving device creation or an exact Windows/native PID mapping. The
+[updated runtime record](../tools/ea-app/Diagnostics/WINE-11.18.md) distinguishes
+these observations from startup duration and cleanup exits.
+
+EA failed to reach Home during bounded attempts with detailed tracing, while
+normal launches reached Home. A full output
+pipe was excluded in two attempts. A later normal-settings EA control opened
+Home through a discard-only pipe, so a pipe alone is insufficient to reproduce
+the wait; the preparation cause remains unresolved.
+The earlier three-minute external capture expired without observing a launch.
+The replacement separates waiting for NFS from the active capture interval.
+Review found and corrected replayed lifecycle records that could misclassify a
+bootstrap as the full game. Incremental-record, deadline and bounded-cleanup
+checks now pass. The corrected helper has not captured another game attempt.
+Astra remains stopped at the user's request.
+
+The next user attempt, observed from 08:04:42 UTC, again exited `-6`: Windows
+PID 2912 after 13,172 ms of observation. Native snapshots independently
+confirmed the private runtime and D3D11/DXGI in a successor. Those snapshots
+do not establish device creation or Windows/native PID equivalence. EA remains
+signed in; retry processes were stopped only after checking their game image.
+
+## Complete Wine source baseline
+
+A separately owned Wine 11.18 source build is compiling the Unix modules,
+both PE architectures and wineserver from one configuration. This addresses the
+unresolved integration limitation of the earlier partial-library swaps. It is
+not yet a working runtime or an NFS fix.
+
+The source is pinned to `7b3fff76fa5178f6ce0141b2c776afa2a822f101`, with the
+package's Vulkan-portability patch and no experimental TF patch. All 380
+private SDK/framework dylibs passed isolated x86_64 load controls. A native
+control initialized TLS, fonts, SDL, GStreamer, FFmpeg, ICU, XML2 and Vulkan;
+Vulkan enumerated one device. These are dependency controls, not game tests.
+
+The archival XML2 2.15.2 dependency required unavailable ICU76. Rebuilding the
+same XML2 source against verified ICU78.3 preserved its features and library
+compatibility version. Its bundled tests passed; optional external conformance
+datasets were absent. MinGW GCC 16.1 also differs from the package's compiler,
+so this is not a byte-identical package rebuild.
+
+The explicit macOS 14.0 build target required disabling configure's detection
+of SDK27-only `pipe2`, selecting Wine's existing fallback. Availability warnings
+now fail native compilation. Runtime controls will run on this macOS27 host;
+they cannot establish support on macOS14.

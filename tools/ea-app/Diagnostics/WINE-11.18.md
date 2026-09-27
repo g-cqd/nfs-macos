@@ -74,3 +74,54 @@ Before the game attempt, the bounded marker collector was validated against the 
 The first game attempt started at 2026-09-26 23:04:59 UTC. Bootstrap `0x06cc` exited `100010`. Full NFS `0x094c` (native PID 53554) exited `0xfffffffa` (`-6`) after 26,840 ms of observation. No visible game window was observed. Cleanup began 35.38 seconds after launch and stopped only identified successor `0x058c` (native PID 53862). No NFS process remained, and EA remained signed in.
 
 The first full-process mapping snapshot confirmed the cloned NFS executable and Wine 11.18 Unix ntdll. D3D11/DXGI were not present in that early snapshot; the later query occurred after exit and supplies no later module evidence. The validated marker collector stopped normally on the first full-process exit with zero markers and zero NFS log bytes consumed. Its coverage is explicitly incomplete. These observations do not prove the absence of every graphics call, nor establish the new-runtime exit caller address. Wine 11.18 did not produce playable startup in this attempt.
+
+## Selective startup trace control
+
+The owned D3D11 test, temporarily named `NFS16.exe`, validated a pipe-only startup collector under Wine 11.18. The collector retained 12 records for the observer-confirmed process: the executable and selected module bases, plus `KERNEL32.ExitProcess(0)` with its numeric caller address. The exit caller belonged to a runtime wrapper outside the test image; no test-image caller RVA was fabricated. The test returned zero, created feature level 11_0, verified the rendered pixel, and returned from 180 presents without a failing HRESULT.
+
+The collector consumed 100,414 bytes and reported no dropped lines, unattributed records, or observer ambiguity. It persisted only fixed module/API identifiers and numeric fields. The temporary six-export `RelayInclude` value was removed, and the Debug registry query matched its pre-test snapshot exactly.
+
+A subsequent preparation attempt restarted EA with the same process-specific debug configuration and a 180-second collector. EA did not open its main window within the 80-second preparation gate, so no NFS process was launched. The supervisor restored the Debug registry and opened normal untraced EA. Signed-in Home returned within approximately 12 seconds. The traced EA process and background service were observed; no MSI updater was observed. This does not establish the cause of the preparation delay.
+
+The collector was terminated during preparation cleanup before it wrote its final summary. Its empty output is a cleanup limitation and supplies no negative trace evidence. The next configuration check must distinguish debug scoping or pipe effects before another game attempt.
+
+## User-requested restart with capture
+
+After the user requested a global Wine shutdown and EA restart, two bounded preparation attempts used the existing signed-in clone. The first retained the validated relay/loader/exception configuration. The second removed only `NFS16.exe:+relay` from `WINEDEBUG`. Neither opened EA Home within its 100-second preparation gate, and neither launched NFS. Each cleanup completed at approximately 103 seconds, restored the Debug registry exactly, and reopened normal EA.
+
+A bounded memory transport forwarded all 10,768 input bytes in each attempt, with no dropped lines or backlog. This excludes a full stderr pipe as the observed wait. It does not identify the cause of the startup difference. The launch executable, `--in-process-gpu`, working directory, private prefix, DXVK overrides, Vulkan ICD and renderer configuration matched the successful normal launch. Allowlisted mapped paths confirmed private Wine, Vulkan and MoltenVK modules. Removing relay alone did not resolve the preparation wait.
+
+Normal EA then opened signed-in Home. A fresh external capture was armed from 2026-09-26 23:36:44 UTC through 23:39:44 UTC for a user-started game attempt. This mode records numeric Windows process lifecycle events and allowlisted native module paths. It does not record API callers or exceptions, and it does not infer Windows/native PID equivalence from timing. No game was started automatically.
+
+The external capture ended normally at 23:39:45 UTC after 180.227 seconds. It observed no NFS process, so its lifecycle file remained empty and it produced no game outcome. The observer stopped; normal signed-in EA remained open. Capture was inactive after this deadline.
+
+## Existing user attempt on 2026-09-27
+
+At 07:54 UTC, an NFS process was already running in the owned Wine 11.18 clone. Native process 68076 mapped the private Wine Unix ntdll and private D3D11/DXGI modules. Module mapping establishes a loaded library, not successful device creation. No visible game window was found in the queried process window list.
+
+An external observer armed at 07:54:58 UTC recorded Windows process 52 exiting `0xfffffffa` after 9,018 ms of observation. Its successor, Windows process 1272, also exited `0xfffffffa`, after 45,128 ms. A later process exited with code 1 during scoped retry cleanup. The observer attached after the original process started, so it did not measure that process's full lifetime. The native and Windows PID namespaces were not independently mapped; the numbers must not be equated from timing alone. Only image-verified processes in this owned prefix were stopped, and EA remained open.
+
+Normal EA used `DXVK_LOG_LEVEL=none` and `DXVK_LOG_PATH=none`. The exact checked NFS log paths contained no file, which is expected in this configuration and supplies no negative device-initialization evidence. A future logging check must account for the executable spelling when selecting the NFS log basename, without reading EA logs.
+
+The external helper now has separate deadlines: at most 15 minutes waiting for an observed NFS process, followed by at most 180 seconds of active observation. Later processes cannot extend the active deadline. Timing checks cover start immediately before wait expiry, exact expiry, repeated start observations, backward time, immediate start, and invalid timing inputs. These tests exercise the timing model; the five transport checks separately exercise `LineQueue`, not the supervisor's expiry-drain cleanup. The updated helper was not launched again after this captured failure.
+
+## Capture integration correction and EA-only controls
+
+Review found that the private external helper replayed the whole lifecycle file on every poll while retaining its bootstrap state. If one poll ended at bootstrap exit, a later poll could incorrectly classify the replayed bootstrap observation as the full game. The helper now uses the existing bounded `Tail`, `Lines` and `Lifecycle` helpers and consumes each complete line once. A regression sequence feeds bootstrap observation, bootstrap exit, an idle poll, full-process observation, then full-process exit. The old behavior was reproduced as a failing mock; the corrected integration passes. Additional checks cover an early observer exit, split records, file rewrites, malformed data after an exit, partial EOF, and an event arriving at the expired wait deadline. An early observer exit now stops collection with its actual return code instead of leaving an inactive observer apparently armed.
+
+An EA-only control retained normal `WINEDEBUG=-all`, the unchanged Debug registry, the same executable, `--in-process-gpu`, working directory and renderer configuration. It changed only stderr to an actively drained discard-only pipe. EA opened signed-in Home; the main window was observed by 17.6 seconds and then visually confirmed. The control discarded 78,141 bytes without persisting them and restored normal EA. A pipe alone did not reproduce the earlier capture-mode wait. The unresolved difference remains the debug configuration and temporary relay filter combination.
+
+A separate owned `d3d11-smoke.exe` control used the exact NFS16-specific debug string while EA remained untouched. It exited zero after 5.99 seconds, with 40,610 stderr bytes drained and zero relay, loaddll or seh tagged lines. This supports filename exclusion for that owned executable. It does not establish the cause of EA's earlier startup wait.
+
+A later user-started attempt was observed from 08:04:42 UTC. Windows process 2912 exited `0xfffffffa` after 13,172 ms of observation, followed by a successor. Native process 83922 was independently seen at that time with age 16 seconds and cumulative CPU time 13.48 seconds; it exited before its module query completed. An image-verified successor, native process 84014, mapped the private game, Wine ntdll and D3D11/DXGI modules. Windows and native PID associations remain unproven. Only verified successor processes in the owned clone were stopped; EA stayed open.
+
+
+The finalization review also found that an exception while stopping retries or
+waiting for the observer could leave the status reporting an active capture.
+The corrected finalizer preserves the primary stop reason, records cleanup
+failures separately, attempts stream closure and final status writing, and
+bounds observer termination waits to five seconds followed by a two-second
+kill fallback. Focused failure controls pass. The production wrapper bounds
+its image-verified retry cleanup to eight seconds. No EA or game process was
+launched for these corrections; they have not yet been exercised in a new game
+capture. See [external capture helper contract](EXTERNAL-CAPTURE.md).
