@@ -123,5 +123,21 @@ failures separately, attempts stream closure and final status writing, and
 bounds observer termination waits to five seconds followed by a two-second
 kill fallback. Focused failure controls pass. The production wrapper bounds
 its image-verified retry cleanup to eight seconds. No EA or game process was
-launched for these corrections; they have not yet been exercised in a new game
-capture. See [external capture helper contract](EXTERNAL-CAPTURE.md).
+launched for these corrections. The later 08:44 UTC capture exercised the
+corrected lifecycle/finalization path and reported successful cleanup.
+See [external capture helper contract](EXTERNAL-CAPTURE.md).
+
+## Complete source baseline and network coverage
+
+The complete source build, focused controls and latest instrumented launch
+are recorded in the [handoff](../../../docs/NFS2015-HANDOFF.md#complete-wine-source-baseline).
+The source baseline passes x86/x64 process and exception controls, x64 CLR,
+and the separate DXVK pixel/Present control. Its x86 CLR and built-in
+WineD3D/Vulkan D3D11 controls fail. These limits remain explicit.
+
+The 08:44 UTC game attempt still exited `-6`. Native socket snapshots found
+no internet socket in the game process. Wine source establishes that the
+server performs host connections for AFD requests, so those snapshots do
+not establish that NFS made no network request. A process-scoped server
+diagnostic is required to distinguish a connection failure from earlier
+startup code. No network payload or EA authentication log was captured.

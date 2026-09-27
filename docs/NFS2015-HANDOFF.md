@@ -246,7 +246,8 @@ The earlier three-minute external capture expired without observing a launch.
 The replacement separates waiting for NFS from the active capture interval.
 Review found and corrected replayed lifecycle records that could misclassify a
 bootstrap as the full game. Incremental-record, deadline and bounded-cleanup
-checks now pass. The corrected helper has not captured another game attempt.
+checks now pass. A later instrumented attempt exercised the corrected helper
+and completed cleanup without a reported error.
 Astra remains stopped at the user's request.
 
 The next user attempt, observed from 08:04:42 UTC, again exited `-6`: Windows
@@ -257,10 +258,10 @@ signed in; retry processes were stopped only after checking their game image.
 
 ## Complete Wine source baseline
 
-A separately owned Wine 11.18 source build is compiling the Unix modules,
-both PE architectures and wineserver from one configuration. This addresses the
-unresolved integration limitation of the earlier partial-library swaps. It is
-not yet a working runtime or an NFS fix.
+A separately owned Wine 11.18 source build completed the Unix modules,
+both PE architectures and wineserver from one configuration. The full build
+and install returned zero. This provides a coherent baseline for source
+instrumentation; it does not establish NFS startup compatibility.
 
 The source is pinned to `7b3fff76fa5178f6ce0141b2c776afa2a822f101`, with the
 package's Vulkan-portability patch and no experimental TF patch. All 380
@@ -276,5 +277,82 @@ so this is not a byte-identical package rebuild.
 
 The explicit macOS 14.0 build target required disabling configure's detection
 of SDK27-only `pipe2`, selecting Wine's existing fallback. Availability warnings
-now fail native compilation. Runtime controls will run on this macOS27 host;
-they cannot establish support on macOS14.
+now fail native compilation. Runtime controls ran on this macOS27 host;
+they cannot establish support on macOS14. The upstream build retained 123
+warning lines, including deprecated declarations, parser conflicts and GCC
+diagnostics; it was not warning-free.
+
+| Focused control | Result |
+| --- | --- |
+| x86 and x64 process startup, software exception, real memory-fault resume, suspended-thread context | Passed |
+| x64 CLR activation | Passed |
+| x86 CLR activation | Faulted in `ICorRuntimeHost_Start`; stopped at the 45-second watchdog |
+| Built-in WineD3D/Vulkan device and swapchain | Failed with `0x80004005` |
+| Verified DXVK-macOS fork, stock built DXGI, private Vulkan dependencies | FL11_0, RGBA `64,128,191,255`, 180 nonfailed Present calls |
+
+The DXVK comparison used a disposable clone with async disabled. Its clone
+and both control prefixes were removed after their matching servers stopped
+and open-handle checks passed. The retained baseline has no DXVK overlay or
+experimental TF patch. The x86 CLR failure prevents claiming a working fresh
+EA installer; an already-installed EA clone is a separate integration test.
+
+That integration test subsequently passed the launcher handoff. A uniquely
+owned APFS clone of the installed EA prefix reached signed-in Home under the
+complete source runtime. The original packaged runtime and prefix stayed
+stopped and unchanged by the source build. One launch at 09:01:28 UTC produced
+bootstrap exit `100010`, then full NFS Windows process 2904. Native snapshots
+independently confirmed the cloned source ntdll and D3D11/DXGI; the Windows
+and native process IDs were not independently mapped.
+The game exited `-6` after 30,533 milliseconds of observation without a game
+window. Only its verified successor was stopped; EA remained signed in.
+This resolves the earlier partial-rebuild launcher stall for this baseline,
+while leaving the game's startup failure unresolved.
+
+## Startup and networking capture, 2026-09-27 08:44 UTC
+
+The observer was armed before one controlled launch. Windows process 1560
+exited `-6` after 29,807 milliseconds of observation. Native process 95996
+was independently verified against the owned game image. Its 51 socket
+snapshots spanned 29.141 seconds, with no matching internet socket in any
+snapshot. Cumulative CPU time rose from 0.29 to 26.57 seconds; peak sampled
+RSS was 339,852 KiB. Concurrent workloads were not controlled, so these are
+observations, not a performance comparison. The two PID namespaces were not
+independently mapped.
+
+The process mapped `wsock32`, `ws2_32`, `wininet`, `dnsapi`, `iphlpapi` and
+`crypt32`, plus the private Wine and D3D11/DXGI modules. A native sample
+contained 261 observations per thread. The host main thread waited in the
+AppKit event loop; translated guest frames were largely unresolved. This
+does not identify a guest hot function or a failing network API. The separate
+per-thread `ps` parser rejected the host's output format, so it supplied no
+per-thread measurements for this run.
+
+Source review found a coverage gap: Wine's `ws2_32!connect` sends
+`IOCTL_AFD_WINE_CONNECT`, and `server/sock.c` performs host `connect()` on a
+server-owned socket. Game-process-only socket inspection therefore cannot
+exclude networking through wineserver. Polling also misses transient sockets.
+The next network measurement must identify the requesting Windows process
+and capture the AFD request, host connection result and asynchronous outcome.
+It must include a positive process-start marker before treating zero requests
+as negative evidence.
+
+The sample and observer stopped normally. Only the image-verified retry was
+stopped; EA remained open. The capture reported no cleanup error. No game code,
+authentication data or network payload was changed or collected.
+
+## Evidence required before another compatibility change
+
+| Open question | Discriminating evidence |
+| --- | --- |
+| Does a server connection fail during startup? | NFS-scoped Wine AFD and completion records with startup/exit coverage, not only native socket snapshots |
+| Does the requested execution-breakpoint address run? | Bounded guest instruction-boundary observation with explicit target-hit and unsupported/budget-stop records |
+| Does the game handle the breakpoint exception? | Correlated exception delivery, handler return and continuation; successful Set/Get alone is insufficient |
+| Does the coherent source baseline integrate with EA? | Established for the installed-EA clone: Home and full-process launch work; the game still exits `-6` |
+
+The latest [EA shutdown list](https://www.ea.com/legal/service-updates/i-q)
+was checked on September 27, 2026. It names NFS Rivals, but no NFS 2015 entry
+was found. This does not establish live service health. Uncode's
+[offline-mode demonstration](https://www.youtube.com/watch?v=twhQsBRymXs)
+is a research lead; no released source or installable implementation was
+verified. Neither an unavailable service nor anticheat has been established
+as this startup failure's cause. No mock server or bypass patch was applied.
