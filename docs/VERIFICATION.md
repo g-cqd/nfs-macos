@@ -1,4 +1,45 @@
-# macOS bundle verification — 2026-09-26
+# macOS bundle verification
+
+## Runtime refresh and CoD4 release — 2026-09-27
+
+Current candidates are in `~/Desktop/Game Builds`: Most Wanted Bundled, Most Wanted Import,
+Call of Duty 4 Bundled, and Call of Duty 4 Import. They require Apple Silicon, Rosetta,
+and macOS 15 or newer. This release is separate from the retained version 5 apps below.
+
+- Renderer source: `5f5331a2d8762356bd49d128271c1b186c31e7ec`.
+- x87sidecar source: `dbd680d4cbe14afa12774d53670a18758f15110e`.
+- Shared recipe assembly supports both games and both data editions. No personal save,
+  product key, EA account state, or existing Wine prefix is distributed.
+- Swift 6 release compilation with warnings as errors, strict formatting, the complete
+  pre-push test gate, and eight packaging checks passed.
+- Both Most Wanted editions completed fresh private-prefix setup. The import edition
+  verified and copied the original installation. Original game files remained unchanged.
+- Both CoD4 editions completed setup; profile import preserved every Gigi file byte.
+  The user's first campaign launch exposed Wine's working-directory fallback to
+  `C:\windows`. The archives were intact. A temporary private game-only `G:` mapping
+  made the exact bundled Wine resolve `main\iw_00.iwd`; the helper now creates and
+  removes that mapping around play. Two focused regression tests pass. User gameplay
+  verification of this correction is pending. The corrected live process opened both
+  `iw_00.iwd` and `iw_01.iwd` and loaded the bundled renderer; this does not by itself
+  establish working gameplay.
+- Each initial candidate passed Developer ID signing and dependency/path audit:
+  50 Mach-O files, 49 nested runtime/helper hashes, and no external libraries, escaping
+  payload links, or development RPATHs. Both corrected CoD4 candidates also passed
+  signing, source-archive comparison, and strict signature verification after relocation.
+- Apple notarization for this release is in progress: Most Wanted bundled submission
+  `76f398a5-1de5-4789-86fd-fe01a5b740dc` and import submission
+  `1f968688-5f95-4d0c-912f-4840502d3c1f`. Neither has a rejection. CoD4 submission
+  awaits the campaign check. The accepted version 5 submissions below do not
+  establish notarization of these new candidates.
+
+Spatial MetalFX remains the shipping implementation. Native scale bypasses upscaling.
+Temporal upscaling and frame interpolation are explicitly outside this release; the
+[feasibility report](METALFX-ROADMAP.md) records the actual M1 capability probe.
+CoD4 campaign gameplay in the new bundle and controller support remain unverified.
+No new sustained frame-rate or latency claim is made. Guest drive isolation does not
+provide App Sandbox confinement. NFS (2015) debugging remains paused.
+
+## Previous delivery — 2026-09-26
 
 ## Delivered builds
 
