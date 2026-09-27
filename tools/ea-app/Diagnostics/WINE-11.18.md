@@ -1,5 +1,10 @@
 # Wine 11.18 isolated boot and renderer gate
 
+The [latest handoff](../../../docs/NFS2015-HANDOFF.md#server-afd-capture-2026-09-27-0924-utc)
+records the complete source-runtime NFS capture: exit `-6` with no selected-game
+AFD activity, followed by an independently reproduced correction to Wine's
+instruction-step trap return. These results do not establish a playable game.
+
 ## Provenance
 
 The [maintainer release](https://github.com/Gcenx/macOS_Wine_builds/releases/tag/11.18), published 2026-09-25 at 15:27:48 UTC, supplies `wine-devel-11.18-osx64.tar.xz` (190,974,384 bytes). Its published SHA-256 and the downloaded archive both equal `aa0ea4c82e636ae7bca2076387cb0a5affa26509ad13f119ecd0d62bd7ba6f82`. Extraction validated member paths and link targets before expanding 5,378 entries (871,377,330 bytes). The private session has an ownership marker, separate runtime, and new prefix. The existing EA prefix and global Wine were not changed.

@@ -340,11 +340,78 @@ The sample and observer stopped normally. Only the image-verified retry was
 stopped; EA remained open. The capture reported no cleanup error. No game code,
 authentication data or network payload was changed or collected.
 
+## Server AFD capture, 2026-09-27 09:24 UTC
+
+A private server diagnostic selected NFS by the device and inode of its open
+executable file. Owned socket controls passed 32 checks with logging disabled
+and enabled; the core capture tests passed 17 checks. The actual game capture
+independently maps Windows process `0x0b00` to native process `3754`.
+
+The full game exited `0xfffffffa` (`-6`) after 28,322 milliseconds from its
+selected-image marker. Its captured lifetime contains zero AFD requests,
+replies, host connection attempts, connection completions, and asynchronous
+notifications or final results. Its image, startup, and exit markers precede
+the valid capture footer. The bootstrap and the owner-stopped successor also
+have complete markers and zero AFD activity. The trace contains 14 records
+and 1,826 bytes without record or byte loss. The footer's active deadline
+occurred more than 144 seconds after all selected processes exited.
+
+This rules out a failed game-owned Winsock-to-server AFD connection in this
+observed startup. It does not cover pre-image activity, native client calls,
+DNS, or networking delegated to EA helpers. It does not establish remote
+service availability. A replacement server is not supported by this evidence
+as a fix for the observed local exit.
+
+The first launcher preparation attempt exited before Home and produced no
+selected game. That attempt is not included in the game's coverage claim.
+The diagnostic server was stopped after its footer; signed-in baseline EA
+was restored. The trace SHA-256 is
+`35278a4082a9aed89340e17f4b52e369bd43709013ebaead45bd43d8654378f6`.
+
+## Wine 11.18 instruction-step trap correction
+
+The first port of the bounded TF diagnostic failed its owned fixtures.
+An initial worker's `NtContinue` returned `STATUS_ACCESS_VIOLATION`, then
+fell through to `ntdll!process_breakpoint` at RVA `0x11130`. A remote worker
+spent its budget in exception unwinding. Neither was an NFS result.
+
+A bounded history of the owned worker's last 16 instruction boundaries
+confirmed the failed `NtContinue` return. The native fault was the syscall
+dispatcher's read of `0x320(%r13)` with a null thread pointer. Wine 11.18's
+`init_handler` switches macOS thread-local storage to pthread data, but
+`trap_handler` returned immediately when `handle_syscall_trap` succeeded.
+That return omitted `leave_handler`, leaving the dispatcher to read the
+Wine TEB pointer from the wrong thread-local storage.
+
+Calling `leave_handler(data, sigcontext)` before that early return made both
+failing fixtures pass seven checks each, including exact-address execution
+breakpoint delivery before the instruction's effect. The uninstrumented
+candidate then passed all 52 assertions across the eight delivery cases.
+All 13 supplementary cases also passed, including the expected unsupported
+instruction stops. Instruction and time budgets were unchanged.
+
+One subsequent NFS attempt under this candidate produced
+`TFEMU STOP elapsed-budget` at 09:35:42 UTC without a visible game window.
+The observed full Windows process `0x099c` exited `1`; the image-verified
+native process `4930` also ended. The filtered stop line lacks a PID, so
+its association with that game process is temporal. This is a diagnostic
+budget stop, not a verified recurrence of the game's earlier `-6` exit.
+The next capture adds numeric process and instruction attribution while
+retaining the same execution and time bounds. A playable game remains unproven.
+
+Two user-supplied crash reports identify the separate 32-bit
+`IGOProxy32.exe` overlay helper in WineD3D's D3D8 path. The supported EA
+overlay UI did not respond. A reversible, helper-specific workaround sets
+`HKCU\Software\Wine\AppDefaults\IGOProxy32.exe\DllOverrides\d3d8` to an
+empty string in the isolated prefix; its previously absent value was recorded.
+This suppresses the helper's D3D8 probe, without changing NFS's D3D11 overrides
+or establishing that the entire EA overlay is disabled.
+
 ## Evidence required before another compatibility change
 
 | Open question | Discriminating evidence |
 | --- | --- |
-| Does a server connection fail during startup? | NFS-scoped Wine AFD and completion records with startup/exit coverage, not only native socket snapshots |
+| Does a server connection fail during startup? | The complete selected-game AFD capture records no request before exit `-6`; helper, DNS, and native paths remain outside its scope |
 | Does the requested execution-breakpoint address run? | Bounded guest instruction-boundary observation with explicit target-hit and unsupported/budget-stop records |
 | Does the game handle the breakpoint exception? | Correlated exception delivery, handler return and continuation; successful Set/Get alone is insufficient |
 | Does the coherent source baseline integrate with EA? | Established for the installed-EA clone: Home and full-process launch work; the game still exits `-6` |
