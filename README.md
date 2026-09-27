@@ -16,6 +16,8 @@ The repository contains launcher code, test fixtures, patches, and build recipes
 
 ## Read the setup knowledge
 
+- [New developer handoff, targets and roadmap](docs/DEVELOPER-HANDOFF.md)
+
 - [Tuning and measured results](docs/TUNING.md)
 - [Bundle layout and release procedure](docs/BUNDLING.md)
 - [Call of Duty 4 configuration and profiles](docs/COD4.md)
