@@ -23,10 +23,14 @@ package struct GameInstaller {
   {
     do {
       try manifest.validate()
+      guard manifest.kind == paths.kind else {
+        throw LauncherError.operation("The game manifest belongs to a different app.")
+      }
       try files.createDirectory(at: paths.support, withIntermediateDirectories: true)
       let current = try currentGeneration()
       if let current, source == nil, current.metadata.bundleVersion == manifest.version {
-        guard files.fileExists(atPath: current.game.appendingPathComponent("speed.exe").path),
+        guard
+          files.fileExists(atPath: current.game.appendingPathComponent(paths.kind.executable).path),
           files.fileExists(atPath: paths.prefix.path), files.fileExists(atPath: paths.saves.path)
         else {
           throw LauncherError.operation(
@@ -40,7 +44,7 @@ package struct GameInstaller {
         guard originalData.isFileURL, values.isDirectory == true, values.isSymbolicLink != true
         else {
           throw LauncherError.operation(
-            "Select an installed Most Wanted PC folder, without symbolic links.")
+            "Select the matching installed PC game folder, without symbolic links.")
         }
       }
       let origin = originalData?.standardizedFileURL.resolvingSymlinksInPath()
@@ -83,11 +87,13 @@ package struct GameInstaller {
       try files.createDirectory(
         at: prefix.appendingPathComponent("drive_c"), withIntermediateDirectories: true)
       try files.createSymbolicLink(
-        atPath: prefix.appendingPathComponent("drive_c/NFSMW").path,
+        atPath: prefix.appendingPathComponent("drive_c/" + paths.kind.folder).path,
         withDestinationPath: "../../Current/Game")
-      try files.createSymbolicLink(
-        atPath: prefix.appendingPathComponent("drive_c/NFSMWSaves").path,
-        withDestinationPath: "../../Saves")
+      if paths.kind == .nfsmw {
+        try files.createSymbolicLink(
+          atPath: prefix.appendingPathComponent("drive_c/NFSMWSaves").path,
+          withDestinationPath: "../../Saves")
+      }
       try files.moveItem(at: stage, to: paths.data)
     } catch {
       do { try files.removeItem(at: stage) } catch {
@@ -108,10 +114,7 @@ package struct GameInstaller {
       do {
         try copyVerifiedGame(
           to: stage.appendingPathComponent("Game"), originalData: originalData, metadata: metadata)
-        for name in [
-          "mtld3d.conf", "scripts/NFS_XtendedInput.ini", "scripts/NFSMostWanted.WidescreenFix.ini",
-          "scripts/XtendedInputMaps",
-        ] {
+        for name in paths.kind.preservedConfiguration {
           let previous = paths.currentGame.appendingPathComponent(name)
           guard files.fileExists(atPath: previous.path) else { continue }
           let destination = stage.appendingPathComponent("Game/\(name)")
@@ -172,8 +175,13 @@ package struct GameInstaller {
     try files.createDirectory(at: destination, withIntermediateDirectories: true)
     for file in manifest.gameFiles {
       let root =
-        GameDataFiles.contains(file.path) ? (originalData ?? paths.template) : paths.template
+        paths.kind.isOriginalData(file.path) ? (originalData ?? paths.template) : paths.template
       try VerifiedGameFile.copy(file, from: root, to: destination.appendingPathComponent(file.path))
+    }
+    if paths.kind == .cod4 {
+      try files.createSymbolicLink(
+        atPath: destination.appendingPathComponent("players").path,
+        withDestinationPath: "../../../Saves")
     }
     try JSONEncoder().encode(metadata).write(
       to: destination.deletingLastPathComponent().appendingPathComponent("origin.json"),

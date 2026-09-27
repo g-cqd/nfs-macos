@@ -7,6 +7,7 @@ struct Session {
 
   func run(mode: String, configuration: URL?) throws -> Int32 {
     let files = FileManager.default
+    let runtime = WineRuntime(paths: paths, output: output)
     try files.createDirectory(at: paths.support, withIntermediateDirectories: true)
     return try SessionLock.withLock(at: paths.support.appendingPathComponent("session.lock")) {
       let lease = GameLease(url: paths.support.appendingPathComponent("game-session.json"))
@@ -19,7 +20,7 @@ struct Session {
       }
       let manifest = try BundleManifest.read(
         from: paths.resources.appendingPathComponent("game-manifest.json"))
-      var environment = environment(prefix: paths.prefix)
+      var environment = runtime.environment(prefix: paths.prefix)
       let rosetta = ProcessCommand(
         executable: URL(fileURLWithPath: "/usr/bin/arch"),
         arguments: ["-x86_64", "/usr/bin/true"], directory: paths.support, environment: environment)
@@ -29,8 +30,8 @@ struct Session {
       }
       let game = try GameInstaller(paths: paths, manifest: manifest).prepare(
         importing: mode == "--import-game" ? configuration : nil,
-        initializePrefix: preparePrefix)
-      try stopServer(prefix: paths.prefix)
+        initializePrefix: runtime.initialize)
+      try runtime.stop(paths.prefix)
       try GuestIsolation.restrict(prefix: paths.prefix, root: paths.support)
       let store = SettingsStore(paths: paths)
       var settings = try store.load()
@@ -55,52 +56,10 @@ struct Session {
         directory: game, environment: environment
       ).run(output: output, onStart: lease.record)
       try lease.clear()
-      try stopServer(prefix: paths.prefix)
+      try runtime.stop(paths.prefix)
       try LauncherSnapshot.read(paths: paths).write(paths: paths)
       return status
     }
   }
 
-  private func environment(prefix: URL) -> [String: String] {
-    LaunchEnvironment.make(
-      paths: paths, prefix: prefix,
-      home: paths.support.appendingPathComponent("RuntimeHome/Player"),
-      temporary: paths.support.appendingPathComponent("Temporary"))
-  }
-
-  private func preparePrefix(_ prefix: URL) throws {
-    try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false)
-    let environment = environment(prefix: prefix)
-    do {
-      let boot = ProcessCommand(
-        executable: paths.wine, arguments: ["wineboot", "--init"],
-        directory: prefix, environment: environment)
-      guard try boot.run(output: output) == 0 else {
-        throw LauncherError.operation("Wine could not initialize the player folder.")
-      }
-      let settings = ProcessCommand(
-        executable: paths.wine,
-        arguments: [
-          "reg", "import", paths.resources.appendingPathComponent("Defaults/settings.reg").path,
-        ],
-        directory: prefix, environment: environment)
-      guard try settings.run(output: output) == 0 else {
-        throw LauncherError.operation("Wine could not import the game and controller settings.")
-      }
-      try stopServer(prefix: prefix)
-    } catch {
-      do { try stopServer(prefix: prefix) } catch { print("Setup cleanup failed: \(error)") }
-      throw error
-    }
-  }
-
-  private func stopServer(prefix: URL) throws {
-    let environment = environment(prefix: prefix)
-    try WineShutdown.stop { argument in
-      let command = ProcessCommand(
-        executable: paths.wineServer, arguments: [argument],
-        directory: prefix, environment: environment)
-      return try command.run(output: output)
-    }
-  }
 }

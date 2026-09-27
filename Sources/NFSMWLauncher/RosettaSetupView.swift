@@ -1,3 +1,4 @@
+import SharedLauncher
 import SwiftUI
 
 struct RosettaSetupView: View {

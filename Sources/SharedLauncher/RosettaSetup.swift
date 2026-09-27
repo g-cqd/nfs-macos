@@ -1,20 +1,20 @@
 import Observation
 
 @MainActor @Observable
-final class RosettaSetup {
-  private(set) var state = RosettaState.unchecked
+package final class RosettaSetup {
+  package private(set) var state = RosettaState.unchecked
   private let service: any RosettaProviding
 
-  init(service: any RosettaProviding = NativeRosetta()) { self.service = service }
+  package init(service: any RosettaProviding = NativeRosetta()) { self.service = service }
 
-  var isAvailable: Bool { state == .available }
-  var isBusy: Bool { state == .checking || state == .installing }
-  var issue: String? {
+  package var isAvailable: Bool { state == .available }
+  package var isBusy: Bool { state == .checking || state == .installing }
+  package var issue: String? {
     if case .failed(let message) = state { return message }
     return nil
   }
 
-  func refresh() async {
+  package func refresh() async {
     guard !isBusy else { return }
     let previous = state
     state = .checking
@@ -27,7 +27,7 @@ final class RosettaSetup {
     }
   }
 
-  func install() async {
+  package func install() async {
     guard !isBusy, !isAvailable else { return }
     let previous = state
     state = .installing

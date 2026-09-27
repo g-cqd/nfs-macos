@@ -4,6 +4,20 @@ import Testing
 @testable import LauncherCore
 
 struct LaunchEnvironmentTests {
+  @Test
+  func `cod4 uses bundled renderer without loading NFS input plugins`() throws {
+    let paths = try AppPaths(
+      bundle: URL(fileURLWithPath: "/Applications/Call of Duty.app"),
+      support: URL(fileURLWithPath: "/tmp/CoD4 Player"), game: .cod4)
+    let environment = LaunchEnvironment.make(
+      paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support)
+    #expect(
+      environment["WINEDLLPATH"]
+        == "/Applications/Call of Duty.app/Contents/SharedSupport/Wine/lib/wine/d3d9/mtld3d")
+    #expect(environment["WINEDLLOVERRIDES"] == "mscoree,mshtml=")
+    #expect(environment["MTL_HUD_ENABLED"] == "0")
+    #expect(environment["WINE_COMPATDB"]?.contains("d3d9=mtld3d") == true)
+  }
   @Test(arguments: ["/Applications/Most Wanted.app", "/tmp/Friends & games/НФС.app"])
   func `resolves runtime paths after moving the app`(location: String) throws {
     let sut = try AppPaths(

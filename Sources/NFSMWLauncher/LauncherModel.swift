@@ -3,6 +3,7 @@ import Foundation
 import GameController
 import LauncherCore
 import Observation
+import SharedLauncher
 import SwiftUI
 
 @MainActor @Observable

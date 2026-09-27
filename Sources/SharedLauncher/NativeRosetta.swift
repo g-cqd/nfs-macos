@@ -2,9 +2,10 @@ import AppKit
 import Foundation
 
 @MainActor
-struct NativeRosetta: RosettaProviding {
+package struct NativeRosetta: RosettaProviding {
+  package init() {}
   /// Probes actual Intel execution without opening an installer or polling a receipt.
-  func isAvailable() async throws -> Bool {
+  package func isAvailable() async throws -> Bool {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/arch")
     process.arguments = ["-x86_64", "/usr/bin/true"]
@@ -31,7 +32,7 @@ struct NativeRosetta: RosettaProviding {
   }
 
   /// Launch Services requests Apple's Rosetta installation before opening this Intel-only helper.
-  func requestInstallation() async throws {
+  package func requestInstallation() async throws {
     let helper = Bundle.main.bundleURL.appendingPathComponent(
       "Contents/Helpers/Rosetta Request.app")
     let configuration = NSWorkspace.OpenConfiguration()

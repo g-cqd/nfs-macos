@@ -4,6 +4,14 @@ import Foundation
 package struct BundleManifest: Codable {
   let version: String
   let gameFiles: [ManifestFile]
+  let gameID: GameKind?
+  var kind: GameKind { gameID ?? .nfsmw }
+
+  init(version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil) {
+    self.version = version
+    self.gameFiles = gameFiles
+    self.gameID = gameID
+  }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
   package static func read(from url: URL) throws(LauncherError) -> Self {
@@ -42,11 +50,11 @@ package struct BundleManifest: Codable {
         throw .operation("The game manifest has an invalid or duplicate file: \(file.path)")
       }
       total += file.size
-      guard total <= 6_000_000_000 else {
+      guard total <= kind.byteLimit else {
         throw .operation("The game payload exceeds its size limit.")
       }
     }
-    guard seen.contains("speed.exe") else {
+    guard seen.contains(kind.executable) else {
       throw .operation("The game executable is missing from the manifest.")
     }
   }

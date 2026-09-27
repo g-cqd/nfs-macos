@@ -1,4 +1,4 @@
-enum RosettaState: Equatable {
+package enum RosettaState: Equatable {
   case unchecked
   case checking
   case missing

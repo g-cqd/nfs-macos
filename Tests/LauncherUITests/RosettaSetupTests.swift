@@ -1,4 +1,5 @@
 import Foundation
+import SharedLauncher
 import Testing
 
 @testable import NFSMWLauncher
