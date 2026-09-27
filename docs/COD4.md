@@ -35,6 +35,12 @@ while profile creation supplies standard keyboard/mouse bindings. No initial res
 template: the launcher supplies the selected display resolution. `Game/players` points
 to the app's persistent `Data/Saves` players tree after preparation.
 
+During play, a temporary `G:` drive maps only the private game directory. Wine cannot
+reverse-map the native working directory through `C:\CoD4` alone; without this drive
+it starts in `C:\windows` and fails to find `fileSysCheck.cfg` inside `main/iw_00.iwd`.
+The helper removes `G:` after stopping Wine. The next setup also removes a mapping
+left by an interrupted session. No host home or filesystem-root drive is exposed.
+
 The fresh prefix enables Wine Retina mode and Windows 10. The existing working prefix
 has no native DLL override or Activision install registration to reproduce.
 `d3dx9_34.dll` comes from the bundled Wine builtin; its bytes match the working prefix.

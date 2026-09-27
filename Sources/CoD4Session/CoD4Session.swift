@@ -64,6 +64,8 @@ struct CoD4Session {
       guard files.fileExists(atPath: game.appendingPathComponent(mode.executable).path) else {
         throw LauncherError.operation("This installation does not include the selected game mode.")
       }
+      let drive = CoD4GameDrive(paths: paths)
+      try drive.install()
       let status: Int32
       do {
         status = try ProcessCommand(
@@ -77,9 +79,11 @@ struct CoD4Session {
         do {
           try runtime.stop(paths.prefix)
           try lease.clear()
+          try drive.remove()
         } catch { print("CoD4 session cleanup failed: \(error)") }
         throw error
       }
+      try drive.remove()
       try snapshot(mode: mode, profile: selected)
       return status
     }
