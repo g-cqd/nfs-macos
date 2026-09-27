@@ -5,10 +5,17 @@
 #include <stdio.h>
 #include <wchar.h>
 
+#ifndef OBSERVATION_LIMIT_MS
+#define OBSERVATION_LIMIT_MS 180000ULL
+#endif
+#if OBSERVATION_LIMIT_MS < 1 || OBSERVATION_LIMIT_MS > 1080000ULL
+#error Invalid observation limit
+#endif
+
 /* Observe NFS termination metadata without opening its memory or command line. */
 int main(void)
 {
-    const ULONGLONG deadline = GetTickCount64() + 180000;
+    const ULONGLONG deadline = GetTickCount64() + OBSERVATION_LIMIT_MS;
     DWORD previous_pid = 0;
     setvbuf(stdout, NULL, _IONBF, 0);
 
