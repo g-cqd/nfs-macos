@@ -9,6 +9,7 @@ import argparse
 import plistlib
 import tempfile
 from signing_policy import resolve_identity, executable_entitlements
+from runtime_inputs import archive_launcher
 
 PROJECT = Path(__file__).resolve().parent.parent
 APP = PROJECT / "Build/Need for Speed Most Wanted.app"
@@ -18,8 +19,7 @@ MAGIC = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafec
 def main(identity='-'):
     listing = subprocess.check_output(['/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning'], text=True) if identity != '-' else ''
     identity = resolve_identity(identity, listing)
-    subprocess.run(["/usr/bin/tar", "-czf", str(APP / "Contents/Resources/Sources/NFSMW-launcher-source.tar.gz"),
-        "-C", str(PROJECT), "Package.swift", "Sources", "Tests", "Packaging", "README.md", "docs", "tools", "PLAN.md", "SETTINGS-PLAN.md"], check=True)
+    archive_launcher(APP / 'Contents/Resources')
     code = []
     changes = []
     for path in sorted(APP.rglob("*")):
@@ -68,7 +68,9 @@ def main(identity='-'):
     (APP / "Contents/Resources/runtime-files.json").write_text(json.dumps(pins, indent=2) + "\n")
     sign(APP)
     subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(APP)], check=True)
-    (PROJECT / "Evidence/signing.json").write_text(json.dumps(dict(
+    game_id = json.loads((APP / 'Contents/Resources/game-manifest.json').read_text()).get('gameID', 'nfsmw')
+    (PROJECT / 'Evidence').mkdir(exist_ok=True)
+    (PROJECT / 'Evidence' / ('signing-' + game_id + '.json')).write_text(json.dumps(dict(
         signature="ad-hoc" if identity == '-' else 'Developer ID', notarized=False,
         hardenedRuntime=identity != '-', nestedCodeCount=len(code), removedSearchPaths=changes), indent=2) + "\n")
     print("Verified", 'ad-hoc' if identity == '-' else 'Developer ID', "signatures for the app and", len(code), "nested code files")

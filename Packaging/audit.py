@@ -7,6 +7,7 @@ import subprocess
 import sys
 import struct
 from game_data import bundled_entries
+from recipes import validate_recipe
 
 app = Path(sys.argv[1]).resolve()
 assert app.is_dir() and app.suffix == ".app"
@@ -41,6 +42,14 @@ for path in app.rglob("*"):
             report["developmentRpaths"].append(lines[index + 2].strip())
 assert not any(report[key] for key in ["externalDependencies", "externalLinks", "developmentRpaths"]), report
 manifest = json.loads((app / "Contents/Resources/game-manifest.json").read_text())
+recipe_path = app / 'Contents/Resources/bundle-recipe.json'
+if recipe_path.exists():
+    recipe = validate_recipe(json.loads(recipe_path.read_text()))
+    assert manifest.get('gameID', 'nfsmw') == recipe['gameID']
+    for item in recipe['defaults']:
+        assert (app / 'Contents/Resources/Defaults' / item['path']).is_file(), item['path']
+    for name in [recipe['launcher'], recipe['session']]:
+        assert any((app / 'Contents' / folder / name).is_file() for folder in ['MacOS', 'Helpers'])
 entries = bundled_entries(manifest)
 for entry in entries:
     path = app / "Contents/Resources/Game" / entry["path"]
@@ -51,5 +60,10 @@ report["verifiedGameFiles"] = len(entries)
 report["gameDataIncluded"] = manifest.get("gameDataIncluded", True)
 report["importInventoryFiles"] = len(manifest["gameFiles"])
 report["gameVersion"] = manifest["version"]
+report['gameID'] = manifest.get('gameID', 'nfsmw')
+expected_game_paths = {entry['path'] for entry in entries}
+actual_game_paths = {path.relative_to(app / 'Contents/Resources/Game').as_posix()
+                     for path in (app / 'Contents/Resources/Game').rglob('*') if path.is_file()}
+assert actual_game_paths == expected_game_paths, 'Unexpected or missing game payload files'
 subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)], check=True)
 print(json.dumps(report, indent=2))

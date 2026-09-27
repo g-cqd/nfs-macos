@@ -3,9 +3,9 @@
 ## Layout
 
 ```text
-Most Wanted.app/Contents/
-  MacOS/NFSMWLauncher
-  Helpers/NFSMWSession
+<Game>.app/Contents/
+  MacOS/<recipe launcher>
+  Helpers/<recipe session>
   Helpers/x87sidecar
   Helpers/Rosetta Request.app
   SharedSupport/Wine/
@@ -19,28 +19,75 @@ Most Wanted.app/Contents/
 
 Keep Wine under SharedSupport. Placing the mixed PE/Mach-O runtime under Frameworks caused code signing to treat Windows DLLs as native code bundles.
 
-The installed app stays immutable. A helper creates writable, hash-verified generations under `~/Library/Application Support/NFSMW/Data/Versions`. `Data/Current` points atomically to one complete generation. `Data/Prefix` and `Data/Saves` persist across updates. Wine sees `C:\NFSMW` and `C:\NFSMWSaves` through relative links, while host drive mappings are restricted. This is guest drive isolation, not App Sandbox confinement.
+The installed app stays immutable. Its helper creates writable, hash-verified generations under `~/Library/Application Support/<game support name>/Data/Versions` (`NFSMW` or `CoD4Mac`). `Data/Current` points atomically to one complete generation. `Data/Prefix` and `Data/Saves` persist across updates. Wine sees the selected game through relative links (`C:\NFSMW` or `C:\CoD4`), while host drive mappings are restricted. NFS careers use `C:\NFSMWSaves`; CoD4 uses its persistent `players` tree. This is guest drive isolation, not App Sandbox confinement.
 
 The helper holds a process lock and records the game PID plus kernel start time. This protects a running game even if the parent launcher exits. Stage a complete replacement before publishing it. Preserve controller profile maps and configuration files during a generation update. Save and settings edits use bounded, recoverable transactions.
 
-## Local assembly inputs
+## Shared packaging stages and recipes
 
-`Packaging/package.py` currently resolves these pinned external inputs relative to the project parent (`TOOLS`):
+`Packaging/build.py` runs the shared verify → assemble → sign → audit → archive pipeline.
+`Packaging/assemble.py` composes input verification, runtime staging, game inventory,
+compatibility/default resources, corresponding sources, and app metadata. `package.py`
+remains the low-level entry point. Both games use these same stages.
 
-| Input | Local relative location |
+`Packaging/Recipes/{nfsmw,cod4}.json` declare the app identity, Swift launcher/session
+products, runtime profile, input roots, original file/directory allowlists, executable
+hashes, compatibility resources and clean defaults. `Packaging/runtime-inputs.json`
+pins the source revisions and tested runtime artifacts. A recipe selects resources;
+it does not claim that an arbitrary game works with Wine.
+
+The current inputs are retained local artifacts:
+
+| Input | Default |
 |---|---|
-| Supported game files | `../NFSMW` |
-| Base runtime | `wine-nfsmw-vertex-20260926` |
-| Installed production renderer | `public-sources/mtld3d-clean/.wine-isolated/sdk/lib/wine/d3d9/mtld3d` |
-| Cursor-corrected Wine loader | `wine-cursor-build/loader/wine` |
-| Exact conversion sidecar | `x87sidecar-nfsmw-20260926` |
-| Corresponding source forks | `public-sources/{mtld3d-clean,x87sidecar,wine}` |
-| Additional source recipes | `wine-build`, `NFS-XtendedInput`, `diagnostics/{cursor-source,rumble-lab,garage-edit}` |
-| Dependency sources/notices | local `Evidence/wine-deps.tar.xz`, `Evidence/DependencySources`, and component license files |
+| NFS original assets | `~/Games/NFSMW` |
+| NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Desktop/Most Wanted Bundled.app` (preserved v5) |
+| CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
+| Tested latest mtld3d overlay | `~/Games/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine` |
+| Renderer source evidence | `~/Games/CoD4-tools/performance-20260927-U9gG37/source-sha256.json` |
+| Latest sidecar / corresponding forks | `~/Developer/x87sidecar/build/bin/x87sidecar`, `~/Developer/{mtld3d,x87sidecar}` |
 
-These external runtime and source archives must exist before full packaging. Keep their origins and hashes in the generated provenance. The supported game executable SHA-256 is `bde12bdd158b7f861078ad4527f5a656f34c6068e4a2120f28044f92f0fa158c`.
+These are assembly inputs, never runtime dependencies on the destination Mac. The
+packager uses APFS clones, keeps source installations unchanged, and rejects artifact
+hash mismatches or a dirty/unpinned source checkout. All 535 renderer source hashes
+match the pinned latest mtld3d revision. The two Wine bases have identical code sections
+in their outer loader, server and Unix ntdll and identical i386 ntdll runtime contents;
+NFS retains its separate cursor-corrected inner loader.
 
-The packager copies only the declared game folders, compatibility files, and runtime components. It strips unused renderers, developer headers, static libraries, and tools. It applies the hash-gated WidescreenFix patch, fixes simulation rate at 120, writes per-file hashes, and includes notices and corresponding modified sources. It does not copy personal saves or an existing Wine prefix.
+Override a relocated input with `--input NAME=/absolute/path`. The declared names are
+in each recipe. For example, `--input baseApp=/archive/Most\ Wanted\ Bundled.app` changes
+the retained source/notices input; also override `runtime` if that app supplies the
+Wine base. No source path is inferred from a user's existing Wine prefix.
+
+NFS copies its existing hash-pinned compatibility files from v5, including the patched
+WidescreenFix and fixed simulation rate. CoD4 copies only declared original SP/MP assets
+and clean defaults; no player files, keys, logs, or shader caches enter the bundle.
+Import builds keep the complete per-file inventory and compatibility files while
+omitting original game bytes. See [CoD4](COD4.md) for its payload and first-run contract.
+
+## Add a game recipe
+
+1. Add a recipe JSON with a unique `gameID`, bundle identifier, app name, and existing
+   launcher/session executable targets. Use `--recipe /path/game.json` while developing it.
+2. Declare input roots with `{home}`, `{games}`, `{tools}` or `{project}` placeholders.
+   List original files and directory suffix filters explicitly. An empty suffix list
+   selects all files in that directory. Linked files, traversal paths, duplicate or
+   overlapping selections and payloads above 20 GiB are rejected.
+3. Pin supported executables and select a verified runtime profile. A new runtime
+   profile belongs in `runtime-inputs.json` with corresponding source/license inputs;
+   changing an artifact requires new pins and compatibility evidence.
+4. Declare compatibility resources and clean defaults separately. `path` is the
+   destination relative to `Game` or `Defaults`; `input` and `source` identify the
+   original. An optional `sha256` pins a compatibility resource. Original executables
+   and assets are never patched by the generic stage.
+5. Supply the launcher's game adapter for preparation, settings, persistent files and
+   arguments. Recipes do not replace game-specific runtime behavior. Any new binary
+   transform must be an explicit, tested adapter, like the retained NFS compatibility
+   workflow, rather than a universal game patch.
+6. Run the focused `Packaging/check_*.py` gates and the normal build pipeline, then test
+   the relocated app. `compatibilityFiles` in the manifest defines the import payload;
+   `gameDataIncluded`, `supportsSP` and `supportsMP` describe package contents, not online
+   service availability or successful gameplay verification.
 
 ## Rosetta setup
 
@@ -76,8 +123,8 @@ The app copies only required original assets from that folder and uses its own c
 Use Python 3.11 or newer. Both commands run the tests, release build, formatter, packaging regressions, signing, dependency/hash audit, ZIP verification, and SHA-256 generation:
 
 ```sh
-python3 Packaging/build.py --game-data bundled --output "Build/Most Wanted Bundled.app"
-python3 Packaging/build.py --game-data import --output "Build/Most Wanted Import.app"
+python3 Packaging/build.py --game nfsmw --game-data bundled --output "Build/Most Wanted Bundled.app"
+python3 Packaging/build.py --game nfsmw --game-data import --output "Build/Most Wanted Import.app"
 ```
 
 | Mode | Included | First use |
@@ -85,7 +132,7 @@ python3 Packaging/build.py --game-data import --output "Build/Most Wanted Import
 | `bundled` | Whole game, Wine, mtld3d, x87sidecar, launcher, compatibility files, notices and sources | Prepare the player folder and play |
 | `import` | Same runtime, launcher and fixes; no original game assets | Select **Import game data…** and choose the supported PC installation |
 
-Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Choose an unused output name; previous builds are preserved. The low-level `package.py` also accepts `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
+Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
 
 Both modes currently need the pinned local assembly inputs above, including the source game installation used to generate the complete import inventory. The import variant retains that inventory but omits the original payload. Builds do not include personal careers or an existing Wine prefix.
 

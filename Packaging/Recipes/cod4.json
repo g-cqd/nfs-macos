@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "gameID": "cod4",
+  "displayName": "Call of Duty 4",
+  "bundleIdentifier": "local.cod4.mac",
+  "bundleVersion": "1",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.action-games",
+  "launcher": "CoD4Launcher",
+  "session": "CoD4Session",
+  "runtimeProfile": "cod4-tested",
+  "inputs": {
+    "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
+    "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/CoD4-tools/performance-20260927-U9gG37",
+    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
+    "mtld3dSource": "{home}/Developer/mtld3d",
+    "x87Source": "{home}/Developer/x87sidecar",
+    "packaging": "{project}/Packaging",
+    "game": "{games}/CoD4",
+    "runtime": "{games}/CoD4-tools/wine"
+  },
+  "originalFiles": [
+    "iw3sp.exe",
+    "iw3mp.exe",
+    "binkw32.dll",
+    "mss32.dll",
+    "localization.txt"
+  ],
+  "originalDirectories": {
+    "main": [
+      ".iwd",
+      ".bik"
+    ],
+    "zone": [
+      ".ff"
+    ],
+    "miles": [
+      ".asi",
+      ".flt"
+    ]
+  },
+  "executableHashes": {
+    "iw3sp.exe": "d07c39ee5865972a319a4a174be6134c59911f34fa9ebbafb815674af7d3e116",
+    "iw3mp.exe": "c7a5f9b296f23efa9055868c58afde986b0bd0d45533de667b11fe01d800b3e4"
+  },
+  "compatibility": [
+    {
+      "path": "mtld3d.conf",
+      "input": "packaging",
+      "source": "CoD4Defaults/mtld3d.conf"
+    }
+  ],
+  "defaults": [
+    {
+      "path": "config.cfg",
+      "input": "packaging",
+      "source": "CoD4Defaults/config.cfg"
+    },
+    {
+      "path": "config_mp.cfg",
+      "input": "packaging",
+      "source": "CoD4Defaults/config.cfg"
+    },
+    {
+      "path": "mtld3d.conf",
+      "input": "packaging",
+      "source": "CoD4Defaults/mtld3d.conf"
+    },
+    {
+      "path": "settings.reg",
+      "input": "packaging",
+      "source": "CoD4Defaults/settings.reg"
+    }
+  ],
+  "supportsSP": true,
+  "supportsMP": true
+}

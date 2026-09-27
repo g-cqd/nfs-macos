@@ -20,4 +20,10 @@ def omit_original_data(root, entries):
 def bundled_entries(manifest):
     if manifest.get("gameDataIncluded", True):
         return manifest["gameFiles"]
+    if 'compatibilityFiles' in manifest:
+        included = set(manifest['compatibilityFiles'])
+        return [entry for entry in manifest['gameFiles'] if entry['path'] in included]
+    if manifest.get('gameID') == 'cod4':
+        from cod4_data import is_original as cod4_original
+        return [entry for entry in manifest['gameFiles'] if not cod4_original(entry['path'])]
     return [entry for entry in manifest["gameFiles"] if not is_original(entry["path"])]

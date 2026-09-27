@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "gameID": "nfsmw",
+  "displayName": "Most Wanted",
+  "bundleIdentifier": "local.nfsmw.mac",
+  "bundleVersion": "6",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.racing-games",
+  "launcher": "NFSMWLauncher",
+  "session": "NFSMWSession",
+  "runtimeProfile": "nfsmw-cursor",
+  "inputs": {
+    "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
+    "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/CoD4-tools/performance-20260927-U9gG37",
+    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
+    "mtld3dSource": "{home}/Developer/mtld3d",
+    "x87Source": "{home}/Developer/x87sidecar",
+    "packaging": "{project}/Packaging",
+    "game": "{games}/NFSMW",
+    "runtime": "{home}/Desktop/Most Wanted Bundled.app/Contents/SharedSupport/Wine"
+  },
+  "originalFiles": [
+    "speed.exe",
+    "bin.dat",
+    "server.cfg",
+    "server.dll"
+  ],
+  "originalDirectories": {
+    "CARS": [],
+    "CREDITS": [],
+    "FRONTEND": [],
+    "GLOBAL": [],
+    "LANGUAGES": [],
+    "MEMCARD": [],
+    "MOVIES": [],
+    "NIS": [],
+    "SOUND": [],
+    "SUBTITLES": [],
+    "TRACKS": []
+  },
+  "executableHashes": {
+    "speed.exe": "bde12bdd158b7f861078ad4527f5a656f34c6068e4a2120f28044f92f0fa158c"
+  },
+  "compatibility": [
+    {
+      "path": "dinput8.dll",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/dinput8.dll",
+      "sha256": "d5a059aa467a7a7127c8f6169f79fa63ff0f55986ee9eb2fd9a281bebf2aa2e6"
+    },
+    {
+      "path": "mtld3d.conf",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/mtld3d.conf",
+      "sha256": "26a3b29eeefa49ec33f5bc65a8b3aad188b9c7afc10ffe3ff33cb1499c88e68d"
+    },
+    {
+      "path": "scripts/NFSMW_RumbleHelper.exe",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFSMW_RumbleHelper.exe",
+      "sha256": "713f49207b19f08460f2c338a67d26c092848565d5d4be9f38f53b29b61a630c"
+    },
+    {
+      "path": "scripts/NFSMostWanted.WidescreenFix.asi",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFSMostWanted.WidescreenFix.asi",
+      "sha256": "8f0e3f1d0e9e33cd2944e1930884030e49fb1e4db8a739e9800abcdb6f835823"
+    },
+    {
+      "path": "scripts/NFSMostWanted.WidescreenFix.ini",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFSMostWanted.WidescreenFix.ini",
+      "sha256": "af064c9921d3146aca9e7ffead9d12747a6677e318bc326d01aab305fa9100ab"
+    },
+    {
+      "path": "scripts/NFSMostWanted.WidescreenFix.tpk",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFSMostWanted.WidescreenFix.tpk",
+      "sha256": "a66fd12ebc549c4dc8b78dbc791e622d0e9065a286d698ac81a0dd15510bf904"
+    },
+    {
+      "path": "scripts/NFS_XtendedInput.asi",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFS_XtendedInput.asi",
+      "sha256": "40e90b8bf6a76c71d2997690f2df7223cb4b49b229cd41f5c484db4c7938a8c8"
+    },
+    {
+      "path": "scripts/NFS_XtendedInput.ini",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFS_XtendedInput.ini",
+      "sha256": "97907a31c8b34f14dec63af237f08aa2a5f54f0b5b39ce31823448ba1a2b5c43"
+    },
+    {
+      "path": "scripts/NFS_XtendedInput.default.ini",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/NFS_XtendedInput.default.ini",
+      "sha256": "301be2b1bc76eef1324ca28c3dc7b23e350ccfc70092c74e7468b4c2a1186ceb"
+    },
+    {
+      "path": "scripts/Z_NFSMW_Rumble.asi",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/Z_NFSMW_Rumble.asi",
+      "sha256": "167277e5ecb0b7045c08e9ea4395bcdb582f57253f9f53b01884d469fef32ca5"
+    },
+    {
+      "path": "scripts/Z_NFSMW_Unlocks.asi",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/Z_NFSMW_Unlocks.asi",
+      "sha256": "fdffdda99987cab03644f4b5bc6e9894e7b9378c8f7fde750253dcc2f2624013"
+    },
+    {
+      "path": "scripts/nfs_cursor.cur",
+      "input": "baseApp",
+      "source": "Contents/Resources/Game/scripts/nfs_cursor.cur",
+      "sha256": "ce4e795fa5285a72efcf196512b2e31d991e0296cc5461f85989e8d7ad10c49a"
+    }
+  ],
+  "defaults": [
+    {
+      "path": "settings.reg",
+      "input": "packaging",
+      "source": "settings.reg",
+      "sha256": "e7e6627c1823a23c125d0230a3dbc79e0c92487ece2a5739b4ac06af049609cb"
+    },
+    {
+      "path": "FreshCareer.save",
+      "input": "packaging",
+      "source": "FreshCareer.save",
+      "sha256": "873d10faef46e09ecc8aaa4e8bed3af4aa684e15ab07975f2fd553565aab0846"
+    }
+  ],
+  "supportsSP": true,
+  "supportsMP": false
+}

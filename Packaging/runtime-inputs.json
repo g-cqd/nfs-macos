@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "mtld3d": {
+      "input": "mtld3dSource",
+      "revision": "5f5331a2d8762356bd49d128271c1b186c31e7ec",
+      "url": "https://github.com/g-cqd/mtld3d"
+    },
+    "x87sidecar": {
+      "input": "x87Source",
+      "revision": "dbd680d4cbe14afa12774d53670a18758f15110e",
+      "url": "https://github.com/g-cqd/x87sidecar"
+    }
+  },
+  "sidecarSHA256": "4ff36ccd907c5f11f399233d04c7e8318c18a08f6751beab8323120400446be0",
+  "rendererFiles": {
+    "d3d9/mtld3d/i386-windows/d3d8.dll": "2d74b89386d1084426dfb4559f0fef0f906b2cb225d9f87887973c1f04f4c45f",
+    "d3d9/mtld3d/i386-windows/d3d9.dll": "28a641343bff288d9f6c794728026b5c1584c8158c383b72a78e450ce84ce5a5",
+    "d3d9/mtld3d/i386-windows/mtld3d.dll": "a7627943246fe323662ba4938891ff4d79b4fd515309a41a2fa45c1567f4b38d",
+    "d3d9/mtld3d/x86_64-unix/mtld3d.so": "d95992217a16c0cf636ba047ffb007bd0214f75165923205e0da74cfb2464b22",
+    "i386-windows/d3d8.dll": "bcc11c5bd9836702474f78cbd3de0e37bd368ae4fdad437c36f4a71daa04de5c",
+    "i386-windows/d3d9.dll": "434ee843455c2d57ff6ad511e215ba48b5b72d2ab99a4bb58762bd2ba2b4ec12",
+    "i386-windows/mtld3d.dll": "bcc69de7fbceb9d8f274d40b62143aaffd9f976dd953ed5fe548e39c98d5ccac"
+  },
+  "rendererSourceManifestSHA256": "80040ff6972d79d1a0884d9eac9372b0f93ae01e78e4cf5daffc08160772047c",
+  "runtimeProfiles": {
+    "nfsmw-cursor": {
+      "description": "CX26.3 / Wine11.0 with cooperative x87 handshake and NFS cursor recovery",
+      "files": {
+        "bin/wine": "506df923dcda29df4aa4bbfd07e7642212ced0892befdebe0d0534e86f84f4ea",
+        "bin/wineserver": "6c03bbb8bcfcc5567650f2b236ff772b0b805a4bfc52719af07d48844d54c94f",
+        "lib/wine/x86_64-unix/ntdll.so": "f4626247a9442abb90a78f5be134c6a2fbfa788012a2f4b9f44dad9d66ff6ee1",
+        "lib/wine/x86_64-unix/wine": "7bb37fddaa852201d6b70b891c5f63ea601b4e8f914e41d158e551414f1d1939",
+        "lib/wine/i386-windows/ntdll.dll": "6444a002d8b68ec67dff69d1afad7a293564b96e36d0f8eb959d815f25df3c4d"
+      }
+    },
+    "cod4-tested": {
+      "description": "CX26.3 / Wine11.0 with cooperative x87 handshake",
+      "files": {
+        "bin/wine": "7202d5f87ba9542f915b8a886ef7707fd0213200972e4cf61504c514b5e301c4",
+        "bin/wineserver": "c686a25a3dc893941ba8aaa0eb85075877be227bc00cda827d3ff8b2b94f8e97",
+        "lib/wine/x86_64-unix/ntdll.so": "3bc4baa14ae578036896e1cee462871e52a3815a7624bc35ed8292a5bc7508ba",
+        "lib/wine/x86_64-unix/wine": "344f95e27553263de37640eba6e138f4ec8f4c821c631b9e1d228dccca12f611",
+        "lib/wine/i386-windows/ntdll.dll": "5eaa28ca4c65d21f22ed9a5fcbeb37bde3a7fe0822b62fbe31c4847eb57fbfe4"
+      }
+    }
+  }
+}
