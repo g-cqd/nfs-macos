@@ -23,6 +23,7 @@ The repository contains launcher code, test fixtures, patches, and build recipes
 - [Current work and verification gates](docs/WORK-PLAN.md)
 - [Delivered build sizes, checksums and verification](docs/VERIFICATION.md)
 - [Compatibility source forks](docs/UPSTREAMS.md)
+- [MetalFX temporal feasibility (outside this release)](docs/METALFX-ROADMAP.md)
 
 ## Build the native starter
 
