@@ -26,6 +26,11 @@ package struct GameInstaller {
       guard manifest.kind == paths.kind else {
         throw LauncherError.operation("The game manifest belongs to a different app.")
       }
+      guard manifest.kind.copiesGameData else {
+        // A referencing app never republishes game bytes; ReferencedInstall owns that contract.
+        throw LauncherError.operation(
+          "This app runs the player's own installation and publishes no copy of it.")
+      }
       try files.createDirectory(at: paths.support, withIntermediateDirectories: true)
       let current = try currentGeneration()
       if let current, source == nil, current.metadata.bundleVersion == manifest.version {

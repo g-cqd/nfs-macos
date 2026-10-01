@@ -8,7 +8,7 @@ package enum LauncherError: Error, LocalizedError, Equatable {
   package var errorDescription: String? {
     switch self {
     case .operation(let message): message
-    case .alreadyRunning: "Most Wanted is already running. Return to its game window."
+    case .alreadyRunning: "This game is already running. Return to its game window."
     }
   }
 }

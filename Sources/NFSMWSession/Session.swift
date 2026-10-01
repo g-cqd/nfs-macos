@@ -20,7 +20,7 @@ struct Session {
       }
       let manifest = try BundleManifest.read(
         from: paths.resources.appendingPathComponent("game-manifest.json"))
-      var environment = runtime.environment(prefix: paths.prefix)
+      var environment = try runtime.environment(prefix: paths.prefix)
       let rosetta = ProcessCommand(
         executable: URL(fileURLWithPath: "/usr/bin/arch"),
         arguments: ["-x86_64", "/usr/bin/true"], directory: paths.support, environment: environment)

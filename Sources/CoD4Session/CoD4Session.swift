@@ -21,7 +21,7 @@ struct CoD4Session {
           at: paths.support.appendingPathComponent(folder), withIntermediateDirectories: true)
       }
       let runtime = WineRuntime(paths: paths, output: output)
-      let environment = runtime.environment(prefix: paths.prefix)
+      let environment = try runtime.environment(prefix: paths.prefix)
       guard
         try ProcessCommand(
           executable: URL(fileURLWithPath: "/usr/bin/arch"),

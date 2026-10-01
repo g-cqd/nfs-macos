@@ -5,12 +5,33 @@ package struct BundleManifest: Codable {
   let version: String
   let gameFiles: [ManifestFile]
   let gameID: GameKind?
-  var kind: GameKind { gameID ?? .nfsmw }
+  /// Set when the app references the player's installation in place instead of copying it.
+  let referencesInstallation: Bool?
+  /// Runtime switches the recipe declares for the staged Wine build.
+  let runtimeTuning: RuntimeTuning?
+  /// The store client that must be installed, signed into and running before the game starts.
+  let storeClient: StoreClientPlan?
+  /// Controller `VID/PID` pairs this game needs Wine to present through XInput.
+  let controllerDevices: [String]?
 
-  init(version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil) {
+  package var kind: GameKind { gameID ?? .nfsmw }
+  package var references: Bool { referencesInstallation ?? false }
+  package var tuning: RuntimeTuning { runtimeTuning ?? RuntimeTuning() }
+  package var client: StoreClientPlan? { storeClient }
+  package var controllers: [String] { controllerDevices ?? [] }
+
+  init(
+    version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
+    referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
+    storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil
+  ) {
     self.version = version
     self.gameFiles = gameFiles
     self.gameID = gameID
+    self.referencesInstallation = referencesInstallation
+    self.runtimeTuning = runtimeTuning
+    self.storeClient = storeClient
+    self.controllerDevices = controllerDevices
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -33,10 +54,34 @@ package struct BundleManifest: Codable {
       version.utf8.allSatisfy({
         (48...57).contains($0) || (65...90).contains($0)
           || (97...122).contains($0) || $0 == 45 || $0 == 95
-      }),
-      !gameFiles.isEmpty, gameFiles.count <= 30_000
+      }), gameFiles.count <= 30_000
     else {
       throw .operation("The game manifest has an invalid version or file count.")
+    }
+    try tuning.validate()
+    // A referencing app owns no game bytes, so it must carry no inventory and name its client.
+    guard references == (kind == .nfs2015) else {
+      throw .operation("The game manifest does not match this app's installation contract.")
+    }
+    if references {
+      guard gameFiles.isEmpty, let client else {
+        throw .operation(
+          "A referencing game manifest must carry no game files and name its store client.")
+      }
+      try client.validate()
+      guard controllers.count <= 32,
+        controllers.allSatisfy({ device in
+          let parts = device.split(separator: "/", omittingEmptySubsequences: false)
+          return parts.count == 2
+            && parts.allSatisfy { $0.count == 4 && $0.allSatisfy(\.isHexDigit) }
+        })
+      else {
+        throw .operation("The manifest lists an invalid controller device.")
+      }
+      return
+    }
+    guard storeClient == nil, !gameFiles.isEmpty else {
+      throw .operation("The game manifest has an invalid file count.")
     }
     var seen = Set<String>()
     var total = 0
