@@ -51,7 +51,7 @@
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
-    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime"
+    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine"
   },
   "runtimeRetention": [
     "lib/wine/dxgi/gptk",
