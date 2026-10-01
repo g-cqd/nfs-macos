@@ -99,7 +99,7 @@ attribute values, so comments, whitespace, attribute order, unknown elements and
 encoding are kept. A file that is not well-formed, declares a DOCTYPE or has no `RenderProfile` is
 reported as unrecognised and never modified; renderer settings still apply. The first time the
 starter edits the profile it saves the game's untouched copy to `Backups/FarCry2/GamerProfile.original.xml`.
-Settings and the renderer file change in one recoverable transaction. A backup copies the three
+Settings and the renderer file change in one recoverable transaction. A backup copies both
 player folders (at most 4,096 files and 512 MiB each, no links), a restore first backs up the current
 data, and an interrupted restore is completed or reversed at the next session.
 
