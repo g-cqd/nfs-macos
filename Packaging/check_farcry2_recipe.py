@@ -40,6 +40,8 @@ mutations = {
     'path in exclusion': lambda r: r['importRules']['directories'][0]['excludedNames'].append('a/b'),
     'duplicate directory': lambda r: r['importRules']['directories'].append(
         dict(r['importRules']['directories'][0], path='BIN')),
+    'pairing directory only resembles a root': lambda r: r['importRules']['pairings'][0].update(
+        directory='Data_Win32x'),
     'bad pairing suffix': lambda r: r['importRules']['pairings'][0].update(primarySuffix='fat'),
     'marker with path': lambda r: r['importRules']['markers'][0]['patterns'].append('a/b'),
     'malformed digest': lambda r: r['importRules']['knownBuilds'].append(

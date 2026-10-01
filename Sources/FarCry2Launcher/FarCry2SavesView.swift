@@ -15,6 +15,14 @@ struct FarCry2SavesView: View {
             .foregroundStyle(.secondary)
         }
       }
+      if model.keptAside > 0 {
+        Section("Set-aside folders") {
+          Text(
+            "\(model.keptAside) older player folder(s) conflicted with your saved data and were kept, not deleted, in Data/Saves/FarCry2/Conflicts inside ~/Library/Application Support/FarCry2Mac."
+          )
+          .font(.caption).foregroundStyle(.secondary)
+        }
+      }
       Section("Backups") {
         if model.backups.isEmpty {
           Text("No backups yet.").foregroundStyle(.secondary)

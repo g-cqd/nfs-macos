@@ -81,6 +81,18 @@ struct FarCry2UserDataTests {
   }
 
   @Test
+  func `reports how many folders were kept aside so the player can be told`() throws {
+    let fixture = try FarCry2Fixture()
+    defer { fixture.remove() }
+    #expect(try fixture.user.keptAside() == 0)
+    try fixture.write("kept", to: fixture.user.documents.appendingPathComponent("GamerProfile.xml"))
+    let existing = fixture.wineProfile.appendingPathComponent("Documents/My Games/Far Cry 2")
+    try fixture.write("other", to: existing.appendingPathComponent("stray.txt"))
+    try fixture.user.install()
+    #expect(try fixture.user.keptAside() == 1)
+  }
+
+  @Test
   func `finds the profile whatever Wine named it and rejects ambiguity`() throws {
     let named = try FarCry2Fixture(profileName: "Player")
     defer { named.remove() }

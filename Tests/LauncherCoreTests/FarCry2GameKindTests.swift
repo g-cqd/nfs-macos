@@ -25,12 +25,12 @@ struct FarCry2GameKindTests {
   func `existing games keep their previous contracts`(kind: GameKind) {
     switch kind {
     case .nfsmw:
-      #expect(kind.executable == "speed.exe" && kind.folder == "NFSMW" && !kind.usesGameDrive)
+      #expect(kind.executable == "speed.exe" && kind.folder == "NFSMW")
       #expect(kind.rendererConfiguration == "mtld3d.conf")
     case .cod4:
-      #expect(kind.executable == "iw3sp.exe" && kind.folder == "CoD4" && kind.usesGameDrive)
+      #expect(kind.executable == "iw3sp.exe" && kind.folder == "CoD4")
       #expect(kind.preservedConfiguration == ["mtld3d.conf"])
-    case .farcry2: #expect(kind.usesGameDrive)
+    case .farcry2: #expect(kind.rendererConfiguration == "bin/mtld3d.conf")
     }
   }
 

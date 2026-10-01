@@ -65,6 +65,9 @@ package struct BundleManifest: Codable {
       guard importRules.executable.lowercased() == kind.executable.lowercased() else {
         throw .operation("The game recognition rules belong to a different executable.")
       }
+      guard importRules.maximumBytes <= kind.byteLimit else {
+        throw .operation("The game recognition rules allow more data than this game supports.")
+      }
     } else {
       guard seen.contains(kind.executable.lowercased()) else {
         throw .operation("The game executable is missing from the manifest.")

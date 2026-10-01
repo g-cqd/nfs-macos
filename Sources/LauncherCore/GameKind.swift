@@ -24,8 +24,6 @@ package enum GameKind: String, Codable, Sendable {
     case .farcry2: "FarCry2Session"
     }
   }
-  /// Games whose working directory Wine cannot reverse-map through the `C:` link need a game-only drive.
-  package var usesGameDrive: Bool { self != .nfsmw }
   /// The renderer configuration lives next to the executable, which is `bin` for Far Cry 2.
   package var rendererConfiguration: String {
     self == .farcry2 ? "bin/mtld3d.conf" : "mtld3d.conf"

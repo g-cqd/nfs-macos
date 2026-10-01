@@ -61,7 +61,9 @@ def validate_import_rules(rules):
     if rules['executable'].lower() not in names:
         raise ValueError('The executable must be a required file')
     for item in rules.get('pairings', []):
-        safe_relative(item.get('directory'))
+        directory = safe_relative(item.get('directory')).lower()
+        if not any(directory == root or directory.startswith(root + '/') for root in roots):
+            raise ValueError('Pairing directory is outside every copied directory: ' + directory)
         for key in ['primarySuffix', 'companionSuffix']:
             if not re.fullmatch(r'\.[a-z0-9]+', str(item.get(key))):
                 raise ValueError('Invalid pairing suffix')

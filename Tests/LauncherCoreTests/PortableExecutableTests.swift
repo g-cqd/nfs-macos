@@ -19,6 +19,16 @@ struct PortableExecutableTests {
   }
 
   @Test
+  func `version strings are bounded in bytes however many combining marks one letter has`() throws {
+    var options = PEFixture.Options()
+    options.strings = [("ProductName", "e" + String(repeating: "\u{0301}", count: 20_000))]
+    let image = try PortableExecutable.parse(PEFixture.make(options))
+    let product = try #require(image.strings["ProductName"])
+    #expect(product.utf8.count <= 128)
+    #expect(!product.isEmpty)
+  }
+
+  @Test
   func `an image without a version resource is still recognised`() throws {
     var options = PEFixture.Options()
     options.fileVersion = nil

@@ -115,6 +115,15 @@ struct FarCry2ModelTests {
     #expect(request.action == .restore && request.id == backup.id)
   }
 
+  @Test func `kept-aside folders are reported to the player`() async {
+    let service = SessionStub()
+    service.snapshot = FarCry2Snapshot(
+      settings: .init(), profile: .ready, installation: nil, backups: [], keptAside: 2)
+    let sut = makeModel(service: service)
+    await sut.run()
+    #expect(sut.keptAside == 2)
+  }
+
   @Test func `the helper request for importing carries the chosen folder`() async throws {
     let service = SessionStub()
     service.hasData = false

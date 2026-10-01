@@ -112,7 +112,8 @@ struct FarCry2Session {
     let snapshot = FarCry2Snapshot(
       settings: loaded.settings, profile: loaded.state,
       installation: GameInstaller.installedGame(paths: paths),
-      backups: try FarCry2Backups(paths: paths).list())
+      backups: try FarCry2Backups(paths: paths).list(),
+      keptAside: try FarCry2UserData(paths: paths).keptAside())
     try JSONEncoder().encode(snapshot).write(
       to: paths.support.appendingPathComponent("launcher-state.json"), options: .atomic)
   }

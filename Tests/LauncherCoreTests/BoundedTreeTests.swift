@@ -51,6 +51,20 @@ struct BoundedTreeTests {
   }
 
   @Test
+  func `many empty folders count against the same ceiling as files`() throws {
+    let root = try tree(["a.txt": "1"])
+    defer { remove(root) }
+    for index in 0..<6 {
+      try FileManager.default.createDirectory(
+        at: root.appendingPathComponent("empty\(index)"), withIntermediateDirectories: false)
+    }
+    #expect(throws: LauncherError.self) {
+      try BoundedTree.inventory(root, limits: .init(files: 4))
+    }
+    _ = try BoundedTree.inventory(root, limits: .init(files: 20))
+  }
+
+  @Test
   func `copies a tree exactly and refuses an existing or nested destination`() throws {
     let root = try tree(["a.txt": "one", "d/b.txt": "two"])
     defer { remove(root) }

@@ -36,6 +36,7 @@ package enum BoundedTree {
       var pending: [(url: URL, depth: Int, prefix: String)] = [(root, 0, "")]
       var result: [String] = []
       var bytes = 0
+      var directories = 0
       while let (directory, depth, prefix) = pending.popLast() {
         guard depth < limits.depth else {
           throw LauncherError.operation("A player folder is nested too deeply.")
@@ -48,6 +49,10 @@ package enum BoundedTree {
             throw LauncherError.operation("Links are not supported in player folders.")
           }
           if attributes.isDirectory == true {
+            directories += 1
+            guard directories <= limits.files else {
+              throw LauncherError.operation("A player folder contains too many folders.")
+            }
             pending.append((entry, depth + 1, prefix + entry.lastPathComponent + "/"))
             continue
           }

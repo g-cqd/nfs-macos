@@ -92,7 +92,8 @@ Both game folders are symbolic links, with relative targets, from the Wine profi
 `Data/Saves`. Deleting or rebuilding the prefix, or updating the app, keeps saves and settings. An
 existing real folder is moved into `Data/Saves`; if both exist, the real one is moved aside to
 `Saves/FarCry2/Conflicts` and nothing is deleted. A link that points elsewhere, a file in the way or
-a host alias in the profile stops the session before play.
+a host alias in the profile stops the session before play. The Saves & backups page tells the player
+how many set-aside folders exist.
 
 `GamerProfile.xml` is edited **in place**: a byte-level tokenizer finds start tags and replaces only
 attribute values, so comments, whitespace, attribute order, unknown elements and UTF-8, BOM or UTF-16
@@ -101,7 +102,8 @@ reported as unrecognised and never modified; renderer settings still apply. The 
 starter edits the profile it saves the game's untouched copy to `Backups/FarCry2/GamerProfile.original.xml`.
 Settings and the renderer file change in one recoverable transaction. A backup copies both
 player folders (at most 4,096 files and 512 MiB each, no links), a restore first backs up the current
-data, and an interrupted restore is completed or reversed at the next session.
+data (that safety copy may take the count one above the limit of 20, so a full set can still be
+restored), and an interrupted restore is completed or reversed at the next session.
 
 ## Launch
 
@@ -206,6 +208,8 @@ program. Settings worth testing, each a suspicion rather than a finding:
   the profile is reported as unrecognised and left alone.
 - **Runtime libraries.** The 2008 build probably expects VC9 runtimes and `d3dx9_*`; Wine's builtins
   are used and nothing is installed. A missing-DLL failure would appear in the session log.
+- **Disk use.** Every import creates a new generation (a full copy unless APFS can clone it) and old
+  generations are not pruned, as for the other games.
 - **Online and multiplayer.** Not supported (`supportsMP` is false); the game's online services
   are long gone.
 - **32-bit address space.** A large game under a 32-bit process; mtld3d's native threads keep their

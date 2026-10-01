@@ -64,6 +64,22 @@ struct FarCry2BackupsTests {
   }
 
   @Test
+  func `restore still works when the backup limit has been reached`() throws {
+    let (fixture, backups) = try prepared()
+    defer { fixture.remove() }
+    var first: FarCry2Backup?
+    for index in 0..<FarCry2Backups.limit {
+      let backup = try backups.create(label: "b\(index)")
+      first = first ?? backup
+    }
+    try fixture.write("profile v2", to: fixture.user.profileFile)
+    let listed = try backups.perform(.init(action: .restore, id: try #require(first).id))
+    #expect(try fixture.read(fixture.user.profileFile) == "profile v1")
+    #expect(listed.count == FarCry2Backups.limit + 1, "the safety copy may exceed the limit by one")
+    #expect(throws: LauncherError.self) { try backups.create(label: "still limited") }
+  }
+
+  @Test
   func `removing a backup deletes only that backup`() throws {
     let (fixture, backups) = try prepared()
     defer { fixture.remove() }

@@ -36,6 +36,7 @@ fi
 # The prefix must exist before the game drive can be mapped.
 [[ -d "$PREFIX/drive_c" ]] || "$WINE_ROOT/bin/wine" wineboot --init > "$TOOLS/diagnostics/wineboot.log" 2>&1
 
+# NOTE: a default prefix also keeps wineboot's Z: (host root); the app removes it. Developer use only.
 # A native working directory cannot be mapped through a C: link, so map the game alone as G:.
 # (Without it Wine starts in C:\windows; this was the CoD4 fileSysCheck failure.)
 DRIVE="$PREFIX/dosdevices/g:"

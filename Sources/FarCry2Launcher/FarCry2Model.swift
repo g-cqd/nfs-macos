@@ -20,6 +20,7 @@ final class FarCry2Model {
   private(set) var profileState = FarCry2ProfileState.missing
   private(set) var installation: InstalledGame?
   private(set) var backups: [FarCry2Backup] = []
+  private(set) var keptAside = 0
   var settings = FarCry2Settings()
   var tab = "Play"
   var backupSelection = ""
@@ -130,6 +131,7 @@ final class FarCry2Model {
     profileState = snapshot.profile
     installation = snapshot.installation
     backups = snapshot.backups
+    keptAside = snapshot.keptAside
     settings = snapshot.settings
     if settings.values["resolution"] == nil, let detectedDisplay {
       settings.values["resolution"] = detectedDisplay.id

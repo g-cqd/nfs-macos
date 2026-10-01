@@ -24,6 +24,14 @@ package struct FarCry2UserData {
     package let conflicts: [String]
   }
 
+  /// How many conflicting folders were set aside; the player is told so they can recover them.
+  package func keptAside() throws(LauncherError) -> Int {
+    guard files.fileExists(atPath: conflicts.path) else { return 0 }
+    do {
+      return try files.contentsOfDirectory(at: conflicts, includingPropertiesForKeys: nil).count
+    } catch { throw .operation("Could not list set-aside folders: \(error.localizedDescription)") }
+  }
+
   /// The single Windows profile folder Wine created. Wine 11 (CrossOver lineage) names it `crossover`
   /// whatever `USER` says, so the name is discovered rather than assumed.
   package func windowsProfile() throws(LauncherError) -> URL {

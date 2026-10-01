@@ -138,6 +138,19 @@ package struct PortableExecutable: Equatable, Sendable {
     return nil
   }
 
+  /// Cuts at a scalar boundary so one letter with thousands of combining marks cannot exceed the bound.
+  private static func bounded(_ text: String, bytes limit: Int) -> String {
+    var result = String.UnicodeScalarView()
+    var used = 0
+    for scalar in text.unicodeScalars {
+      let width = String(scalar).utf8.count
+      guard used + width <= limit else { break }
+      result.append(scalar)
+      used += width
+    }
+    return String(result)
+  }
+
   /// A string-table entry stores its key and then its value as NUL-separated UTF-16 runs.
   private static func stringTable(_ blob: [UInt8]) -> [String: String] {
     var units: [UInt16] = []
@@ -155,7 +168,7 @@ package struct PortableExecutable: Equatable, Sendable {
     ] {
       guard let position = runs.firstIndex(where: { $0.hasSuffix(key) }), position + 1 < runs.count
       else { continue }
-      result[key] = String(runs[position + 1].prefix(128))
+      result[key] = bounded(runs[position + 1], bytes: 128)
     }
     return result
   }

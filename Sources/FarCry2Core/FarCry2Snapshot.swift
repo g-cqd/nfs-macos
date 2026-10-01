@@ -23,13 +23,16 @@ package struct FarCry2Snapshot: Codable, Equatable, Sendable {
   /// What the import recognised: build, version and store hints. Nil until a game is imported.
   package let installation: InstalledGame?
   package let backups: [FarCry2Backup]
+  /// Folders from an earlier setup that conflicted with saved data and were kept in `Saves/FarCry2/Conflicts`.
+  package let keptAside: Int
   package init(
     settings: FarCry2Settings, profile: FarCry2ProfileState, installation: InstalledGame?,
-    backups: [FarCry2Backup]
+    backups: [FarCry2Backup], keptAside: Int = 0
   ) {
     self.settings = settings
     self.profile = profile
     self.installation = installation
     self.backups = backups
+    self.keptAside = keptAside
   }
 }

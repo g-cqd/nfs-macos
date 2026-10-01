@@ -113,8 +113,14 @@ package struct FarCry2Backups {
   }
 
   package func create(label: String) throws(LauncherError) -> FarCry2Backup {
+    try create(label: label, allowance: 0)
+  }
+
+  /// `allowance` lets the safety copy taken by a restore exceed the limit it is protecting; without it a
+  /// player holding the maximum number of backups could never restore one.
+  private func create(label: String, allowance: Int) throws(LauncherError) -> FarCry2Backup {
     let existing = try list()
-    guard existing.count < Self.limit else {
+    guard existing.count < Self.limit + allowance else {
       throw .operation("Remove an older backup before creating another (limit \(Self.limit)).")
     }
     let id = UUID().uuidString
@@ -151,7 +157,7 @@ package struct FarCry2Backups {
     guard try list().contains(where: { $0.id == id }) else {
       throw .operation("That backup no longer exists or its record is damaged.")
     }
-    _ = try create(label: "Before restoring a backup")
+    _ = try create(label: "Before restoring a backup", allowance: 1)
     let token = UUID().uuidString
     do {
       var staged: [(live: URL, restoring: URL)] = []

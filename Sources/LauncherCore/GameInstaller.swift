@@ -93,6 +93,7 @@ package struct GameInstaller {
     let installation: InstalledGame?
     if isNewSource {
       let scan = try InstallScanner.scan(origin, rules: rules)
+      try scan.game.validate()
       inventory = scan.files
       installation = scan.game
     } else {
@@ -111,8 +112,9 @@ package struct GameInstaller {
 
   private static func storedInventory(of game: URL) throws -> [ManifestFile] {
     let url = game.deletingLastPathComponent().appendingPathComponent("inventory.json")
+    // 30,000 entries at up to 512-byte paths stay well below this cap, so a saved inventory is always readable.
     let entries = try JSONDecoder().decode(
-      [ManifestFile].self, from: BoundedFile.read(url, limit: 8 * 1024 * 1024))
+      [ManifestFile].self, from: BoundedFile.read(url, limit: 32 * 1024 * 1024))
     guard !entries.isEmpty, entries.count <= 30_000 else {
       throw LauncherError.operation("The imported game inventory is invalid. Import it again.")
     }

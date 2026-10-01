@@ -92,6 +92,51 @@ struct ImportRulesTests {
   }
 
   @Test
+  func `a pairing must sit in or below a copied folder, not merely start like one`() throws {
+    try rules(pairings: [.init(directory: "bin/sub", primarySuffix: ".a", companionSuffix: ".b")])
+      .validate()
+    #expect(throws: LauncherError.self) {
+      try rules(pairings: [.init(directory: "binx", primarySuffix: ".a", companionSuffix: ".b")])
+        .validate()
+    }
+  }
+
+  @Test
+  func `a manifest cannot ask for more bytes than the game's own limit`() throws {
+    let compat = ManifestFile(
+      path: "bin/mtld3d.conf", size: 1, sha256: String(repeating: "0", count: 64))
+    let base = try RecipeRules.farCry2()
+    let greedy = ImportRules(
+      executable: base.executable, machine: base.machine, required: base.required,
+      directories: base.directories, maximumBytes: GameKind.farcry2.byteLimit + 1)
+    let manifest = BundleManifest(
+      version: "v1", gameFiles: [compat], gameID: .farcry2, importRules: greedy)
+    #expect(throws: LauncherError.self) { try manifest.validate() }
+  }
+
+  @Test
+  func `recorded installation details are bounded so they can always be read back`() throws {
+    let long = String(repeating: "x", count: 300)
+    func game(
+      strings: [String: String] = [:], markers: [String] = [], version: String? = "1.0.0.0",
+      digest: String = String(repeating: "a", count: 64)
+    ) -> InstalledGame {
+      InstalledGame(
+        executableSHA256: digest, build: nil, fileVersion: version, versionStrings: strings,
+        markers: markers, fileCount: 1, totalBytes: 1)
+    }
+    try game(strings: ["ProductName": "Example"], markers: ["gog"]).validate()
+    #expect(throws: LauncherError.self) { try game(strings: ["ProductName": long]).validate() }
+    #expect(throws: LauncherError.self) { try game(markers: [long]).validate() }
+    #expect(throws: LauncherError.self) { try game(version: long).validate() }
+    #expect(throws: LauncherError.self) { try game(digest: "short").validate() }
+    #expect(throws: LauncherError.self) {
+      try game(strings: Dictionary(uniqueKeysWithValues: (0..<40).map { ("k\($0)", "v") }))
+        .validate()
+    }
+  }
+
+  @Test
   func `a manifest written by the packager round-trips`() throws {
     let compat = ManifestFile(
       path: "bin/mtld3d.conf", size: 1, sha256: String(repeating: "0", count: 64))

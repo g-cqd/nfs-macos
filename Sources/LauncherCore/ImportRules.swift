@@ -129,7 +129,8 @@ package struct ImportRules: Codable, Equatable, Sendable {
     }
     for pairing in pairings {
       try ManifestFile.validate(path: pairing.directory)
-      guard roots.contains(where: { pairing.directory.lowercased().hasPrefix($0) }),
+      let directory = pairing.directory.lowercased()
+      guard roots.contains(where: { directory == $0 || directory.hasPrefix($0 + "/") }),
         pairing.primarySuffix.hasPrefix("."), pairing.companionSuffix.hasPrefix("."),
         pairing.primarySuffix == pairing.primarySuffix.lowercased(),
         pairing.companionSuffix == pairing.companionSuffix.lowercased(),
@@ -166,6 +167,19 @@ package struct InstalledGame: Codable, Equatable, Sendable {
   package let markers: [String]
   package let fileCount: Int
   package let totalBytes: Int
+
+  /// Bounds every recorded string in bytes so `origin.json` can always be read back; a file that
+  /// cannot be read back would block every later session until the player folder was deleted.
+  package func validate() throws(LauncherError) {
+    let invalid = LauncherError.operation("The recognised installation details are invalid.")
+    guard executableSHA256.utf8.count == 64,
+      executableSHA256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+      (build?.utf8.count ?? 0) <= 64, (fileVersion?.utf8.count ?? 0) <= 32,
+      versionStrings.count <= 16, markers.count <= 16, fileCount >= 0, totalBytes >= 0,
+      versionStrings.allSatisfy({ $0.key.utf8.count <= 64 && $0.value.utf8.count <= 256 }),
+      markers.allSatisfy({ $0.utf8.count <= 64 })
+    else { throw invalid }
+  }
 
   package init(
     executableSHA256: String, build: String?, fileVersion: String?,
