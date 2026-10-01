@@ -5,12 +5,18 @@ package struct BundleManifest: Codable {
   let version: String
   let gameFiles: [ManifestFile]
   let gameID: GameKind?
+  /// Present for an import-only app: the player's files are recognised and inventoried at import time.
+  package let importRules: ImportRules?
   var kind: GameKind { gameID ?? .nfsmw }
 
-  init(version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil) {
+  init(
+    version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
+    importRules: ImportRules? = nil
+  ) {
     self.version = version
     self.gameFiles = gameFiles
     self.gameID = gameID
+    self.importRules = importRules
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -42,7 +48,7 @@ package struct BundleManifest: Codable {
     var total = 0
     for file in gameFiles {
       try ManifestFile.validate(path: file.path)
-      guard file.size >= 0, file.size <= 2_000_000_000,
+      guard file.size >= 0, file.size <= kind.fileByteLimit,
         file.sha256.utf8.count == 64,
         file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
         seen.insert(file.path.lowercased()).inserted
@@ -54,8 +60,15 @@ package struct BundleManifest: Codable {
         throw .operation("The game payload exceeds its size limit.")
       }
     }
-    guard seen.contains(kind.executable) else {
-      throw .operation("The game executable is missing from the manifest.")
+    if let importRules {
+      try importRules.validate()
+      guard importRules.executable.lowercased() == kind.executable.lowercased() else {
+        throw .operation("The game recognition rules belong to a different executable.")
+      }
+    } else {
+      guard seen.contains(kind.executable.lowercased()) else {
+        throw .operation("The game executable is missing from the manifest.")
+      }
     }
   }
 }

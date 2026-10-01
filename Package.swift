@@ -14,13 +14,15 @@ let package = Package(
     .target(name: "LauncherCore"),
     .target(name: "SharedLauncher", dependencies: ["LauncherCore"]),
     .target(name: "CoD4Core", dependencies: ["LauncherCore"]),
+    .target(name: "GameFixtures", dependencies: ["LauncherCore"], path: "Tests/GameFixtures"),
     .executableTarget(name: "CoD4Session", dependencies: ["LauncherCore", "CoD4Core"]),
     .executableTarget(
       name: "CoD4Launcher", dependencies: ["LauncherCore", "CoD4Core", "SharedLauncher"]),
     .executableTarget(name: "NFSMWSession", dependencies: ["LauncherCore"]),
     .executableTarget(name: "NFSMWLauncher", dependencies: ["LauncherCore", "SharedLauncher"]),
     .testTarget(
-      name: "LauncherCoreTests", dependencies: ["LauncherCore"], resources: [.copy("Fixtures")]),
+      name: "LauncherCoreTests", dependencies: ["LauncherCore", "GameFixtures"],
+      resources: [.copy("Fixtures")]),
     .testTarget(
       name: "LauncherUITests", dependencies: ["NFSMWLauncher", "LauncherCore", "SharedLauncher"]),
     .testTarget(name: "CoD4CoreTests", dependencies: ["CoD4Core", "LauncherCore"]),

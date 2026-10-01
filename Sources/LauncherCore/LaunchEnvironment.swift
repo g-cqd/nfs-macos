@@ -21,7 +21,7 @@ package enum LaunchEnvironment {
       "MTL_HUD_ENABLED": "0",
       "RUST_LOG": "warn,mtld3d::perf=off",
     ]
-    if paths.kind == .cod4 {
+    if paths.kind != .nfsmw {
       environment["WINEDLLPATH"] =
         paths.wine.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(
           "lib/wine/d3d9/mtld3d"
