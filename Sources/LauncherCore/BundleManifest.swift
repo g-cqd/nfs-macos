@@ -13,17 +13,21 @@ package struct BundleManifest: Codable {
   let storeClient: StoreClientPlan?
   /// Controller `VID/PID` pairs this game needs Wine to present through XInput.
   let controllerDevices: [String]?
+  /// Registry values this game needs in the prefix it runs in.
+  let prefixSettings: [RegistrySetting]?
 
   package var kind: GameKind { gameID ?? .nfsmw }
   package var references: Bool { referencesInstallation ?? false }
   package var tuning: RuntimeTuning { runtimeTuning ?? RuntimeTuning() }
   package var client: StoreClientPlan? { storeClient }
   package var controllers: [String] { controllerDevices ?? [] }
+  package var registry: [RegistrySetting] { prefixSettings ?? [] }
 
   init(
     version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
     referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
-    storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil
+    storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil,
+    prefixSettings: [RegistrySetting]? = nil
   ) {
     self.version = version
     self.gameFiles = gameFiles
@@ -32,6 +36,7 @@ package struct BundleManifest: Codable {
     self.runtimeTuning = runtimeTuning
     self.storeClient = storeClient
     self.controllerDevices = controllerDevices
+    self.prefixSettings = prefixSettings
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -78,7 +83,12 @@ package struct BundleManifest: Codable {
       else {
         throw .operation("The manifest lists an invalid controller device.")
       }
+      _ = try RegistrySetting.script(registry)
       return
+    }
+    guard prefixSettings == nil else {
+      // A bundle that owns its prefix imports Defaults/settings.reg during wineboot instead.
+      throw .operation("Only a referencing manifest declares prefix settings.")
     }
     guard storeClient == nil, !gameFiles.isEmpty else {
       throw .operation("The game manifest has an invalid file count.")

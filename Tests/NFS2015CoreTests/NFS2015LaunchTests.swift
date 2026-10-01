@@ -119,3 +119,83 @@ struct NFS2015LaunchTests {
     #expect(ProcessFamily.descendants(of: ProcessInfo.processInfo.processIdentifier) >= 0)
   }
 }
+
+struct PrefixSettingsTests {
+  static let retina = RegistrySetting(
+    hive: .currentUser, path: #"Software\Wine\Mac Driver"#, name: "RetinaMode", value: "Y",
+    kind: .string, reason: "Wine advertises the native panel")
+
+  @Test
+  func `writes a script Wine can import for each declared hive`() throws {
+    let script = try #require(
+      try RegistrySetting.script([
+        Self.retina,
+        RegistrySetting(
+          hive: .localMachine,
+          path: #"System\CurrentControlSet\Services\WineBus\Devices\054C/05C4"#, name: "Hidraw",
+          value: "0", kind: .dword),
+      ]))
+    #expect(script.hasPrefix("REGEDIT4\n"))
+    #expect(script.contains(#"[HKEY_CURRENT_USER\Software\Wine\Mac Driver]"#))
+    #expect(script.contains("\"RetinaMode\"=\"Y\""))
+    #expect(script.contains("\"Hidraw\"=dword:00000000"))
+    #expect(try RegistrySetting.script([]) == nil)
+  }
+
+  @Test
+  func `reads a value back out of the hive Wine actually wrote`() {
+    let hive = """
+      WINE REGISTRY Version 2
+
+      [Software\\\\Wine\\\\Mac Driver] 1790447526
+      #time=1dd4de555333daa
+      "AllowSetGamma"=dword:00000000
+      "RetinaMode"="Y"
+
+      [Volatile Environment] 1790447302
+      "RetinaMode"="N"
+      """
+    #expect(Self.retina.isRecorded(in: hive))
+    #expect(Self.retina.hive.file == "user.reg")
+    // The same name under a different key must not count.
+    let elsewhere = RegistrySetting(
+      hive: .currentUser, path: "Software\\Wine\\Other", name: "RetinaMode", value: "Y",
+      kind: .string)
+    #expect(!elsewhere.isRecorded(in: hive))
+  }
+
+  @Test
+  func `treats a prefix without the key as needing it, and a prepared prefix as done`() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let prefix = root.appendingPathComponent("Prefix")
+    try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+    try Data(#"[Software\\Wine\\Mac Driver] 1\n"AllowSetGamma"=dword:00000000\#n"#.utf8)
+      .write(to: prefix.appendingPathComponent("user.reg"))
+    let preparation = PrefixPreparation(support: root)
+    #expect(try preparation.missing([Self.retina], in: prefix).count == 1)
+    var imported: [URL] = []
+    let applied = try preparation.apply([Self.retina], in: prefix) { imported.append($0) }
+    #expect(applied.count == 1 && imported.count == 1)
+    #expect(!FileManager.default.fileExists(atPath: imported[0].path), "The script is removed")
+    // Wine would have written the value; prove a prepared prefix starts nothing at all.
+    try Data(
+      "[Software\\\\Wine\\\\Mac Driver] 1\n\"RetinaMode\"=\"Y\"\n".utf8
+    ).write(to: prefix.appendingPathComponent("user.reg"))
+    var second = 0
+    #expect(try preparation.apply([Self.retina], in: prefix) { _ in second += 1 }.isEmpty)
+    #expect(second == 0)
+  }
+
+  @Test(arguments: [
+    RegistrySetting(hive: .currentUser, path: "A", name: "B", value: "x\"y", kind: .string),
+    RegistrySetting(hive: .currentUser, path: "A]\nB", name: "C", value: "y", kind: .string),
+    RegistrySetting(hive: .currentUser, path: "A", name: "B", value: "GG", kind: .dword),
+    RegistrySetting(hive: .currentUser, path: "\\A", name: "B", value: "y", kind: .string),
+    RegistrySetting(hive: .currentUser, path: "A", name: "B\\C", value: "y", kind: .string),
+  ])
+  func `refuses a registry value that could inject another line`(setting: RegistrySetting) {
+    #expect(throws: LauncherError.self) { try setting.validate() }
+  }
+}
