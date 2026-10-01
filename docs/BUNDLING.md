@@ -89,6 +89,15 @@ omitting original game bytes. See [CoD4](COD4.md) for its payload and first-run 
    `gameDataIncluded`, `supportsSP` and `supportsMP` describe package contents, not online
    service availability or successful gameplay verification.
 
+## Import-only recipes
+
+A recipe may declare `"editions": ["import"]` and an `importRules` block instead of an original-file
+inventory and executable hashes (`Packaging/Recipes/farcry2.json`). The packager then needs no game
+input: the manifest carries the rules and the compatibility files, and the session recognises and
+hashes the player's installation at import time. `build.py` and `assemble.py` refuse a bundled edition
+for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. See
+[Far Cry 2](FARCRY2.md) for the rules, the player-data layout and what is still unverified.
+
 ## Rosetta setup
 
 Both editions check Intel execution before preparing or launching Wine. If Rosetta is absent, the Play screen offers **Install Rosetta…** and **Refresh**. Installation opens an Intel-only helper through Launch Services so macOS presents its own installation request. The starter checks again after the request and whenever it becomes active. Cancelling or failing the installation keeps Play disabled and leaves the setup retryable. An external installation is detected by Refresh; no app restart is required.
@@ -132,7 +141,7 @@ python3 Packaging/build.py --game nfsmw --game-data import --output "Build/Most 
 | `bundled` | Whole game, Wine, mtld3d, x87sidecar, launcher, compatibility files, notices and sources | Prepare the player folder and play |
 | `import` | Same runtime, launcher and fixes; no original game assets | Select **Import game data…** and choose the supported PC installation |
 
-Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
+Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe and `--game farcry2 --game-data import` for Far Cry 2. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
 
 Both modes currently need the pinned local assembly inputs above, including the source game installation used to generate the complete import inventory. The import variant retains that inventory but omits the original payload. Builds do not include personal careers or an existing Wine prefix.
 
