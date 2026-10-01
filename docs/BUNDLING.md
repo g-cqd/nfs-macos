@@ -135,7 +135,20 @@ xcrun stapler validate "Build/Most Wanted Import.app"
 spctl --assess --type execute --verbose=2 "Build/Most Wanted Import.app"
 ```
 
-Recreate the ZIP, verify its entries, and regenerate SHA-256 after stapling. Check Apple's submission result before labeling a build notarized.
+Recreate the ZIP and regenerate SHA-256 after stapling using the shared archive stage:
+
+```sh
+python3 Packaging/app_archive.py "Build/Most Wanted Import.app" "Build/Most Wanted Import.zip"
+```
+
+Use a new output path, or remove only the superseded ZIP before recreating it. The
+stage verifies every entry's CRC before publishing, preserves executable permissions
+and internal links, and supports ZIP64 for bundles above 4 GiB. Signatures and stapled
+tickets remain in the archived files; Finder metadata and ACLs are not copied. The
+signing stage clears extended attributes before signing. A regression fixture forces
+ZIP64 and verifies extraction with macOS `ditto`. This avoids the invalid central
+directory offsets observed when `ditto` created the large CoD4 release ZIP.
+Check Apple's submission result before labeling a build notarized.
 
 ## Import your game data
 
