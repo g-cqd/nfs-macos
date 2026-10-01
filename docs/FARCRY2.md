@@ -15,6 +15,12 @@ Python 3.11 or newer is required. The shared pipeline, input names and signing a
 `cod4-tested` runtime profile (CX26.3 / Wine 11.0 with the cooperative x87 handshake). The profile
 name is historical; its hashes are shared and must be updated together.
 
+Build inputs move: on 2026-10-01 the retained Most Wanted v5 app was no longer on the Desktop, and
+`~/Developer/mtld3d` had advanced past the pinned `5f5331a`, which the pin check rejects. The
+import app was built with `--input baseApp="<Game Builds>/Most Wanted Bundled.app"` (its retained
+`Sources` and `Licenses`) and `--input mtld3dSource=<clean clone checked out at 5f5331a>`. No source
+tree was modified.
+
 **There is no bundled edition.** `Packaging/Recipes/farcry2.json` declares `"editions": ["import"]`;
 `build.py --game-data bundled` and `assemble.stage_game(..., include_game_data=True)` refuse it. A
 bundled edition needs pinned executable hashes of a verified build, and none exists for this game
