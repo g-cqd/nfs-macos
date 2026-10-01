@@ -43,13 +43,27 @@ def verify_inputs(recipe, inputs):
     profile = PINS['runtimeProfiles'].get(recipe['runtimeProfile'])
     if profile is None:
         raise ValueError('Unknown pinned runtime profile')
+    if profile.get('pending'):
+        raise ValueError('Runtime profile ' + recipe['runtimeProfile'] + ' is not built yet: '
+                         + profile.get('blockedBy', 'no tested artifacts are pinned'))
+    if len(profile['files']) < 5:
+        raise ValueError('A runtime profile must pin its loader, server and ntdll artifacts')
+    missing = set(recipe.get('requiredRuntimeCapabilities', [])) - set(profile.get('capabilities', []))
+    if missing:
+        # Launching this game on a runtime without its capability produces a relaunch loop.
+        raise ValueError('Runtime profile ' + recipe['runtimeProfile']
+                         + ' does not provide: ' + ', '.join(sorted(missing)))
     verify_hashes(inputs['runtime'], profile['files'])
-    verify_hashes(inputs['renderer'], PINS['rendererFiles'])
     verify_hashes(inputs['sidecar'].parent, {inputs['sidecar'].name: PINS['sidecarSHA256']})
-    verify_hashes(inputs['rendererEvidence'], {'source-sha256.json': PINS['rendererSourceManifestSHA256']})
-    source_hashes = json.loads((inputs['rendererEvidence'] / 'source-sha256.json').read_text())
-    verify_hashes(inputs['mtld3dSource'], source_hashes, allow_internal_links=True)
+    if 'renderer' in inputs:
+        # Only a Direct3D 9 title replaces the renderer; a D3D11 title never loads mtld3d.
+        verify_hashes(inputs['renderer'], PINS['rendererFiles'])
+        verify_hashes(inputs['rendererEvidence'], {'source-sha256.json': PINS['rendererSourceManifestSHA256']})
+        source_hashes = json.loads((inputs['rendererEvidence'] / 'source-sha256.json').read_text())
+        verify_hashes(inputs['mtld3dSource'], source_hashes, allow_internal_links=True)
     for name, pin in PINS['sources'].items():
+        if pin['input'] not in inputs:
+            continue
         repo = inputs[pin['input']]
         actual = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
         dirty = subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True)
@@ -61,22 +75,27 @@ def verify_inputs(recipe, inputs):
 
 
 def stage_runtime(contents, recipe, inputs):
-    """Clone the pinned base, replace its complete 32-bit renderer, then optimize the clone."""
+    """Clone the pinned base, replace any declared renderer, then optimize the clone."""
     wine = contents / 'SharedSupport/Wine'
     clone(inputs['runtime'], wine)
-    renderer = wine / 'lib/wine/d3d9/mtld3d'
-    if renderer.exists():
-        shutil.rmtree(renderer)
-    for name in PINS['rendererFiles']:
-        target = wine / 'lib/wine' / name
-        if target.exists():
-            target.unlink()
-        clone(inputs['renderer'] / name, target)
+    if 'renderer' in inputs:
+        renderer = wine / 'lib/wine/d3d9/mtld3d'
+        if renderer.exists():
+            shutil.rmtree(renderer)
+        for name in PINS['rendererFiles']:
+            target = wine / 'lib/wine' / name
+            if target.exists():
+                target.unlink()
+            clone(inputs['renderer'] / name, target)
     clone(inputs['sidecar'], contents / 'Helpers/x87sidecar')
+    # A Direct3D 11 title is served through DXGI by D3DMetal, so its recipe keeps that stack.
+    retained = {name.casefold() for name in recipe.get('runtimeRetention', [])}
     for name in ['include', 'share/man', 'lib/wine/tests', 'lib/wine/d3d9/mtld3d-v0.7.0',
                  'lib/wine/d3d9/mtld3d.before-vertex', 'lib/wine/dxgi/gptk', 'lib/wine/dxgi/dxmt',
                  'lib/external/D3DMetal.framework', 'lib/external/D3DMetal-License.rtf',
                  'lib/external/libd3dshared.dylib']:
+        if name.casefold() in retained:
+            continue
         path = wine / name
         if path.is_dir():
             shutil.rmtree(path)
@@ -107,6 +126,8 @@ def collect_sources(resources, inputs):
         previous.unlink()
     revisions = json.loads((retained / 'runtime-provenance.json').read_text())['sources']
     for name, pin in PINS['sources'].items():
+        if pin['input'] not in inputs:
+            continue
         repo = inputs[pin['input']]
         archive_source(repo, name, pin['revision'], resources / 'Sources')
         shutil.copyfile(repo / 'LICENSE', resources / 'Licenses' / (name + '.txt'))
@@ -116,11 +137,19 @@ def collect_sources(resources, inputs):
 
 
 def runtime_provenance(recipe, revisions):
-    return {'sources': revisions, 'sourceURLs': {name: pin['url'] for name, pin in PINS['sources'].items()},
+    profile = PINS['runtimeProfiles'][recipe['runtimeProfile']]
+    renderer = {'inputRendererHashes': PINS['rendererFiles']} if 'mtld3d' in revisions else {}
+    return {**renderer, 'sources': revisions,
+            'sourceURLs': {name: pin['url'] for name, pin in PINS['sources'].items()
+                           if name in revisions},
             'wine': PINS['runtimeProfiles'][recipe['runtimeProfile']]['description'],
             'runtimeProfile': recipe['runtimeProfile'],
             'inputRuntimeHashes': PINS['runtimeProfiles'][recipe['runtimeProfile']]['files'],
-            'inputRendererHashes': PINS['rendererFiles'], 'inputSidecarSHA256': PINS['sidecarSHA256'],
+            'runtimeCapabilities': profile.get('capabilities', []),
+            'inputSidecarSHA256': PINS['sidecarSHA256'],
+            'retainedRuntimePaths': recipe.get('runtimeRetention', []),
+            'runtimeTuning': recipe.get('runtimeTuning', {}),
+            'referencesInstallation': bool(recipe.get('referencesInstallation')),
             'renderer': 'Production PROD=1 PERF=1; normal launch disables telemetry',
             'rendererVerification': '923 passed, 0 failed, 11 ignored; all 535 source hashes match pinned commit',
             'x87': 'Flat cooperative sidecar; tested CoD4 artifact matches current fork build',

@@ -32,7 +32,10 @@
         "lib/wine/x86_64-unix/ntdll.so": "f4626247a9442abb90a78f5be134c6a2fbfa788012a2f4b9f44dad9d66ff6ee1",
         "lib/wine/x86_64-unix/wine": "7bb37fddaa852201d6b70b891c5f63ea601b4e8f914e41d158e551414f1d1939",
         "lib/wine/i386-windows/ntdll.dll": "6444a002d8b68ec67dff69d1afad7a293564b96e36d0f8eb959d815f25df3c4d"
-      }
+      },
+      "capabilities": [
+        "x87Sidecar"
+      ]
     },
     "cod4-tested": {
       "description": "CX26.3 / Wine11.0 with cooperative x87 handshake",
@@ -42,7 +45,21 @@
         "lib/wine/x86_64-unix/ntdll.so": "3bc4baa14ae578036896e1cee462871e52a3815a7624bc35ed8292a5bc7508ba",
         "lib/wine/x86_64-unix/wine": "344f95e27553263de37640eba6e138f4ec8f4c821c631b9e1d228dccca12f611",
         "lib/wine/i386-windows/ntdll.dll": "5eaa28ca4c65d21f22ed9a5fcbeb37bde3a7fe0822b62fbe31c4847eb57fbfe4"
-      }
+      },
+      "capabilities": [
+        "x87Sidecar"
+      ]
+    },
+    "nfs2015-tf-cx11": {
+      "description": "CX26.3 / Wine11.0 with x86 hardware execution-breakpoint delivery and the D3DMetal DXGI stack",
+      "capabilities": [
+        "trapFlagEmulation",
+        "d3dmetalDXGI",
+        "x87Sidecar"
+      ],
+      "pending": true,
+      "blockedBy": "Build the CX 11.0 runtime carrying the WINE_TF_* gate at ~/Games/NFS2015-debug/src/wine-cx, then pin bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here",
+      "files": {}
     }
   }
 }

@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import zipfile
-from recipes import load_recipe
+from recipes import load_recipe, supports_edition
 
 
 def main():
@@ -22,6 +22,9 @@ def main():
     if sys.version_info < (3, 11): parser.error('Python 3.11 or newer is required')
     project = Path(__file__).resolve().parents[1]
     recipe = load_recipe(options.game, options.recipe)
+    if not supports_edition(recipe, options.game_data):
+        parser.error('The ' + recipe['displayName'] + ' recipe supports only: '
+                     + ', '.join(recipe.get('editions', ['bundled', 'import'])))
     name = recipe['displayName'] + (' Bundled.app' if options.game_data == 'bundled' else ' Import.app')
     output = (options.output or project/'Build'/name).resolve()
     archive = output.with_suffix('.zip')
@@ -37,6 +40,7 @@ def main():
         [sys.executable, 'Packaging/check_game_data.py'],
         [sys.executable, 'Packaging/check_cod4_data.py'],
         [sys.executable, 'Packaging/check_recipes.py'],
+        [sys.executable, 'Packaging/check_nfs2015_recipe.py'],
         [sys.executable, 'Packaging/check_runtime_inputs.py'],
         [sys.executable, 'Packaging/check_assembly.py'],
         [sys.executable, 'Packaging/check_runtime_optimization.py'],

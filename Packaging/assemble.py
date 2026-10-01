@@ -10,7 +10,7 @@ import sys
 import tempfile
 import uuid
 from payload import inventory
-from recipes import load_recipe, resolve_inputs
+from recipes import load_recipe, resolve_inputs, supports_edition
 from rosetta_request import build_rosetta_request
 from runtime_inputs import (PROJECT, clone, collect_sources, digest, runtime_provenance,
                             stage_runtime, verify_hashes, verify_inputs)
@@ -28,8 +28,15 @@ def stage_resources(items, inputs, destination):
 
 
 def stage_game(resources, recipe, inputs, include_game_data):
-    verify_hashes(inputs['game'], recipe['executableHashes'])
-    entries = inventory(inputs['game'], recipe['originalFiles'], recipe['originalDirectories'])
+    if include_game_data and not supports_edition(recipe, 'bundled'):
+        raise ValueError('This recipe supports the import edition only; no game files are packaged')
+    references = bool(recipe.get('referencesInstallation'))
+    if references:
+        # The player's own installation is recognised on their Mac; nothing is inventoried here.
+        entries = []
+    else:
+        verify_hashes(inputs['game'], recipe['executableHashes'])
+        entries = inventory(inputs['game'], recipe['originalFiles'], recipe['originalDirectories'])
     game = resources / 'Game'
     game.mkdir()
     if include_game_data:
@@ -43,11 +50,18 @@ def stage_game(resources, recipe, inputs, include_game_data):
         path = game / item['path']
         entries.append({'path': item['path'], 'size': path.stat().st_size, 'sha256': digest(path)})
     entries.sort(key=lambda entry: entry['path'])
-    version = hashlib.sha256(json.dumps(entries, sort_keys=True).encode()).hexdigest()[:24]
-    manifest = {'version': version, 'gameID': recipe['gameID'], 'gameFiles': entries,
+    manifest = {'version': '', 'gameID': recipe['gameID'], 'gameFiles': entries,
                 'gameDataIncluded': include_game_data,
                 'compatibilityFiles': [item['path'] for item in recipe['compatibility']],
                 'supportsSP': recipe.get('supportsSP', True), 'supportsMP': recipe.get('supportsMP', False)}
+    if references:
+        # Without an inventory, the recognition and launch contract is what the version covers.
+        manifest.update(referencesInstallation=True, storeClient=recipe['storeClient'],
+                        runtimeTuning=recipe.get('runtimeTuning', {}),
+                        controllerDevices=recipe.get('controllerDevices', []))
+    fingerprint = {key: value for key, value in manifest.items() if key != 'version'}
+    manifest['version'] = hashlib.sha256(
+        json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     (resources / 'game-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
 
