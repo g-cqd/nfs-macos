@@ -15,6 +15,57 @@ def safe_relative(value):
     return value
 
 
+EDITIONS = {'bundled', 'import'}
+CAPABILITIES = {'trapFlagEmulation', 'd3dmetalDXGI', 'x87Sidecar'}
+GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
+
+
+def validate_store_client(client):
+    """Mirror of the native StoreClientPlan validation; the Swift tests pin the same shape."""
+    if not isinstance(client, dict):
+        raise ValueError('The store client must be an object')
+    for key in ['installRoot', 'clientExecutable', 'launcherExecutable', 'gameRoot']:
+        safe_relative(client.get(key))
+    for key in ['signInEvidence', 'readinessEvidence']:
+        paths = client.get(key)
+        if not isinstance(paths, list) or not 1 <= len(paths) <= 16:
+            raise ValueError('The store client needs 1-16 ' + key + ' paths')
+        for path in paths:
+            safe_relative(path)
+    name = client.get('name')
+    if not isinstance(name, str) or not 0 < len(name) <= 64 or any(ord(c) < 32 for c in name):
+        raise ValueError('The store client needs a plain name')
+    arguments = client.get('clientArguments')
+    if not isinstance(arguments, list) or len(arguments) > 7 or not all(
+            isinstance(a, str) and re.fullmatch(r'--[a-z-]{1,62}', a) for a in arguments):
+        raise ValueError('The store client arguments must be plain long switches')
+    url = client.get('launchURL')
+    if not isinstance(url, str) or len(url) > 256 or '{offer}' not in url \
+            or not url.startswith(('origin2://', 'link2ea://')) \
+            or any(ord(c) < 32 or ord(c) > 126 for c in url):
+        raise ValueError('The store launch request must be a bounded store URL with an offer slot')
+    if not re.fullmatch(r'[0-9]{1,20}', str(client.get('offerID'))):
+        raise ValueError('The store offer identifier must be a decimal number')
+    if not isinstance(client.get('readinessChildren'), int) \
+            or not 0 <= client['readinessChildren'] <= 64:
+        raise ValueError('Invalid store client readiness child count')
+    if not isinstance(client.get('readinessSeconds'), int) \
+            or not 5 <= client['readinessSeconds'] <= 600:
+        raise ValueError('Invalid store client readiness wait')
+    return client
+
+
+def validate_runtime_tuning(tuning):
+    """Only the gate variables the Wine runtime reads, and only bounded decimal counts."""
+    supported = {'WINE_TF_EMULATION', 'WINE_TF_MAX_STEPS', 'WINE_TF_MAX_NS'}
+    if not isinstance(tuning, dict) or not set(tuning) <= supported:
+        raise ValueError('Unsupported runtime switch')
+    for value in tuning.values():
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9]{1,20}', value):
+            raise ValueError('Runtime switches must be decimal counts')
+    return tuning
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -72,7 +123,50 @@ def validate_recipe(recipe):
     for path, checksum in recipe['executableHashes'].items():
         if safe_relative(path) not in recipe['originalFiles'] or not re.fullmatch('[0-9a-f]{64}', checksum):
             raise ValueError('Invalid executable pin')
+    editions = recipe.get('editions', ['bundled', 'import'])
+    if not isinstance(editions, list) or not editions or not set(editions) <= EDITIONS \
+            or len(set(editions)) != len(editions):
+        raise ValueError('Recipe editions must be a non-empty subset of bundled and import')
+    if 'bundled' in editions and not recipe['executableHashes']:
+        # Without pinned executable digests a bundled app could not prove which build it contains.
+        raise ValueError('A bundled edition needs pinned executable hashes')
+    capabilities = recipe.get('requiredRuntimeCapabilities', [])
+    if not isinstance(capabilities, list) or not set(capabilities) <= CAPABILITIES \
+            or len(set(capabilities)) != len(capabilities):
+        raise ValueError('Unknown required runtime capability')
+    retention = recipe.get('runtimeRetention', [])
+    if not isinstance(retention, list) or len(retention) > 32:
+        raise ValueError('Runtime retention must be a bounded list')
+    for name in retention:
+        safe_relative(name)
+    if len({name.casefold() for name in retention}) != len(retention):
+        raise ValueError('Duplicate runtime retention entry')
+    validate_runtime_tuning(recipe.get('runtimeTuning', {}))
+    if recipe.get('referencesInstallation'):
+        # A referencing app ships no game bytes at all, so it can carry no inventory.
+        if editions != ['import']:
+            raise ValueError('A referencing recipe produces the import edition only')
+        if recipe['originalFiles'] or recipe['originalDirectories'] or recipe['executableHashes'] \
+                or recipe['compatibility']:
+            raise ValueError('A referencing recipe must not list original or compatibility files')
+        if 'game' in recipe['inputs']:
+            raise ValueError('A referencing recipe takes no game input')
+        validate_store_client(recipe.get('storeClient'))
+        devices = recipe.get('controllerDevices', [])
+        if not isinstance(devices, list) or len(devices) > 32 or not all(
+                re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
+            raise ValueError('Invalid controller device')
+    else:
+        for key in ['storeClient', 'controllerDevices']:
+            if key in recipe:
+                raise ValueError('Only a referencing recipe declares ' + key)
+        if 'game' not in recipe['inputs']:
+            raise ValueError('A recipe that packages original data needs a game input')
     return recipe
+
+
+def supports_edition(recipe, edition):
+    return edition in recipe.get('editions', ['bundled', 'import'])
 
 
 def load_recipe(name='nfsmw', path=None):

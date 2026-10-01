@@ -10,7 +10,7 @@
   "session": "NFSMWSession",
   "runtimeProfile": "nfsmw-cursor",
   "inputs": {
-    "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
+    "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
     "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
     "rendererEvidence": "{games}/CoD4-tools/performance-20260927-U9gG37",
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
@@ -18,7 +18,7 @@
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
     "game": "{games}/NFSMW",
-    "runtime": "{home}/Desktop/Most Wanted Bundled.app/Contents/SharedSupport/Wine"
+    "runtime": "{home}/Desktop/Game Builds/Most Wanted Bundled.app/Contents/SharedSupport/Wine"
   },
   "originalFiles": [
     "speed.exe",
