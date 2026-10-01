@@ -31,6 +31,8 @@ struct FarCry2GameKindTests {
       #expect(kind.executable == "iw3sp.exe" && kind.folder == "CoD4")
       #expect(kind.preservedConfiguration == ["mtld3d.conf"])
     case .farcry2: #expect(kind.rendererConfiguration == "bin/mtld3d.conf")
+    // Not one of this test's arguments; NFS2015GameKindTests owns that contract.
+    case .nfs2015: Issue.record("Need for Speed (2015) is not an argument of this test")
     }
   }
 
@@ -39,7 +41,7 @@ struct FarCry2GameKindTests {
     let paths = try AppPaths(
       bundle: URL(fileURLWithPath: "/Applications/Far Cry 2.app"),
       support: URL(fileURLWithPath: "/tmp/FarCry2 Player"), game: .farcry2)
-    let environment = LaunchEnvironment.make(
+    let environment = try LaunchEnvironment.make(
       paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support)
     #expect(
       environment["WINEDLLPATH"]

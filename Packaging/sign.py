@@ -16,11 +16,30 @@ APP = PROJECT / "Build/Need for Speed Most Wanted.app"
 MAGIC = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafeca"]}
 
 
+def vendor_artifacts(app):
+    """Paths the recipe retains verbatim: an Apple-signed framework must not be re-signed.
+
+    Deleting a search path or re-signing one of these would discard the signature that proves
+    where it came from, so they are preserved and only hash-pinned.
+    """
+    recipe = app / 'Contents/Resources/bundle-recipe.json'
+    if not recipe.is_file():
+        return []
+    declared = json.loads(recipe.read_text()).get('vendorRuntimePaths', [])
+    return [app / 'Contents/SharedSupport/Wine' / name for name in declared]
+
+
+def is_vendor(path, roots):
+    return any(path == root or root in path.parents for root in roots)
+
+
 def main(identity='-'):
     listing = subprocess.check_output(['/usr/bin/security', 'find-identity', '-v', '-p', 'codesigning'], text=True) if identity != '-' else ''
     identity = resolve_identity(identity, listing)
     archive_launcher(APP / 'Contents/Resources')
+    vendor_roots = vendor_artifacts(APP)
     code = []
+    vendor = []
     changes = []
     for path in sorted(APP.rglob("*")):
         if path.is_symlink():
@@ -31,6 +50,9 @@ def main(identity='-'):
         path.chmod(stat.S_IMODE(path.stat().st_mode) | stat.S_IWUSR)
         with path.open("rb") as stream: magic = stream.read(4)
         if magic not in MAGIC: continue
+        if is_vendor(path, vendor_roots):
+            vendor.append(path)
+            continue
         code.append(path)
         lines = subprocess.check_output(["/usr/bin/otool", "-l", str(path)], text=True).splitlines()
         for index, line in enumerate(lines):
@@ -62,7 +84,7 @@ def main(identity='-'):
     for nested in sorted(APP.rglob('*.app'), key=lambda path: len(path.parts), reverse=True):
         if nested.is_dir(): sign(nested)
     pins = {}
-    for path in code:
+    for path in code + vendor:
         if path.parent == APP / "Contents/MacOS": continue
         with path.open("rb") as stream: pins[str(path.relative_to(APP))] = hashlib.file_digest(stream, "sha256").hexdigest()
     (APP / "Contents/Resources/runtime-files.json").write_text(json.dumps(pins, indent=2) + "\n")
@@ -72,8 +94,10 @@ def main(identity='-'):
     (PROJECT / 'Evidence').mkdir(exist_ok=True)
     (PROJECT / 'Evidence' / ('signing-' + game_id + '.json')).write_text(json.dumps(dict(
         signature="ad-hoc" if identity == '-' else 'Developer ID', notarized=False,
-        hardenedRuntime=identity != '-', nestedCodeCount=len(code), removedSearchPaths=changes), indent=2) + "\n")
-    print("Verified", 'ad-hoc' if identity == '-' else 'Developer ID', "signatures for the app and", len(code), "nested code files")
+        hardenedRuntime=identity != '-', nestedCodeCount=len(code), removedSearchPaths=changes,
+        preservedVendorCode=[str(path.relative_to(APP)) for path in vendor]), indent=2) + "\n")
+    print("Verified", 'ad-hoc' if identity == '-' else 'Developer ID', "signatures for the app and",
+          len(code), "nested code files;", len(vendor), "vendor files kept their own signature")
 
 
 if __name__ == "__main__":
