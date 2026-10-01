@@ -9,6 +9,8 @@ let package = Package(
     .executable(name: "NFSMWSession", targets: ["NFSMWSession"]),
     .executable(name: "CoD4Launcher", targets: ["CoD4Launcher"]),
     .executable(name: "CoD4Session", targets: ["CoD4Session"]),
+    .executable(name: "FarCry2Launcher", targets: ["FarCry2Launcher"]),
+    .executable(name: "FarCry2Session", targets: ["FarCry2Session"]),
   ],
   targets: [
     .target(name: "LauncherCore"),
@@ -19,6 +21,9 @@ let package = Package(
     .executableTarget(name: "CoD4Session", dependencies: ["LauncherCore", "CoD4Core"]),
     .executableTarget(
       name: "CoD4Launcher", dependencies: ["LauncherCore", "CoD4Core", "SharedLauncher"]),
+    .executableTarget(name: "FarCry2Session", dependencies: ["LauncherCore", "FarCry2Core"]),
+    .executableTarget(
+      name: "FarCry2Launcher", dependencies: ["LauncherCore", "FarCry2Core", "SharedLauncher"]),
     .executableTarget(name: "NFSMWSession", dependencies: ["LauncherCore"]),
     .executableTarget(name: "NFSMWLauncher", dependencies: ["LauncherCore", "SharedLauncher"]),
     .testTarget(
@@ -30,6 +35,10 @@ let package = Package(
     .testTarget(
       name: "FarCry2CoreTests",
       dependencies: ["FarCry2Core", "LauncherCore", "GameFixtures"]),
+    .testTarget(name: "FarCry2SessionTests", dependencies: ["FarCry2Session", "LauncherCore"]),
+    .testTarget(
+      name: "FarCry2UITests",
+      dependencies: ["FarCry2Launcher", "FarCry2Core", "LauncherCore", "SharedLauncher"]),
     .testTarget(
       name: "CoD4UITests",
       dependencies: ["CoD4Launcher", "CoD4Core", "LauncherCore", "SharedLauncher"]),
