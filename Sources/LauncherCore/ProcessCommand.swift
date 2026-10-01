@@ -15,6 +15,27 @@ package struct ProcessCommand {
     self.environment = environment
   }
 
+  /// Starts the child and returns it still running, for a program the session must outlive.
+  ///
+  /// A store client keeps its own window open while the game it started runs, so the session
+  /// cannot wait for it before taking the next step. The caller owns the returned process and
+  /// must wait for or terminate it.
+  package func start(output: FileHandle) throws(LauncherError) -> Process {
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.currentDirectoryURL = directory
+    process.environment = environment
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = output
+    process.standardError = output
+    do { try process.run() } catch {
+      throw .operation(
+        "Could not start \(executable.lastPathComponent): \(error.localizedDescription)")
+    }
+    return process
+  }
+
   /// Runs on a synchronous helper process, never on the launcher's UI or cooperative executor.
   /// - Returns: The child's actual exit status.
   package func run(output: FileHandle, onStart: (Int32) throws(LauncherError) -> Void = { _ in })

@@ -17,6 +17,8 @@ def safe_relative(value):
 
 EDITIONS = {'bundled', 'import'}
 SHA256 = re.compile('[0-9a-f]{64}')
+CAPABILITIES = {'trapFlagEmulation', 'd3dmetalDXGI', 'x87Sidecar'}
+GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
 
 
 def _simple_name(value):
@@ -78,6 +80,83 @@ def validate_import_rules(rules):
         if not isinstance(rules.get(key), int) or rules[key] < 1:
             raise ValueError('Invalid import limit: ' + key)
     return rules
+
+
+def validate_store_client(client):
+    """Mirror of the native StoreClientPlan validation; the Swift tests pin the same shape."""
+    if not isinstance(client, dict):
+        raise ValueError('The store client must be an object')
+    for key in ['installRoot', 'clientExecutable', 'launcherExecutable', 'gameRoot']:
+        safe_relative(client.get(key))
+    for key in ['signInEvidence', 'readinessEvidence']:
+        paths = client.get(key)
+        if not isinstance(paths, list) or not 1 <= len(paths) <= 16:
+            raise ValueError('The store client needs 1-16 ' + key + ' paths')
+        for path in paths:
+            safe_relative(path)
+    name = client.get('name')
+    if not isinstance(name, str) or not 0 < len(name) <= 64 or any(ord(c) < 32 for c in name):
+        raise ValueError('The store client needs a plain name')
+    arguments = client.get('clientArguments')
+    if not isinstance(arguments, list) or len(arguments) > 7 or not all(
+            isinstance(a, str) and re.fullmatch(r'--[a-z-]{1,62}', a) for a in arguments):
+        raise ValueError('The store client arguments must be plain long switches')
+    url = client.get('launchURL')
+    if not isinstance(url, str) or len(url) > 256 or '{offer}' not in url \
+            or not url.startswith(('origin2://', 'link2ea://')) \
+            or any(ord(c) < 32 or ord(c) > 126 for c in url):
+        raise ValueError('The store launch request must be a bounded store URL with an offer slot')
+    if not re.fullmatch(r'[0-9]{1,20}', str(client.get('offerID'))):
+        raise ValueError('The store offer identifier must be a decimal number')
+    if not isinstance(client.get('readinessChildren'), int) \
+            or not 0 <= client['readinessChildren'] <= 64:
+        raise ValueError('Invalid store client readiness child count')
+    if not isinstance(client.get('readinessSeconds'), int) \
+            or not 5 <= client['readinessSeconds'] <= 600:
+        raise ValueError('Invalid store client readiness wait')
+    return client
+
+
+def validate_runtime_tuning(tuning):
+    """Only the gate variables the Wine runtime reads, and only bounded decimal counts."""
+    supported = {'WINE_TF_EMULATION', 'WINE_TF_MAX_STEPS', 'WINE_TF_MAX_NS'}
+    if not isinstance(tuning, dict) or not set(tuning) <= supported:
+        raise ValueError('Unsupported runtime switch')
+    for value in tuning.values():
+        if not isinstance(value, str) or not re.fullmatch(r'[0-9]{1,20}', value):
+            raise ValueError('Runtime switches must be decimal counts')
+    return tuning
+
+
+def validate_prefix_settings(settings):
+    """Mirror of the native RegistrySetting validation; nothing may inject a second key or line."""
+    if not isinstance(settings, list) or len(settings) > 64:
+        raise ValueError('Prefix settings must be a bounded list')
+    for item in settings:
+        if not isinstance(item, dict):
+            raise ValueError('A prefix setting must be an object')
+        if item.get('hive') not in {'HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE'}:
+            raise ValueError('Unknown registry hive')
+        path, name = item.get('path'), item.get('name')
+        for text, limit in [(path, 256), (name, 128)]:
+            if not isinstance(text, str) or not 0 < len(text) <= limit \
+                    or any(ord(c) < 32 or ord(c) > 126 or c in '"[]' for c in text):
+                raise ValueError('Unusable registry location')
+        if path.startswith('\\') or path.endswith('\\') or '\\\\' in path or '\\' in name:
+            raise ValueError('Unusable registry key path')
+        value = item.get('value')
+        if item.get('kind') == 'string':
+            if not isinstance(value, str) or not 0 < len(value) <= 256 \
+                    or any(ord(c) < 32 or ord(c) > 126 or c in '"[]\\' for c in value):
+                raise ValueError('Unusable registry string value')
+        elif item.get('kind') == 'dword':
+            if not re.fullmatch('[0-9a-f]{1,8}', str(value)):
+                raise ValueError('A registry number must be lowercase hexadecimal')
+        else:
+            raise ValueError('Unknown registry value kind')
+        if not isinstance(item.get('reason', ''), str) or len(item.get('reason', '')) > 200:
+            raise ValueError('Overlong registry reason')
+    return settings
 
 
 def validate_recipe(recipe):
@@ -151,8 +230,52 @@ def validate_recipe(recipe):
                              'it must not list original files or hashes')
         if 'bundled' in editions:
             raise ValueError('Import rules cannot produce a bundled edition')
-    elif editions == ['import']:
-        raise ValueError('An import-only recipe needs import rules')
+    capabilities = recipe.get('requiredRuntimeCapabilities', [])
+    if not isinstance(capabilities, list) or not set(capabilities) <= CAPABILITIES \
+            or len(set(capabilities)) != len(capabilities):
+        raise ValueError('Unknown required runtime capability')
+    retention = recipe.get('runtimeRetention', [])
+    if not isinstance(retention, list) or len(retention) > 32:
+        raise ValueError('Runtime retention must be a bounded list')
+    for name in retention:
+        safe_relative(name)
+    if len({name.casefold() for name in retention}) != len(retention):
+        raise ValueError('Duplicate runtime retention entry')
+    # Vendor artifacts keep their own signature and search paths; we neither alter nor re-sign them.
+    vendor = recipe.get('vendorRuntimePaths', [])
+    if not isinstance(vendor, list) or len(vendor) > 32:
+        raise ValueError('Vendor runtime paths must be a bounded list')
+    folded = {name.casefold() for name in retention}
+    for name in vendor:
+        if safe_relative(name).casefold() not in folded:
+            raise ValueError('A vendor runtime path must also be retained: ' + name)
+    validate_runtime_tuning(recipe.get('runtimeTuning', {}))
+    if recipe.get('referencesInstallation'):
+        # A referencing app ships no game bytes at all, so it can carry no inventory.
+        if editions != ['import']:
+            raise ValueError('A referencing recipe produces the import edition only')
+        if recipe['originalFiles'] or recipe['originalDirectories'] or recipe['executableHashes'] \
+                or recipe['compatibility']:
+            raise ValueError('A referencing recipe must not list original or compatibility files')
+        if 'game' in recipe['inputs']:
+            raise ValueError('A referencing recipe takes no game input')
+        validate_store_client(recipe.get('storeClient'))
+        validate_prefix_settings(recipe.get('prefixSettings', []))
+        devices = recipe.get('controllerDevices', [])
+        if not isinstance(devices, list) or len(devices) > 32 or not all(
+                re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
+            raise ValueError('Invalid controller device')
+    else:
+        for key in ['storeClient', 'controllerDevices', 'prefixSettings']:
+            if key in recipe:
+                # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
+                raise ValueError('Only a referencing recipe declares ' + key)
+        if 'importRules' not in recipe:
+            # Neither recognised by rules nor by reference, so this recipe packages game bytes.
+            if editions == ['import']:
+                raise ValueError('An import-only recipe needs import rules or an installation reference')
+            if 'game' not in recipe['inputs']:
+                raise ValueError('A recipe that packages original data needs a game input')
     return recipe
 
 

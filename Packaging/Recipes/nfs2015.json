@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "gameID": "nfs2015",
+  "displayName": "Need for Speed",
+  "bundleIdentifier": "local.nfs2015.mac",
+  "bundleVersion": "1",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.racing-games",
+  "launcher": "NFS2015Launcher",
+  "session": "NFS2015Session",
+  "runtimeProfile": "nfs2015-tf-cx11",
+  "requiredRuntimeCapabilities": [
+    "trapFlagEmulation",
+    "d3dmetalDXGI"
+  ],
+  "editions": [
+    "import"
+  ],
+  "referencesInstallation": true,
+  "runtimeTuning": {
+    "WINE_TF_EMULATION": "1",
+    "WINE_TF_MAX_STEPS": "0",
+    "WINE_TF_MAX_NS": "0"
+  },
+  "storeClient": {
+    "name": "EA app",
+    "installRoot": "Program Files/Electronic Arts/EA Desktop",
+    "clientExecutable": "EA Desktop/EADesktop.exe",
+    "clientArguments": [
+      "--in-process-gpu"
+    ],
+    "launcherExecutable": "EA Desktop/EALauncher.exe",
+    "launchURL": "origin2://game/launch/?offerIds={offer}",
+    "offerID": "1024486",
+    "signInEvidence": [
+      "AppData/Local/Electronic Arts/EA Desktop"
+    ],
+    "readinessEvidence": [
+      "AppData/Local/Electronic Arts/EA Desktop/Logs"
+    ],
+    "readinessChildren": 1,
+    "readinessSeconds": 180,
+    "gameRoot": "Program Files/EA Games/Need for Speed"
+  },
+  "controllerDevices": [
+    "054C/05C4",
+    "054C/0CE6"
+  ],
+  "inputs": {
+    "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
+    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
+    "x87Source": "{home}/Developer/x87sidecar",
+    "packaging": "{project}/Packaging",
+    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime"
+  },
+  "runtimeRetention": [
+    "lib/wine/dxgi/gptk",
+    "lib/external/D3DMetal.framework",
+    "lib/external/D3DMetal-License.rtf",
+    "lib/external/libd3dshared.dylib"
+  ],
+  "originalFiles": [],
+  "originalDirectories": {},
+  "executableHashes": {},
+  "compatibility": [],
+  "defaults": [],
+  "supportsSP": true,
+  "supportsMP": false,
+  "vendorRuntimePaths": [
+    "lib/external/D3DMetal.framework",
+    "lib/external/libd3dshared.dylib"
+  ],
+  "prefixSettings": [
+    {
+      "hive": "HKEY_CURRENT_USER",
+      "path": "Software\\Wine\\Mac Driver",
+      "name": "RetinaMode",
+      "value": "Y",
+      "kind": "string",
+      "reason": "Wine advertises the native panel, so the full-screen mode the game asks for exists"
+    }
+  ]
+}

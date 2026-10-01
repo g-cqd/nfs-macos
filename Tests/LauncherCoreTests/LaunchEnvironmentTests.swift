@@ -9,7 +9,7 @@ struct LaunchEnvironmentTests {
     let paths = try AppPaths(
       bundle: URL(fileURLWithPath: "/Applications/Call of Duty.app"),
       support: URL(fileURLWithPath: "/tmp/CoD4 Player"), game: .cod4)
-    let environment = LaunchEnvironment.make(
+    let environment = try LaunchEnvironment.make(
       paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support)
     #expect(
       environment["WINEDLLPATH"]
@@ -32,7 +32,7 @@ struct LaunchEnvironmentTests {
     let sut = try AppPaths(
       bundle: URL(fileURLWithPath: "/tmp/Game.app"),
       support: URL(fileURLWithPath: "/tmp/Player"))
-    let environment = LaunchEnvironment.make(
+    let environment = try LaunchEnvironment.make(
       paths: sut, prefix: sut.prefix,
       home: URL(fileURLWithPath: "/Users/friend"), temporary: URL(fileURLWithPath: "/tmp"))
     #expect(environment["HOME"] == "/Users/friend")
