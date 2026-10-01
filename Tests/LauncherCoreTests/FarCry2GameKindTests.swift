@@ -44,7 +44,7 @@ struct FarCry2GameKindTests {
     #expect(
       environment["WINEDLLPATH"]
         == "/Applications/Far Cry 2.app/Contents/SharedSupport/Wine/lib/wine/d3d9/mtld3d")
-    #expect(environment["WINEDLLOVERRIDES"] == "mscoree,mshtml=")
+    #expect(environment["WINEDLLOVERRIDES"] == "mscoree,mshtml=;d3d10,d3d10_1,d3d10core,dxgi=")
     #expect(environment["WINE_COMPATDB"]?.contains("d3d9=mtld3d") == true)
     #expect(
       environment["ROSETTA_X87_PATH"] == "/Applications/Far Cry 2.app/Contents/Helpers/x87sidecar")
