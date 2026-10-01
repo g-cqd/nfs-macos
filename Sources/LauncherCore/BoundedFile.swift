@@ -23,8 +23,8 @@ package enum BoundedFile {
     }
   }
 
-  package static func text(_ url: URL) throws(LauncherError) -> String {
-    guard let text = String(data: try read(url), encoding: .utf8) else {
+  package static func text(_ url: URL, limit: Int = 1_048_576) throws(LauncherError) -> String {
+    guard let text = String(data: try read(url, limit: limit), encoding: .utf8) else {
       throw .operation("Invalid UTF-8 configuration: \(url.lastPathComponent).")
     }
     return text
