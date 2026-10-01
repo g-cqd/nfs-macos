@@ -10,6 +10,7 @@
   "session": "FarCry2Session",
   "runtimeProfile": "cod4-tested",
   "editions": ["import"],
+  "shaderCache": true,
   "inputs": {
     "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
     "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
@@ -34,7 +35,7 @@
       {
         "path": "bin",
         "minimumBytes": 0,
-        "excludedNames": ["mtld3d.conf", "mtld3d_shaders.bin"],
+        "excludedNames": ["mtld3d.conf", "mtld3d_shaders.bin", "mtld3d_shaders.bin.lock", "mtld3d_shaders.bin.owner"],
         "excludedSuffixes": [".log", ".tmp"],
         "excludedDirectories": ["mtld3d-logs"]
       },
