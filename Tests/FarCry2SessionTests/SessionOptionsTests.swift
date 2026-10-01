@@ -15,7 +15,7 @@ struct SessionOptionsTests {
     let play = try SessionOptions(
       arguments: [app, "--support", "/tmp/Player", "--play", "--request", "/tmp/r.json"])
     #expect(play.action == .play && play.request?.path == "/tmp/r.json")
-    for flag in ["--configure", "--backups", "--import-game"] {
+    for flag in ["--configure", "--backups", "--import-game", "--shader-cache"] {
       let options = try SessionOptions(
         arguments: [app, "--support", "/tmp/Player", flag, "--request", "/tmp/x"])
       #expect(options.action.rawValue == flag)
@@ -29,6 +29,8 @@ struct SessionOptionsTests {
     ["/A.app", "--support", "/tmp/p", "--support", "/tmp/q", "--prepare"],
     ["/A.app", "--support", "/tmp/p", "--play"],
     ["/A.app", "--support", "/tmp/p", "--configure"],
+    ["/A.app", "--support", "/tmp/p", "--shader-cache"],
+    ["/A.app", "--support", "/tmp/p", "--shader-cache", "--backups", "--request", "x"],
     ["/A.app", "--support", "/tmp/p", "--prepare", "--request"],
     ["/A.app", "--support", "/tmp/p", "--prepare", "--mode", "x"],
     ["/A.app", "--support", "/tmp/p", "--prepare", "--request", "a", "--request", "b"],

@@ -20,6 +20,13 @@ struct FarCry2Session {
         try files.createDirectory(
           at: paths.support.appendingPathComponent(folder), withIntermediateDirectories: true)
       }
+      let cache = shaderCache()
+      // A crashed session leaves its cache in the game folder, and a new generation would not carry it.
+      if files.fileExists(atPath: paths.currentGame.path) {
+        attempt("take back the previous cache") {
+          report(harvest: try cache.harvest(game: paths.currentGame))
+        }
+      }
       let runtime = WineRuntime(paths: paths, output: output)
       let environment = runtime.environment(prefix: paths.prefix)
       guard
@@ -55,13 +62,16 @@ struct FarCry2Session {
         if state != .ready {
           print("GamerProfile.xml was not changed (\(state.rawValue)); renderer settings were.")
         }
+      case .shaderCache:
+        try perform(try decode(FarCry2ShaderCacheRequest.self, options.request), cache, game: game)
       }
-      try snapshot()
+      try snapshot(cache)
       guard options.action == .play else { return 0 }
       let executable = game.appendingPathComponent(GameKind.farcry2.executable)
       guard files.fileExists(atPath: executable.path) else {
         throw LauncherError.operation("The imported game has no bin/FarCry2.exe. Import it again.")
       }
+      attempt("place the cache") { report(launch: try cache.prepare(game: game)) }
       try drive.install()
       let status: Int32
       do {
@@ -71,17 +81,19 @@ struct FarCry2Session {
           directory: game.appendingPathComponent("bin"), environment: environment
         ).run(output: output, onStart: lease.record)
         try runtime.stop(paths.prefix)
+        attempt("save the cache") { report(harvest: try cache.harvest(game: game)) }
         try lease.clear()
       } catch {
         do {
           try runtime.stop(paths.prefix)
+          attempt("save the cache") { report(harvest: try cache.harvest(game: game)) }
           try lease.clear()
           try drive.remove()
         } catch { print("Far Cry 2 session cleanup failed: \(error)") }
         throw error
       }
       try drive.remove()
-      try snapshot()
+      try snapshot(cache)
       return status
     }
   }
@@ -107,13 +119,14 @@ struct FarCry2Session {
     }
   }
 
-  private func snapshot() throws {
+  private func snapshot(_ cache: FarCry2ShaderCache) throws {
     let loaded = try FarCry2SettingsStore(paths: paths).load()
     let snapshot = FarCry2Snapshot(
       settings: loaded.settings, profile: loaded.state,
       installation: GameInstaller.installedGame(paths: paths),
       backups: try FarCry2Backups(paths: paths).list(),
-      keptAside: try FarCry2UserData(paths: paths).keptAside())
+      keptAside: try FarCry2UserData(paths: paths).keptAside(),
+      shaderCache: try? cache.status())
     try JSONEncoder().encode(snapshot).write(
       to: paths.support.appendingPathComponent("launcher-state.json"), options: .atomic)
   }

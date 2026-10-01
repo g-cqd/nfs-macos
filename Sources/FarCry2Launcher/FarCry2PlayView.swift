@@ -29,6 +29,12 @@ struct FarCry2PlayView: View {
           )
           .font(.caption).foregroundStyle(.secondary)
         }
+        if let notice = model.shaderCacheNotice {
+          Section("First launch") {
+            Text(notice)
+            Text("Details are under Shader cache.").font(.caption).foregroundStyle(.secondary)
+          }
+        }
         Section("Installation") {
           if let summary = model.installationSummary {
             LabeledContent("Recognised", value: summary)

@@ -9,6 +9,7 @@ struct SessionOptions {
     case configure = "--configure"
     case importGame = "--import-game"
     case backups = "--backups"
+    case shaderCache = "--shader-cache"
   }
 
   let bundle: URL

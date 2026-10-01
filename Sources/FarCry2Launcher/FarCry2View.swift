@@ -8,6 +8,7 @@ struct FarCry2View: View {
         Label("Play", systemImage: "play.fill").tag("Play")
         Section("Your experience") {
           Label("Graphics", systemImage: "display").tag("Graphics")
+          Label("Shader cache", systemImage: "bolt.horizontal").tag("ShaderCache")
         }
         Section("Your progress") {
           Label("Saves & backups", systemImage: "externaldrive.badge.timemachine").tag("Saves")
@@ -22,6 +23,7 @@ struct FarCry2View: View {
           switch model.tab {
           case "Graphics": FarCry2GraphicsView(model: model)
           case "Saves": FarCry2SavesView(model: model)
+          case "ShaderCache": FarCry2ShaderCacheView(model: model)
           case "Setup": FarCry2SetupView(model: model)
           default: FarCry2PlayView(model: model)
           }
@@ -60,6 +62,11 @@ struct FarCry2View: View {
       Button("Restore Backup", role: .destructive, action: model.restoreBackup)
     } message: {
       Text("Your current settings and saves are backed up first, then replaced.")
+    }
+    .confirmationDialog("Reset the shader cache?", isPresented: $model.shaderResetConfirmation) {
+      Button("Reset Shader Cache", role: .destructive, action: model.resetShaderCache)
+    } message: {
+      Text("The saved shaders are deleted. The next launch compiles them again and may pause.")
     }
     .confirmationDialog("Remove this backup?", isPresented: $model.removalConfirmation) {
       Button("Remove Backup", role: .destructive, action: model.removeBackup)

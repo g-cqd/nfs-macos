@@ -139,6 +139,87 @@ struct FarCry2ModelTests {
     #expect(sut.hasGameData)
   }
 
+  private func cacheSnapshot(_ status: ShaderCacheStatus) -> FarCry2Snapshot {
+    FarCry2Snapshot(
+      settings: .init(), profile: .ready, installation: nil, backups: [], shaderCache: status)
+  }
+
+  @Test func `an empty cache explains the first launch pause and a warm one does not`() async {
+    let service = SessionStub()
+    service.snapshot = cacheSnapshot(.init(state: .empty))
+    let sut = makeModel(service: service)
+    await sut.run()
+    #expect(sut.shaderCacheNotice?.contains("first launch") == true)
+    #expect(!sut.canExportShaderCache && sut.canImportShaderCache && !sut.canResetShaderCache)
+    service.snapshot = cacheSnapshot(.init(state: .warm, bytes: 2_000_000, saved: Date()))
+    sut.reload()
+    await sut.run()
+    #expect(sut.shaderCacheNotice == nil)
+    #expect(sut.canExportShaderCache && sut.canImportShaderCache && sut.canResetShaderCache)
+    #expect(sut.shaderCacheSummary.contains("saved"))
+  }
+
+  @Test func `a build without persistent cache offers no cache actions and no notice`() async {
+    let service = SessionStub()
+    let sut = makeModel(service: service)
+    await sut.run()
+    #expect(sut.shaderCache.state == .unavailable)
+    #expect(sut.shaderCacheNotice == nil)
+    #expect(!sut.canExportShaderCache && !sut.canImportShaderCache && !sut.canResetShaderCache)
+  }
+
+  @Test func `without a game the cache page offers nothing`() async {
+    let service = SessionStub()
+    service.hasData = false
+    service.snapshot = cacheSnapshot(.init(state: .warm, bytes: 9, saved: Date()))
+    let sut = makeModel(service: service)
+    await sut.run()
+    #expect(sut.shaderCacheNotice == nil)
+    #expect(!sut.canExportShaderCache && !sut.canImportShaderCache && !sut.canResetShaderCache)
+  }
+
+  @Test func `resetting the cache asks the helper to reset and keeps unsaved settings`()
+    async throws
+  {
+    let service = SessionStub()
+    service.snapshot = cacheSnapshot(.init(state: .warm, bytes: 9, saved: Date()))
+    let sut = makeModel(service: service)
+    await sut.run()
+    sut.settings.values["vsync"] = "1"
+    service.snapshot = FarCry2Snapshot(
+      settings: .init(), profile: .ready, installation: nil, backups: [],
+      shaderCache: .init(state: .empty))
+    sut.shaderResetConfirmation = true
+    sut.resetShaderCache()
+    #expect(!sut.shaderResetConfirmation)
+    await sut.run()
+    guard case .shaderCache(let request) = service.operations.last else {
+      Issue.record("Expected a shader cache operation")
+      return
+    }
+    #expect(request.action == .reset && request.path == nil)
+    #expect(sut.shaderCache.state == .empty)
+    #expect(sut.settings.value("vsync") == "1", "a cache operation must not discard unsaved edits")
+    #expect(sut.phase == .ready)
+  }
+
+  @Test func `cache actions are ignored while the starter is busy or the action is unavailable`()
+    async
+  {
+    let service = SessionStub()
+    service.snapshot = cacheSnapshot(.init(state: .empty))
+    let sut = makeModel(service: service)
+    await sut.run()
+    let request = sut.request
+    sut.exportShaderCache()
+    sut.resetShaderCache()
+    #expect(sut.request == request, "an empty cache can be neither exported nor reset")
+    sut.importShaderCache()
+    #expect(sut.request == request + 1)
+    sut.resetShaderCache()
+    #expect(sut.request == request + 1, "a busy starter accepts no second action")
+  }
+
   private func makeModel(service: SessionStub, available: Bool = true) -> FarCry2Model {
     FarCry2Model(
       service: service, rosetta: RosettaSetup(service: RosettaStub(available: available)),

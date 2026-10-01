@@ -16,6 +16,7 @@ import subprocess
 import sys
 import uuid
 
+HERE = Path(__file__).resolve().parent
 
 def tree_digest(root):
     digest = hashlib.sha256()
@@ -24,6 +25,33 @@ def tree_digest(root):
         with path.open('rb') as stream:
             digest.update(hashlib.file_digest(stream, 'sha256').digest())
     return digest.hexdigest()
+
+
+def cache_identifier(key):
+    """Mirrors ShaderCacheKey.identifier, so a drift between Swift and this script shows up as a failure."""
+    canonical = '\n'.join(['farcry2-shader-cache', 'revision=' + key['mtld3dRevision'],
+                           'format=%d' % key['cacheFormatVersion'], 'schema=%d' % key['shaderSchemaVersion'],
+                           'emitter=' + key['emitterDigest']])
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
+def synthetic_cache(name, key):
+    """A cache written by the real mtld3d writers from invented entries, under the app's header.
+
+    The chunk checksums do not cover the file header, so the header can be set to what this build writes.
+    """
+    data = bytearray((HERE / name).read_bytes())
+    data[8:12] = key['cacheFormatVersion'].to_bytes(4, 'little')
+    data[12:16] = key['shaderSchemaVersion'].to_bytes(4, 'little')
+    return bytes(data)
+
+
+def export_container(payload, key):
+    manifest = {'formatVersion': 1, 'created': '2026-10-02T00:00:00Z', 'key': key,
+                'payloadBytes': len(payload), 'payloadSHA256': hashlib.sha256(payload).hexdigest(),
+                'origin': {'gpu': 'Synthetic GPU', 'system': 'Synthetic macOS'}}
+    body = json.dumps(manifest, sort_keys=True).encode()
+    return b'FC2SHCEX' + len(body).to_bytes(4, 'little') + body + payload
 
 
 def main():
@@ -124,6 +152,73 @@ def main():
         # `wineserver -k` succeeds only when a server for THIS prefix is still running.
         leftover = subprocess.run([str(wineserver), '-k'], env=wine_env, capture_output=True)
         check(leftover.returncode != 0, 'no wineserver of this prefix remains')
+
+        key_file = app / 'Contents/Resources/renderer-cache-key.json'
+        if key_file.is_file():
+            key = json.loads(key_file.read_text())
+            identifier = cache_identifier(key)
+            saved = support / 'ShaderCache' / identifier / 'mtld3d_shaders.bin'
+            binfolder = current / 'bin'
+            state_file = support / 'launcher-state.json'
+            check('Shader cache: none yet' in result.stdout, 'the first launch is reported as cold')
+            check(not (binfolder / 'mtld3d_shaders.bin.owner').exists()
+                  and not (binfolder / 'mtld3d_shaders.bin').exists(), 'no cache or marker left in bin after play')
+            check(json.loads(state_file.read_text())['shaderCache']['state'] == 'empty', 'empty cache reported')
+            singles = synthetic_cache('synthetic-cache-singles.bin', key)
+            bundle = synthetic_cache('synthetic-cache-bundle.bin', key)
+            incoming = work / 'incoming.fc2shadercache'
+            incoming.write_bytes(export_container(singles, key))
+            request.write_text(json.dumps({'action': 'import', 'path': str(incoming)}))
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode == 0 and saved.read_bytes() == singles, 'import installs the cache outside the game folder')
+            check(json.loads(state_file.read_text())['shaderCache']['state'] == 'warm', 'warm cache reported')
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode == 0 and 'already imported' in result.stdout, 'importing the same file again changes nothing')
+            check(saved.read_bytes() == singles, 'the saved cache is unchanged by a repeated import')
+            garbage = work / 'garbage.fc2shadercache'
+            garbage.write_bytes(b'not a cache export')
+            request.write_text(json.dumps({'action': 'import', 'path': str(garbage)}))
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode != 0 and saved.read_bytes() == singles, 'a damaged export is refused and changes nothing')
+            result = run('--play', '--request', str(play))
+            check('starting from %d saved bytes' % len(singles) in result.stdout, 'play starts from the saved cache')
+            check(saved.read_bytes() == singles and not (binfolder / 'mtld3d_shaders.bin').exists()
+                  and not (binfolder / 'mtld3d_shaders.bin.owner').exists(), 'the cache is back in storage after play')
+            # A killed session leaves the file mtld3d wrote in bin; the next session must keep it.
+            (binfolder / 'mtld3d_shaders.bin').write_bytes(bundle)
+            (binfolder / 'mtld3d_shaders.bin.owner').write_text(identifier + '\n')
+            result = run('--prepare')
+            check(result.returncode == 0 and saved.read_bytes() == bundle, 'a crashed session loses nothing')
+            check(not (binfolder / 'mtld3d_shaders.bin').exists(), 'the recovered file leaves bin')
+            (binfolder / 'mtld3d_shaders.bin').write_bytes(singles)  # not placed by the starter: no marker
+            result = run('--prepare')
+            check(result.returncode == 0 and saved.read_bytes() == bundle
+                  and not (binfolder / 'mtld3d_shaders.bin').exists(), 'a cache the starter did not place is never saved')
+            outgoing = work / 'outgoing.fc2shadercache'
+            request.write_text(json.dumps({'action': 'export', 'path': str(outgoing)}))
+            result = run('--shader-cache', '--request', str(request))
+            data = outgoing.read_bytes() if outgoing.exists() else b''
+            length = int.from_bytes(data[8:12], 'little')
+            manifest = json.loads(data[12:12 + length]) if data[:8] == b'FC2SHCEX' else {}
+            check(result.returncode == 0 and data[12 + length:] == bundle
+                  and manifest.get('payloadSHA256') == hashlib.sha256(bundle).hexdigest()
+                  and manifest.get('key') == key, 'export writes a verified file for this renderer build')
+            request.write_text(json.dumps({'action': 'export', 'path': str(support / 'inside.fc2shadercache')}))
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode != 0 and not (support / 'inside.fc2shadercache').exists(),
+                  'export refuses a destination inside the player folder')
+            other = dict(key, mtld3dRevision='0' * 40)
+            foreign = work / 'foreign.fc2shadercache'
+            foreign.write_bytes(export_container(singles, other))
+            request.write_text(json.dumps({'action': 'import', 'path': str(foreign)}))
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode != 0 and saved.read_bytes() == bundle, "another renderer build's cache is refused")
+            request.write_text(json.dumps({'action': 'reset'}))
+            result = run('--shader-cache', '--request', str(request))
+            check(result.returncode == 0 and not saved.exists(), 'reset deletes the saved cache')
+            check(json.loads(state_file.read_text())['shaderCache']['state'] == 'empty', 'reset is reported')
+        else:
+            print('SKIP shader cache checks: this app carries no renderer cache key')
     finally:
         if support.exists():
             subprocess.run([str(wineserver), '-k'], env=wine_env, capture_output=True)
