@@ -36,9 +36,13 @@ struct NFS2015Session {
       let store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       var settings = try store.load()
       if options.action == "--configure", let request = options.request {
-        settings = try JSONDecoder().decode(
+        let requested = try JSONDecoder().decode(
           NFS2015Settings.self, from: BoundedFile.read(request, limit: 65_536))
-        try store.apply(settings)
+        // The game's own file is the record, so the snapshot reports what it now holds.
+        settings = try store.apply(requested)
+      }
+      if let install = readiness.install, options.action != "--configure" {
+        try recordPrefixSettings(manifest.registry, install: install, tuning: manifest.tuning)
       }
       if options.action == "--enable-controller" {
         try enableController(
@@ -67,6 +71,36 @@ struct NFS2015Session {
       try snapshot(readiness: readiness, store: store, settings: try store.load())
       return status
     }
+  }
+
+  /// Records the display and runtime registry values this game needs in the referenced prefix.
+  ///
+  /// These are not game options, so the game's own file cannot hold them: Wine reads them from
+  /// the prefix. Without `RetinaMode` the driver advertises the scaled logical desktop instead
+  /// of the native panel, the full-screen mode the game asks for does not exist, and Wine
+  /// substitutes the nearest one. Each value is imported only when the prefix lacks it, so a
+  /// prepared prefix is left completely untouched.
+  private func recordPrefixSettings(
+    _ settings: [RegistrySetting], install: NFS2015Install, tuning: RuntimeTuning
+  ) throws {
+    let runtime = WineRuntime(paths: paths, output: output, tuning: tuning)
+    let applied = try PrefixPreparation(support: paths.support).apply(
+      settings, in: install.prefix
+    ) { script in
+      guard
+        try ProcessCommand(
+          executable: paths.wine, arguments: ["reg", "import", script.path],
+          directory: paths.support, environment: try runtime.environment(prefix: install.prefix)
+        ).run(output: output) == 0
+      else {
+        throw LauncherError.operation("Wine could not record the prefix settings.")
+      }
+    }
+    guard !applied.isEmpty else { return }
+    for setting in applied {
+      print("Recorded \(setting.name)=\(setting.value) in your Windows folder: \(setting.reason)")
+    }
+    try runtime.stop(install.prefix)
   }
 
   /// Imports the controller key into the referenced prefix, with the player asking for it.

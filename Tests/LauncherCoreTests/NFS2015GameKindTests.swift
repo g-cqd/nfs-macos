@@ -62,8 +62,14 @@ struct NFS2015GameKindTests {
     let manifest = BundleManifest(
       version: "abc123", gameFiles: [], gameID: .nfs2015, referencesInstallation: true,
       runtimeTuning: RuntimeTuning(["WINE_TF_EMULATION": "1"]), storeClient: Self.plan,
-      controllerDevices: ["054C/05C4"])
+      controllerDevices: ["054C/05C4"],
+      prefixSettings: [
+        RegistrySetting(
+          hive: .currentUser, path: #"Software\Wine\Mac Driver"#, name: "RetinaMode",
+          value: "Y", kind: .string)
+      ])
     try manifest.validate()
+    #expect(manifest.registry.count == 1)
     #expect(manifest.references)
     #expect(manifest.client?.launchRequest == "origin2://game/launch/?offerIds=1024486")
     #expect(manifest.controllers == ["054C/05C4"])
@@ -84,6 +90,20 @@ struct NFS2015GameKindTests {
         storeClient: Self.plan, controllerDevices: ["054C"]),
     ] {
       #expect(throws: LauncherError.self) { try manifest.validate() }
+    }
+  }
+
+  @Test
+  func `rejects prefix settings on a manifest whose app owns its prefix`() throws {
+    let file = ManifestFile(path: "speed.exe", size: 1, sha256: String(repeating: "a", count: 64))
+    #expect(throws: LauncherError.self) {
+      try BundleManifest(
+        version: "abc123", gameFiles: [file], gameID: .nfsmw,
+        prefixSettings: [
+          RegistrySetting(
+            hive: .currentUser, path: "Software", name: "A", value: "B", kind: .string)
+        ]
+      ).validate()
     }
   }
 

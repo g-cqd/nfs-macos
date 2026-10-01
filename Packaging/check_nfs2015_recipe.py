@@ -39,6 +39,14 @@ assert 'lib/external/libd3dshared.dylib' in recipe['runtimeRetention']
 assert 'renderer' not in recipe['inputs'] and 'mtld3dSource' not in recipe['inputs']
 assert 'lib/wine/d3d9/mtld3d' not in recipe['runtimeRetention']
 
+# The prefix settings the game needs, which are Wine's and so cannot live in the game's file.
+retina = [s for s in recipe['prefixSettings'] if s['name'] == 'RetinaMode']
+assert len(retina) == 1, 'The recipe must record RetinaMode in the adopted prefix'
+assert retina[0]['hive'] == 'HKEY_CURRENT_USER'
+assert retina[0]['path'] == 'Software\\Wine\\Mac Driver'
+assert retina[0]['kind'] == 'string' and retina[0]['value'] in {'Y', 'y'}
+assert retina[0]['reason'], 'A prefix setting must say why it is needed'
+
 # The runtime capability gate must refuse a runtime without execution-breakpoint delivery.
 assert 'trapFlagEmulation' in recipe['requiredRuntimeCapabilities']
 for name, profile in PINS['runtimeProfiles'].items():
@@ -65,6 +73,10 @@ for change in [
     lambda r: r.update(runtimeTuning={'DYLD_INSERT_LIBRARIES': '/tmp/x'}),
     lambda r: r.update(runtimeTuning={'WINE_TF_EMULATION': 'yes'}),
     lambda r: r.update(controllerDevices=['054C']),
+    lambda r: r['prefixSettings'][0].update(value='Y"\n[HKEY_LOCAL_MACHINE\\X]'),
+    lambda r: r['prefixSettings'][0].update(hive='HKEY_CLASSES_ROOT'),
+    lambda r: r['prefixSettings'][0].update(kind='binary'),
+    lambda r: r['prefixSettings'][0].update(path='Software\\\\Wine'),
     lambda r: r.update(requiredRuntimeCapabilities=['teleportation']),
     lambda r: r['runtimeRetention'].append('../escape'),
     lambda r: r.update(compatibility=[{'path': 'a', 'input': 'packaging', 'source': 'b'}]),
@@ -80,6 +92,14 @@ for change in [
 
 # A recipe that packages original data may not claim a store client.
 nfsmw = load_recipe('nfsmw')
+altered = deepcopy(nfsmw)
+altered['prefixSettings'] = recipe['prefixSettings']
+try:
+    validate_recipe(altered)
+except ValueError:
+    pass
+else:
+    raise AssertionError('A copying recipe was allowed to declare prefix settings')
 altered = deepcopy(nfsmw)
 altered['storeClient'] = client
 try:
@@ -98,6 +118,7 @@ with TemporaryDirectory() as temporary:
     assert manifest['storeClient'] == client
     assert manifest['runtimeTuning'] == recipe['runtimeTuning']
     assert manifest['controllerDevices'] == recipe['controllerDevices']
+    assert manifest['prefixSettings'] == recipe['prefixSettings']
     assert len(manifest['version']) == 24
     assert not any((resources / 'Game').rglob('*')), 'No game file may be staged'
     first = manifest['version']

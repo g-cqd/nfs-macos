@@ -66,6 +66,37 @@ def validate_runtime_tuning(tuning):
     return tuning
 
 
+def validate_prefix_settings(settings):
+    """Mirror of the native RegistrySetting validation; nothing may inject a second key or line."""
+    if not isinstance(settings, list) or len(settings) > 64:
+        raise ValueError('Prefix settings must be a bounded list')
+    for item in settings:
+        if not isinstance(item, dict):
+            raise ValueError('A prefix setting must be an object')
+        if item.get('hive') not in {'HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE'}:
+            raise ValueError('Unknown registry hive')
+        path, name = item.get('path'), item.get('name')
+        for text, limit in [(path, 256), (name, 128)]:
+            if not isinstance(text, str) or not 0 < len(text) <= limit \
+                    or any(ord(c) < 32 or ord(c) > 126 or c in '"[]' for c in text):
+                raise ValueError('Unusable registry location')
+        if path.startswith('\\') or path.endswith('\\') or '\\\\' in path or '\\' in name:
+            raise ValueError('Unusable registry key path')
+        value = item.get('value')
+        if item.get('kind') == 'string':
+            if not isinstance(value, str) or not 0 < len(value) <= 256 \
+                    or any(ord(c) < 32 or ord(c) > 126 or c in '"[]\\' for c in value):
+                raise ValueError('Unusable registry string value')
+        elif item.get('kind') == 'dword':
+            if not re.fullmatch('[0-9a-f]{1,8}', str(value)):
+                raise ValueError('A registry number must be lowercase hexadecimal')
+        else:
+            raise ValueError('Unknown registry value kind')
+        if not isinstance(item.get('reason', ''), str) or len(item.get('reason', '')) > 200:
+            raise ValueError('Overlong registry reason')
+    return settings
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -160,13 +191,15 @@ def validate_recipe(recipe):
         if 'game' in recipe['inputs']:
             raise ValueError('A referencing recipe takes no game input')
         validate_store_client(recipe.get('storeClient'))
+        validate_prefix_settings(recipe.get('prefixSettings', []))
         devices = recipe.get('controllerDevices', [])
         if not isinstance(devices, list) or len(devices) > 32 or not all(
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
             raise ValueError('Invalid controller device')
     else:
-        for key in ['storeClient', 'controllerDevices']:
+        for key in ['storeClient', 'controllerDevices', 'prefixSettings']:
             if key in recipe:
+                # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)
         if 'game' not in recipe['inputs']:
             raise ValueError('A recipe that packages original data needs a game input')

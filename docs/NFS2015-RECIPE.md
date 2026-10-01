@@ -126,6 +126,31 @@ the `WINE_TF_*` gate is still being built at `~/Games/NFS2015-debug/src/wine-cx`
 `bin/wine`, `bin/wineserver`, `lib/wine/x86_64-unix/{ntdll.so,wine}` and
 `lib/wine/i386-windows/ntdll.dll` under that profile and remove `pending`.
 
+## Prefix settings the game needs
+
+Some values this game depends on are Wine's, not the game's, so the game's own file cannot
+hold them. A bundle that owns its prefix imports them once through `Defaults/settings.reg`
+during `wineboot`; this recipe owns no prefix and never runs `wineboot`. It therefore declares
+`prefixSettings`, and the session checks each one against the prefix's own `user.reg` or
+`system.reg` and imports only what is missing — a prepared prefix starts no Wine process and is
+left completely untouched.
+
+| Value | Why |
+|---|---|
+| `HKCU\Software\Wine\Mac Driver` `RetinaMode="Y"` | Without it the Mac driver advertises the scaled logical desktop instead of the native panel, so the full-screen mode the game asks for does not exist and Wine substitutes the nearest one |
+
+**Strong but unverified**, reported by the startup worker: on a 2560×1600 Retina display the
+game's own options were already correct (`FullscreenEnabled 1`, `2560×1600`, `60`) yet the
+window came up wrong until windowed mode was toggled to force a re-query, and this key was
+absent from the prefix. The diagnosis matches the key's documented effect and the absent key was
+confirmed in this tree's prefix, where `Mac Driver` holds only `AllowSetGamma`. It is not yet
+confirmed that setting it makes the window correct on the first launch.
+
+Note that the existing bundles disagree about this value, so it is not a blanket default:
+`Packaging/CoD4Defaults/settings.reg` sets `"Y"`, while `Packaging/settings.reg` for Most Wanted
+sets `"N"`. Wine accepts `y`, `Y`, `t`, `T` or `1` as true. Making it per-recipe configuration
+rather than a shared default is deliberate.
+
 ## Settings
 
 The installed game writes `Documents/Need For Speed/settings/PROFILEOPTIONS_profile` below the
@@ -139,6 +164,13 @@ back from the installed game. `GstRender.AmbientOcclusion` and `GstRender.AntiAl
 deliberately excluded: the game wrote one value for each and their domains are not established,
 so they stay under the game's own Video menu. The four-step detail domain (`0`–`3`) is inferred
 from that menu, not measured.
+
+The game's file is the **only** record of these settings. The app keeps no copy of its own, so
+a change the player makes in the game's own Video menu is what the starter shows, and the
+starter can never overwrite a player's choice with a stale cache. `--configure` writes the
+requested values into the game's file and then reads that file back, so the snapshot reports
+what the game now holds rather than what was asked for. Before the game has written its file
+there is nothing to change, and the app says so instead of inventing one.
 
 A real Windows profile usually links `Documents` at the player's own folder, so that link is
 followed on purpose. This is the one file the app changes outside its own folder:

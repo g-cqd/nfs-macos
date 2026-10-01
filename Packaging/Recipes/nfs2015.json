@@ -69,5 +69,15 @@
   "vendorRuntimePaths": [
     "lib/external/D3DMetal.framework",
     "lib/external/libd3dshared.dylib"
+  ],
+  "prefixSettings": [
+    {
+      "hive": "HKEY_CURRENT_USER",
+      "path": "Software\\Wine\\Mac Driver",
+      "name": "RetinaMode",
+      "value": "Y",
+      "kind": "string",
+      "reason": "Wine advertises the native panel, so the full-screen mode the game asks for exists"
+    }
   ]
 }

@@ -113,11 +113,20 @@ struct NFS2015SettingsTests {
     var settings = try store.load()
     #expect(settings.value("render.resolution") == "2560x1600")
     settings.values["render.resolution"] = "1920x1080"
-    try store.apply(settings)
+    #expect(try store.apply(settings).value("render.resolution") == "1920x1080")
     #expect(try store.load().value("render.resolution") == "1920x1080")
     let written = try String(contentsOf: try #require(try store.optionsFile()), encoding: .utf8)
     #expect(written.contains("GstRender.ResolutionWidth 1920"))
     #expect(written.contains("GstAudio.MusicVolume 1.000000"))
+    // The game is the only record: a change made in its own menu is what the app reports.
+    try Data(
+      written.replacingOccurrences(of: "GstRender.VSyncEnabled 0", with: "GstRender.VSyncEnabled 1")
+        .utf8
+    )
+    .write(to: try #require(try store.optionsFile()))
+    #expect(try store.load().value("render.vsync") == "1")
+    #expect(
+      !FileManager.default.fileExists(atPath: support.appendingPathComponent("settings.json").path))
   }
 
   @Test
@@ -131,6 +140,9 @@ struct NFS2015SettingsTests {
     let store = NFS2015SettingsStore(support: support, install: install)
     #expect(try store.optionsFile() == nil)
     #expect(try store.load() == NFS2015Settings())
+    // Nothing is cached anywhere else, so there is nothing to write yet either.
+    let error = #expect(throws: LauncherError.self) { try store.apply(NFS2015Settings()) }
+    #expect(error?.localizedDescription.contains("writes its own options file") == true)
   }
 
   @Test
