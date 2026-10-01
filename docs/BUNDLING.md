@@ -47,7 +47,7 @@ The current inputs are retained local artifacts:
 | Input | Default |
 |---|---|
 | NFS original assets | `~/Games/NFSMW` |
-| NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Desktop/Game Builds/Most Wanted Bundled.app` (preserved v5) |
+| NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app` (preserved v5) |
 | CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
 | Tested latest mtld3d overlay | `~/Games/renderer-pins-20261002/retained-overlay/wine/lib/wine` |
 | Renderer source evidence | `~/Games/renderer-pins-20261002/source-sha256.json` |
@@ -69,6 +69,13 @@ hash mismatches or a dirty/unpinned source checkout. All 631 renderer source has
 match the pinned mtld3d revision. The two Wine bases have identical code sections
 in their outer loader, server and Unix ntdll and identical i386 ntdll runtime contents;
 NFS retains its separate cursor-corrected inner loader.
+
+The retained app is the **v5** build, and it is the only acceptable source of the
+`nfsmw-cursor` Wine: the pinned hashes are the artifacts as they were *before* signing, and
+the v6 app in `~/Desktop/Game Builds` carries the same Wine re-signed, so every one of those
+five hashes differs there and `verify_inputs` rejects it. v5 now lives in iCloud Drive under
+`Shared - Games`, not on the Desktop. Keep it materialised locally; an evicted copy makes the
+build stall on download rather than fail.
 
 Override a relocated input with `--input NAME=/absolute/path`. The declared names are
 in each recipe. For example, `--input baseApp=/archive/Most\ Wanted\ Bundled.app` changes
