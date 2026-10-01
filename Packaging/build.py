@@ -40,6 +40,7 @@ def main():
         [sys.executable, 'Packaging/check_cod4_data.py'],
         [sys.executable, 'Packaging/check_recipes.py'],
         [sys.executable, 'Packaging/check_farcry2_recipe.py'],
+        [sys.executable, 'Packaging/check_shader_cache.py'],
         [sys.executable, 'Packaging/check_runtime_inputs.py'],
         [sys.executable, 'Packaging/check_assembly.py'],
         [sys.executable, 'Packaging/check_runtime_optimization.py'],
