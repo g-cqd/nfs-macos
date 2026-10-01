@@ -132,7 +132,8 @@ root drive is exposed. Environment (`LaunchEnvironment`):
 `bin/mtld3d.conf` (renderer settings) sits next to the executable because mtld3d reads it from the
 executable's directory. The shader cache `bin/mtld3d_shaders.bin` is placed there from the saved copy
 before play and taken back after it (see "Shader cache"); logs `bin/mtld3d-logs/` appear there too. None
-of them is imported or verified. `tools/farcry2/Play_FarCry2.command` is the developer
+of them is imported or verified. The developer script `tools/farcry2/Play_FarCry2.command` does not go
+through the session, so it does not use the saved cache. `tools/farcry2/Play_FarCry2.command` is the developer
 equivalent of `Play_CoD4.command`; it was syntax-checked only.
 
 ## Direct3D 9 versus Direct3D 10
