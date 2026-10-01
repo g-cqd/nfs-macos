@@ -37,6 +37,9 @@ bundled edition needs pinned executable hashes of a verified build, and none exi
 | Session helper, SwiftUI starter, developer launcher script | **Implemented**; never run against the real game |
 | Import, links, `G:` working directory, cleanup on the real bundled Wine | **Demonstrated** with a synthetic game tree (`tools/farcry2/smoke_session.py`, 22 checks): a stand-in executable ran as `C:\FarCry2\bin\FarCry2.exe` with `G:\bin` as its working directory, then `G:` and the lease were removed and no wineserver remained |
 | mtld3d profile for `FarCry2.exe` | **Proposed** only (below); mtld3d was not edited |
+| Shader cache kept in the player folder, keyed to the renderer build, reset, exported and imported; default `mtld3d.conf` with a source and a verification state for every option | **Implemented**, tested with synthetic caches (real mtld3d writers, no game data) and on the bundled Wine with a stand-in executable (`tools/farcry2/smoke_session.py`) |
+| That a warm cache removes the first-run pauses, how long a cold run compiles, start-up time with a full cache | **Unverified**: needs a game session; the earlier numbers are leads only (see "Shader cache") |
+| Compile during the loading screen, bounded prewarm, `shaderCache.dir` | **Proposed** for mtld3d (see "Shader cache"); nothing in mtld3d was changed |
 | Known-build digests, exact file list, exact setting value ranges | **Unverified**: need a legitimate install |
 | Start-up, rendering, input, audio, saves, x87 use, stutter | **Unverified**: no game run exists |
 
@@ -82,6 +85,7 @@ without needing the original folder. A failed import leaves the active game and 
   Data/Saves/FarCry2/Documents        the game's "My Games\Far Cry 2" (GamerProfile.xml, Saved Games)
   Data/Saves/FarCry2/LocalAppData     the game's "AppData\Local\My Games\Far Cry 2" (input map)
   Data/Backups/FarCry2/<uuid>/        bounded backups, plus GamerProfile.original.xml
+  ShaderCache/<build id>/             the saved shader cache (mtld3d_shaders.bin, info.json), see below
   Logs/ RuntimeHome/ Temporary/
 ```
 
@@ -126,8 +130,9 @@ root drive is exposed. Environment (`LaunchEnvironment`):
 - Metal HUD and mtld3d performance logging off, as in the other apps.
 
 `bin/mtld3d.conf` (renderer settings) sits next to the executable because mtld3d reads it from the
-executable's directory; the shader cache `bin/mtld3d_shaders.bin` and logs `bin/mtld3d-logs/` appear
-there and are never imported or verified. `tools/farcry2/Play_FarCry2.command` is the developer
+executable's directory. The shader cache `bin/mtld3d_shaders.bin` is placed there from the saved copy
+before play and taken back after it (see "Shader cache"); logs `bin/mtld3d-logs/` appear there too. None
+of them is imported or verified. `tools/farcry2/Play_FarCry2.command` is the developer
 equivalent of `Play_CoD4.command`; it was syntax-checked only.
 
 ## Direct3D 9 versus Direct3D 10
@@ -192,6 +197,122 @@ program. Settings worth testing, each a suspicion rather than a finding:
   `adapter.spoof`) is the closest analogue if wrong depth or vendor-specific behaviour appears. Only
   change them on evidence from an F12 capture.
 
+## Shader cache and first-run compile pauses
+
+Far Cry 2 asks mtld3d for shaders while it plays, and mtld3d compiles each new shader and pipeline for
+the Mac's GPU the first time a draw needs it. The renderer keeps what it compiled so a later run can skip
+that work. This section records how that works (read from mtld3d's source, not measured on this game),
+what the starter does about it, and what it cannot do.
+
+### Leads from an earlier run (not reproduced here)
+
+A previous run without `mtld3d.conf` reported gameplay and loading frames that were CPU bound, 946 shaders
+compiled over 38.9 s on the first run (one burst of 655 in 23.8 s, others of 6.4 s and 4.7 s), 15 pre-warmed,
+a persistent cache of 2 MB afterwards, and a shipped `bin/mtld3d_shaders.bin` of 15 KB. No game was
+available to check them, so they are not evidence for any claim below; they only show the order of
+magnitude worth measuring. Two parts of the brief were corrected by reading the source: the cache switch
+is `shaderCache.enable` (not `shader.cache`), and the cache is not keyed to GPU, driver or macOS.
+
+### What mtld3d does (source read at b22073b; the pinned 5f5331a has the same container format 20 and shader schema 79)
+
+| Question | Answer | Where |
+| --- | --- | --- |
+| Where is the cache? | `mtld3d_shaders.bin` in the directory of the running executable, plus `mtld3d_shaders.bin.lock` (a lock sidecar) and `mtld3d_shaders.bin.<pid>-<n>.tmp` during compaction. For this game that is `C:\FarCry2\bin`, which is the active generation's `bin`. The path is fixed; no option moves it. | `windows/d3d9/src/encoder.rs` (`EncoderThread::spawn`), `windows/core/src/shader_cache.rs` (`lock_path`, `temp_sibling`) |
+| What is in it? | A 16-byte header (`MTLD3DSH`, container format, shader schema), then zstd chunks, each with an xxh3 checksum. Records hold MSL text; for programmable shaders also the **DXSO bytecode** and every specialization input; and pipeline recipes made of logical state (formats, blend, vertex layout), never handles. | `shader_cache.rs`, `shader_cache/source.rs` |
+| What invalidates it? | (1) A different container format or shader schema in the header: the **whole file is deleted** when the renderer loads it (`SHADER_CACHE_SCHEMA_VERSION`, bumped by hand, is 79). (2) A different **emitter fingerprint** (xxh3 over `src/dxso/**`, `dxso.rs`, `vs_draw.rs`, `ps_draw.rs` and `unix/shared/src/mtl.rs`, computed in `windows/core/build.rs`) in a record: programmable shaders are regenerated from their retained DXSO during prewarm; fixed-function shaders and their pipelines are dropped. (3) Damage: reading stops at the first chunk with a bad checksum or a torn tail, and the tail is cut. | `shader_cache.rs` (`load`, `parse_records`), `unix/unix/src/shader_prewarm.rs` |
+| Is it keyed to the mtld3d commit, GPU, driver or macOS? | **No.** Nothing in the file or in the load path reads any of them. The cache holds source and recipes; the renderer recompiles them on the Mac that loads it, and a record that fails to compile there is skipped, not mis-rendered. `GpuCaps` (unified memory, alignment) affects buffer storage, not shader text. | `shader_cache.rs`, `windows/core/src/gpu_caps.rs`, `shader_prewarm.rs` |
+| Can it move to another Mac? | Yes, as a file, between builds with the same format, schema and emitter. A build with a different emitter loads it and regenerates; a different schema deletes it. Hence the starter's own key (below). | as above |
+| What does "process-start prewarm" do? | It runs when the device is created, not literally at process start. A prewarm thread loads the cache under the lock, regenerates stale MSL, compiles every recorded library (up to eight workers), then every recorded pipeline, and hands the handles to the encoder, which waits for them **before it accepts the first frame**. It then compacts the file into one bundle. Start-up therefore grows with the cache. | `shader_prewarm.rs`, `docs/ARCHITECTURE.md` (shader cache) |
+| What is `shader.asyncCompile`? | With either value, four worker threads build first-use shaders and pipelines. With `true` a draw whose build is still running can be left out of its frame; with `false` it is kept and the frame waits. | `mtld3d.conf`, `docs/ARCHITECTURE.md` |
+
+The cache contains the game's own shader bytecode. **Do not ship a pre-generated cache.** It would embed
+game data, so no cache is packaged: the recipe never includes one, `Packaging/audit.py` fails an app that
+contains any `mtld3d_shaders*` file, `check_shader_cache.py` fails a tracked cache or export file, and the
+import rules skip the cache, its lock and its marker if they appear in a player's folder.
+
+### What the starter does (implemented)
+
+- **Storage.** The saved cache lives in `ShaderCache/<build id>/` in the player folder, outside the Wine
+  prefix and outside every game generation. A new generation (app update, re-import), a rebuilt prefix or
+  an app update therefore keeps it.
+- **Key.** The packager writes `Contents/Resources/renderer-cache-key.json` for recipes with
+  `"shaderCache": true` (Far Cry 2 only): the pinned mtld3d revision, the container format and shader
+  schema read from `shader_cache.rs`, and a SHA-256 over the same files and in the same order as
+  mtld3d's emitter fingerprint (`Packaging/shader_cache_key.py`; the file set and order were checked
+  against the `rerun-if-changed` list of a real mtld3d build). The build id is a hash of all of them.
+  Another pin, schema, format or emitter gets a new, empty folder; the old one is never loaded and the
+  newest two are kept before the oldest is removed. GPU and macOS are recorded for information, not keyed.
+  Carrying a cache across pins by relying on mtld3d's regeneration is possible but is **not enabled**.
+- **Launch.** Because the renderer reads a fixed path, the session copies the saved cache into `bin` before
+  play with a marker naming the build id, and after the game exits (and at the start of every session, so
+  a crash loses nothing) takes the file back. Only a regular file with the marker is taken; a link, a file
+  the starter did not place, another build's file, an empty file, a file with another schema or one over
+  256 MiB never replaces the saved cache. A torn tail is cut. Cache problems are logged and never stop
+  the game.
+- **Integrity.** `ShaderCacheFormat` walks the chunks as mtld3d does and checks each xxh3 (`XXH3` is
+  reproduced and tested against the `xxhash-rust` crate for every length class), so the starter keeps only
+  what the renderer would accept. Records are not decompressed; this app never reads the bytecode.
+- **Reset, export, import.** *Shader cache* in the starter shows the state and offers reset (confirmed),
+  export and import. An export is one `.fc2shadercache` file: a manifest (renderer key, SHA-256, size,
+  GPU and macOS as information) followed by the cache. Import refuses a damaged file, a file over the
+  limit, another renderer build (naming both), a payload the renderer would delete or that holds no records,
+  and a destination or source that is a link. It joins the chunks of both caches under one header, which
+  mtld3d accepts and compacts at its next start (checked with the real parser). Importing the same
+  file again is recognised and changes nothing. Exports stay outside the player folder.
+  An export holds shader data generated on your Mac; it is for your own use. The starter never uploads it.
+- **First-run notice.** While there is no cache, the Play page and the cache page explain the one-time
+  compile pause. The session log says whether a launch starts cold or from N saved bytes.
+- **Defaults.** `bin/mtld3d.conf` is documented option by option with its evidence and what is
+  unverified (`shaderCache.enable=true`, `shader.asyncCompile=false`, `render.scale=1`, `present.maxFps=0`,
+  `memory.vramBudgetMB` left at mtld3d's 1024 for a 32-bit game, telemetry off through `RUST_LOG`).
+  `check_farcry2_recipe.py` requires every active key to be a key mtld3d documents, to be justified by
+  the comment above it and to state what is unverified.
+
+### Compile during the loading screen: what can and cannot be done
+
+mtld3d only learns of a shader when the game creates it, and of a pipeline when a draw uses it. A
+pipeline needs the vertex layout, the render target formats, blend state and sample count of that draw,
+and a pixel shader's emitted text depends on what is bound to its samplers (schema 66 types the sampler
+slots from the bound textures). So the renderer cannot compile what a game has not yet asked for, and
+nothing outside the game knows the list in advance. What is sound:
+
+| Option | Effect | Cost and status |
+| --- | --- | --- |
+| Persistent cache and prewarm at device creation | Combinations from earlier sessions are compiled before the first frame, in parallel, instead of one by one in play. | Longer start-up that grows with the cache; the first session still compiles. **Implemented** in mtld3d; the starter keeps the file alive. Gain **unverified**. |
+| Compile synchronously (`shader.asyncCompile=false`) | A first-use compile pauses the frame instead of dropping draws. If the game touches a shader during a loading screen, the pause is hidden there. | Only helps if Dunia uses its shaders while loading, which is **unverified**. **Implemented** as the default. |
+| Warm-up before the player cares | Play once past the first scenes, then export the cache for other Macs. | The notice says so; nothing to build. |
+| Ship a generated cache | Would remove first-run pauses for everyone. | **Rejected**: it embeds game bytecode. |
+| Compile from the starter | Would need the game's bytecode and the renderer. | **Rejected**: not possible without the game running. |
+| Guess a loading screen | Compile only while the game looks idle. | **Rejected**: unsound heuristics, and the game still asks later. |
+
+### Proposals for mtld3d (not applied; mtld3d was not edited)
+
+1. **`shaderCache.dir`, like `log.dir`.** Today the starter copies the file in and out. A key accepting a
+   directory (relative to the executable or absolute) would let the starter point it at the saved
+   folder and delete the copy and the crash recovery. Files: `windows/d3d9/src/encoder.rs` (the path built
+   in `EncoderThread::spawn`), `windows/core/src/config.rs`, `mtld3d.conf`, `docs/ARCHITECTURE.md`. Behaviour:
+   an absolute Windows path is translated with `wine_path::unix_path`; an unusable directory logs once and
+   disables the cache as a missing path does today. Test: a host unit test of path resolution for relative,
+   absolute, empty and untranslatable values, plus the existing e2e cold-start test with the key set.
+   The sidecar lock and `compact`'s rename must stay in the same directory.
+2. **Bounded prewarm.** Prewarm blocks the first frame until every recorded shader is compiled. A time
+   budget (`shaderCache.prewarmBudgetMs`, 0 meaning unbounded as today) would compile in file order, which is
+   first-use order, until the budget ends, hand the partial warm cache to the encoder, and give the rest to
+   the existing compile workers. The invariant to keep: a draw that needs a key still queued must wait for
+   that job, never start a second build of the same key. Files: `unix/unix/src/shader_prewarm.rs`,
+   `unix/unix/src/encoder/compile.rs`, `windows/core/src/config.rs`, `docs/ARCHITECTURE.md`. Tests: a unit
+   test with a fake clock (budget 0 returns at once with the rest queued; unbounded matches today), a test that a
+   live miss on a queued key adds no second job, and an e2e that counts builds per key. Worth doing only
+   if a real session shows a long start-up with a large cache.
+3. **Cache carry-over across pins** that share the container format and schema. mtld3d already regenerates
+   programmable MSL when only the emitter changed, so a starter could seed a new build's cache from the
+   newest old one. Not enabled here because the brief asks for a pin-keyed cache; it needs a real
+   session to show the regenerated cache is complete enough to be worth the risk.
+
+Measure before any of these: a session log with the `shader_cache: pre-warmed` and `shaders: N compiled`
+lines, a first run and a second run, and the frame times of both. Dumping DXSO with
+`debug.bytecodeDumpDir` would show whether Dunia creates its shaders during loading.
+
 ## Known risks
 
 - **Copy protection and activation.** The 2008 retail disc used SecuROM, with online activation; the
@@ -202,9 +323,9 @@ program. Settings worth testing, each a suspicion rather than a finding:
   only and never blocks.
 - **x87.** Whether Dunia executes x87 in hot code is unknown. The sidecar is on by default as in the
   tested recipes; use `FARCRY2_X87=0` to compare.
-- **Shader compile stutter.** Pipelines compile on first use and are cached in
-  `bin/mtld3d_shaders.bin`. Synchronous compilation preserves draws but can pause. No frame-time
-  measurement exists.
+- **Shader compile stutter.** Pipelines compile on first use and are cached; the starter keeps the cache
+  across updates (see "Shader cache"). Synchronous compilation preserves draws but can pause, most on the
+  first run. No frame-time measurement exists.
 - **Many CPU cores.** Public reports (the Multi-Fixer adds a process-affinity option) describe crashes
   on CPUs with many logical processors. The pinned Wine has no `WINE_CPU_TOPOLOGY` (checked with
   `strings`); it does contain `WINENCPU`, whose meaning here is unknown. No mitigation is applied.
@@ -233,7 +354,11 @@ Every row below needs a legitimate installed copy and a person to play:
 - that the game runs with `d3d10` and `dxgi` hidden, and with x87sidecar on and off;
 - menu, loading and gameplay rendering, shadows, vegetation, water, HDR, MSAA and alpha to coverage;
 - keyboard, mouse and controller input, audio, save, quit, relaunch and resume;
-- frame time, shader-stutter behaviour and `present.maxFps` effects.
+- frame time, shader-stutter behaviour and `present.maxFps` effects;
+- that mtld3d writes `mtld3d_shaders.bin` into the generation's `bin` when the game is started as
+  `C:\FarCry2\bin\FarCry2.exe` (the smoke test uses a stand-in executable that writes no cache);
+- how long a cold run compiles, what a warm run saves, and the start-up time with a full cache;
+- whether Dunia creates its shaders during loading (would make a loading-screen pause invisible).
 
 ## Test steps for someone who owns the game
 
@@ -257,10 +382,15 @@ Use a throwaway player folder and keep your own installation untouched:
 8. After quitting, confirm `dosdevices/g:` is gone from `Data/Prefix` and no Wine process of this app
    remains.
 9. Optional A/B: run with `FARCRY2_X87=0` through `tools/farcry2/Play_FarCry2.command` and compare.
+10. Shader cache: on the first launch note whether the game pauses while scenes load and keep the session
+    log (`Shader cache: none yet`). Quit, relaunch and compare; the log should say `starting from N saved
+    bytes`. Look in the log folder of the game (`bin/mtld3d-logs`, copy it before the next launch) for the
+    `shader_cache: pre-warmed` and `shaders: N compiled` lines and report both runs. Then export the
+    cache, reset it, import the export, and confirm the next launch starts from saved bytes again.
 
 ## Automated tests and gates
 
-Run `xcrun swift test` and `python3 Packaging/check_farcry2_recipe.py`. They use synthetic trees,
+Run `xcrun swift test`, `python3 Packaging/check_farcry2_recipe.py` and `python3 Packaging/check_shader_cache.py`. They use synthetic trees,
 synthetic PE images and an invented profile only; no game byte exists in the repository, and a gate
 fails the packaging checks if a Far Cry 2 executable, engine library or archive file appears in the tree.
 
@@ -276,9 +406,17 @@ fails the packaging checks if a Far Cry 2 executable, engine library or archive 
 | Player data and backups | Links, migration, conflicts, rebuilt prefix, host aliases, ambiguity, backup limit, restore and recovery |
 | Session options and starter model | Argument parsing; Rosetta gating; import, play, discard and backup requests |
 | `check_farcry2_recipe.py` | Schema mutations, manifest content, version changes with rules, `build.py` refusal, no game files in the tree |
-| `tools/farcry2/smoke_session.py` | Not part of `swift test`. Runs a built app's session helper against a synthetic tree on the real bundled Wine: import, Wine profile name and links, in-place profile edit, backup, play lifecycle and cleanup |
+| XXH3 | The 64-bit hash against `xxhash-rust` vectors for every length class and the multi-block path |
+| Cache format | Real mtld3d-written caches (committed as base64, synthetic entries only): chunk walk, checksums, torn tails, every cut, bit flips, strays, unknown kinds, joins equal to the file the real parser accepted, size limits, slices |
+| Cache key and export | The key file the packager writes, identifier changes with every field, unsafe or malformed keys, export round trip, truncation, tampering, extra bytes, lying lengths, newer versions, control characters |
+| Cache store | Cold and warm launches, compaction, crash recovery, torn and foreign files, links, size limit, marker links, damaged saved cache, cleanup, storage outside prefix and generation, survival of prefix removal and a new generation, another build starting empty, pruning, reset |
+| Cache export and import | Round trip between two player folders, merge, repeated import, import after compaction, other builds, schema and format, unusable payloads, damaged and foreign files, links, destinations, limits, crashed-session recovery |
+| Renderer defaults and request | Shipped values equal the catalog defaults; an edit keeps every comment, the cache key and a player's own lines; telemetry off in the launch environment; cache files never imported; request validation; old state files still decode |
+| Starter model | First-run notice only while empty, actions gated by state, reset keeps unsaved edits, busy starter ignores actions |
+| `check_shader_cache.py` | The packager's key against a synthetic mtld3d tree: file set and order, what changes the digest and what must not, linked or missing sources, malformed constants and revisions, opt-in only, no cache or export file in the tree |
+| `tools/farcry2/smoke_session.py` | Not part of `swift test`. Runs a built app's session helper against a synthetic tree on the real bundled Wine: import, Wine profile name and links, in-place profile edit, backup, play lifecycle and cleanup, and, when the app has a renderer key, cold and warm launches, import, repeated and damaged imports, crash recovery, export, reset |
 
-Seven mutations of the guarded behaviours (ignored exclusions, no archive pairing, forward-order XML
+Nine mutations of the cache behaviours (a foreign file taken as ours, an empty file replacing the saved cache, the emitter missing from the key, repeated imports growing the cache, no pruning, an unchecked export digest, unchecked chunk checksums, uncleaned compaction files, an import that ignores the revision) were each caught. Seven mutations of the guarded behaviours (ignored exclusions, no archive pairing, forward-order XML
 edits, a deleted conflict folder, no saved inventory, visible D3D10 libraries, restore without the
 safety backup) were each caught by the suite that owns them.
 

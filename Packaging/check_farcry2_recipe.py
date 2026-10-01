@@ -117,6 +117,42 @@ assert not offenders, offenders
 defaults = (PROJECT / 'Packaging/FarCry2Defaults/mtld3d.conf').read_text()
 assert 'shader.asyncCompile = false' in defaults and 'render.scale = 1' in defaults
 assert 'present.maxFps = 0' in defaults
+
+# Every key mtld3d documents at the pinned renderer builds; it ignores any other key with a warning, so a
+# misspelling (for example `shader.cache` for `shaderCache.enable`) would silently do nothing.
+MTLD3D_KEYS = {
+    'display.legacy4By3', 'log.dir', 'color.space', 'color.hdr.enable', 'cursor.scale', 'cursor.software',
+    'shaderCache.enable', 'shader.asyncCompile', 'query.flushImmediate', 'query.eventImmediate',
+    'depth.aliasSameSize', 'buffer.ignoreLockBounds', 'memory.vbibRetentionCapMB', 'memory.vramBudgetMB',
+    'memory.pageboxPoolCapMB', 'present.maxFps', 'render.scale', 'render.lodBias',
+    'render.preserveDiscardBackbuffer', 'intel.expandPacked16', 'intel.denyFloat32Filtering',
+    'intel.managedMemory', 'intel.linearAlign256', 'debug.capsAll', 'debug.mainThreadChecker',
+    'debug.bytecodeDumpDir', 'debug.skipShaders', 'debug.presentGateFile', 'adapter.spoof', 'caps.dfFormats'}
+lines = defaults.splitlines()
+active = {}
+for number, line in enumerate(lines):
+    if not line.strip() or line.lstrip().startswith('#'):
+        continue
+    key, separator, value = line.partition('=')
+    assert separator and key.strip() not in active, 'one key = value per line: ' + line
+    active[key.strip()] = value.strip()
+    block = []
+    for earlier in reversed(lines[:number]):
+        if not earlier.startswith('#'):
+            break
+        block.append(earlier)
+    # Each option is justified by the comment block directly above it, and says what is not demonstrated.
+    assert len(block) >= 3, 'undocumented option: ' + key.strip()
+    assert any(label in ' '.join(block) for label in ('[mtld3d]', '[CoD4]')), 'no source cited: ' + key.strip()
+    assert '[unverified]' in ' '.join(block), 'no verification state: ' + key.strip()
+assert active == {'shader.asyncCompile': 'false', 'shaderCache.enable': 'true', 'render.scale': '1',
+                  'present.maxFps': '0'}, active
+assert set(active) <= MTLD3D_KEYS, set(active) - MTLD3D_KEYS
+assert '# memory.vramBudgetMB = 1024' in lines, 'the video memory budget stays documented but unset'
+assert not any(line.startswith('memory.vramBudgetMB') for line in lines)
+cache_names = {'mtld3d_shaders.bin', 'mtld3d_shaders.bin.lock', 'mtld3d_shaders.bin.owner'}
+assert cache_names <= set(rules['directories'][0]['excludedNames']), 'cache files must never be imported'
+assert recipe['shaderCache'] is True and 'mtld3dSource' in recipe['inputs']
 assert (PROJECT / 'Packaging/FarCry2Defaults/settings.reg').read_text() == \
     (PROJECT / 'Packaging/CoD4Defaults/settings.reg').read_text()
 print('Far Cry 2 import-only recipe regressions passed')
