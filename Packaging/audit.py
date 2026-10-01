@@ -15,12 +15,18 @@ probe = app/'Contents/Helpers/Rosetta Request.app/Contents/MacOS/RosettaRequest'
 with probe.open('rb') as stream:
     magic, cpu = struct.unpack('<II', stream.read(8))
 assert magic == 0xfeedfacf and cpu == 0x01000007, 'Rosetta request helper must be Intel-only'
+recipe_path = app / 'Contents/Resources/bundle-recipe.json'
+embedded = validate_recipe(json.loads(recipe_path.read_text())) if recipe_path.exists() else {}
+# A retained vendor artifact keeps its own signature and its own search paths; it is reported,
+# never rewritten, so the gate stays strict for every file this project builds or stages itself.
+vendor_roots = [app / 'Contents/SharedSupport/Wine' / name
+                for name in embedded.get('vendorRuntimePaths', [])]
 pins = json.loads((app / "Contents/Resources/runtime-files.json").read_text())
 for relative, expected in pins.items():
     assert hashlib.sha256((app / relative).read_bytes()).hexdigest() == expected, relative
 assert not any(p.name in {"Gigi", "user.reg", "system.reg"} for p in app.rglob("*"))
-report = dict(externalDependencies=[], externalLinks=[], developmentRpaths=[], machoCount=0,
-              verifiedRuntimeHashes=len(pins))
+report = dict(externalDependencies=[], externalLinks=[], developmentRpaths=[], vendorRpaths=[],
+              vendorCode=[], machoCount=0, verifiedRuntimeHashes=len(pins))
 magic_values = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafeca"]}
 for path in app.rglob("*"):
     if path.is_symlink():
@@ -31,6 +37,9 @@ for path in app.rglob("*"):
     with path.open("rb") as stream: magic = stream.read(4)
     if magic not in magic_values: continue
     report["machoCount"] += 1
+    is_vendor = any(path == root or root in path.parents for root in vendor_roots)
+    if is_vendor:
+        report["vendorCode"].append(str(path.relative_to(app)))
     lines = subprocess.check_output(["/usr/bin/otool", "-L", str(path)], text=True).splitlines()[1:]
     for line in lines:
         dependency = line.strip().split(" (")[0]
@@ -38,13 +47,22 @@ for path in app.rglob("*"):
             report["externalDependencies"].append(dependency)
     lines = subprocess.check_output(["/usr/bin/otool", "-l", str(path)], text=True).splitlines()
     for index, line in enumerate(lines):
-        if "LC_RPATH" in line and any(value in lines[index + 2] for value in ["/Users/", "/Applications/", "/opt/"]):
-            report["developmentRpaths"].append(lines[index + 2].strip())
+        if "LC_RPATH" not in line: continue
+        rpath = lines[index + 2].strip()
+        if is_vendor:
+            report["vendorRpaths"].append(rpath)
+        elif any(value in rpath for value in ["/Users/", "/Applications/", "/opt/", "/AppleInternal/",
+                                              "/Library/Caches/"]):
+            report["developmentRpaths"].append(rpath)
 assert not any(report[key] for key in ["externalDependencies", "externalLinks", "developmentRpaths"]), report
+for relative in report["vendorCode"]:
+    authority = subprocess.run(["/usr/bin/codesign", "--display", "--verbose=2", str(app / relative)],
+                               capture_output=True, text=True).stderr
+    assert "Authority=" in authority, 'A retained vendor artifact must keep a real signature: ' + relative
+    assert "adhoc" not in authority, 'A retained vendor artifact was re-signed: ' + relative
 manifest = json.loads((app / "Contents/Resources/game-manifest.json").read_text())
-recipe_path = app / 'Contents/Resources/bundle-recipe.json'
 if recipe_path.exists():
-    recipe = validate_recipe(json.loads(recipe_path.read_text()))
+    recipe = embedded
     assert manifest.get('gameID', 'nfsmw') == recipe['gameID']
     for item in recipe['defaults']:
         assert (app / 'Contents/Resources/Defaults' / item['path']).is_file(), item['path']

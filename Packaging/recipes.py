@@ -141,6 +141,14 @@ def validate_recipe(recipe):
         safe_relative(name)
     if len({name.casefold() for name in retention}) != len(retention):
         raise ValueError('Duplicate runtime retention entry')
+    # Vendor artifacts keep their own signature and search paths; we neither alter nor re-sign them.
+    vendor = recipe.get('vendorRuntimePaths', [])
+    if not isinstance(vendor, list) or len(vendor) > 32:
+        raise ValueError('Vendor runtime paths must be a bounded list')
+    folded = {name.casefold() for name in retention}
+    for name in vendor:
+        if safe_relative(name).casefold() not in folded:
+            raise ValueError('A vendor runtime path must also be retained: ' + name)
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
     if recipe.get('referencesInstallation'):
         # A referencing app ships no game bytes at all, so it can carry no inventory.

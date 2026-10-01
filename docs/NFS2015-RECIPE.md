@@ -85,11 +85,32 @@ its licence file while still dropping `dxmt`. The recipe declares no `renderer`,
 `rendererEvidence` or `mtld3dSource` input at all, so the packager neither verifies nor stages
 mtld3d for it, and the bundle carries no mtld3d source archive.
 
+Retaining an Apple-signed framework needed two changes to the shared signing and audit
+stages, both found by actually running them:
+
+- `sign.py` re-signed every Mach-O with `--force`, which would have replaced Apple's
+  Apple-Software-Signing signature on `D3DMetal` with ours. It now leaves anything under a
+  recipe's `vendorRuntimePaths` untouched — no search-path deletion, no re-signing — and only
+  hash-pins it. `codesign --verify --deep --strict` still passes, because Apple's own
+  signature is valid.
+- `audit.py` failed the build on `D3DMetal`'s own `LC_RPATH` entries into Apple's internal
+  build roots (`/AppleInternal/…`, `/Library/Caches/com.apple.xbs/…`). Those cannot be stripped
+  without breaking Apple's signature, so they are now reported under `vendorRpaths` instead of
+  `developmentRpaths`, and the audit additionally asserts each retained vendor binary still
+  carries a real, non-ad-hoc signing authority. The gate stays strict for every file this
+  project builds or stages itself: the `/AppleInternal/` and `/Library/Caches/` prefixes were
+  added to the fatal list for non-vendor files at the same time.
+
+Measured on a probe build against the CoD4-tested Wine base: 51 files signed by this project,
+6 Apple files preserved, audit clean.
+
 **Open licensing question, not resolved here:** retaining `D3DMetal.framework` means the app
 would redistribute an Apple-signed framework under Apple's own licence. `BUNDLING.md` already
 notes that "Apple runtime licenses/signatures require separate handling in the EA track".
 Settle that before distributing a build of this recipe to anyone else; a local build for the
-machine's own owner is a different question from redistribution.
+machine's own owner is a different question from redistribution. Note also that the bundle
+inherits `mtld3d-source.tar.gz` from the retained base app's notices even though it ships no
+mtld3d; that is extra corresponding source, not a missing one.
 
 ### Runtime capability gate
 

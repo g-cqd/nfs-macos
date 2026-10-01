@@ -9,8 +9,13 @@
   "launcher": "NFS2015Launcher",
   "session": "NFS2015Session",
   "runtimeProfile": "nfs2015-tf-cx11",
-  "requiredRuntimeCapabilities": ["trapFlagEmulation", "d3dmetalDXGI"],
-  "editions": ["import"],
+  "requiredRuntimeCapabilities": [
+    "trapFlagEmulation",
+    "d3dmetalDXGI"
+  ],
+  "editions": [
+    "import"
+  ],
   "referencesInstallation": true,
   "runtimeTuning": {
     "WINE_TF_EMULATION": "1",
@@ -21,17 +26,26 @@
     "name": "EA app",
     "installRoot": "Program Files/Electronic Arts/EA Desktop",
     "clientExecutable": "EA Desktop/EADesktop.exe",
-    "clientArguments": ["--in-process-gpu"],
+    "clientArguments": [
+      "--in-process-gpu"
+    ],
     "launcherExecutable": "EA Desktop/EALauncher.exe",
     "launchURL": "origin2://game/launch/?offerIds={offer}",
     "offerID": "1024486",
-    "signInEvidence": ["AppData/Local/Electronic Arts/EA Desktop"],
-    "readinessEvidence": ["AppData/Local/Electronic Arts/EA Desktop/Logs"],
+    "signInEvidence": [
+      "AppData/Local/Electronic Arts/EA Desktop"
+    ],
+    "readinessEvidence": [
+      "AppData/Local/Electronic Arts/EA Desktop/Logs"
+    ],
     "readinessChildren": 1,
     "readinessSeconds": 180,
     "gameRoot": "Program Files/EA Games/Need for Speed"
   },
-  "controllerDevices": ["054C/05C4", "054C/0CE6"],
+  "controllerDevices": [
+    "054C/05C4",
+    "054C/0CE6"
+  ],
   "inputs": {
     "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
@@ -51,5 +65,9 @@
   "compatibility": [],
   "defaults": [],
   "supportsSP": true,
-  "supportsMP": false
+  "supportsMP": false,
+  "vendorRuntimePaths": [
+    "lib/external/D3DMetal.framework",
+    "lib/external/libd3dshared.dylib"
+  ]
 }
