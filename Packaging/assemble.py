@@ -59,7 +59,9 @@ def stage_game(resources, recipe, inputs, include_game_data):
         manifest.update(referencesInstallation=True, storeClient=recipe['storeClient'],
                         runtimeTuning=recipe.get('runtimeTuning', {}),
                         controllerDevices=recipe.get('controllerDevices', []))
-    fingerprint = {key: value for key, value in manifest.items() if key != 'version'}
+    # The version identifies the contract, not the edition: both editions of one recipe share it.
+    fingerprint = {key: value for key, value in manifest.items()
+                   if key not in {'version', 'gameDataIncluded'}}
     manifest['version'] = hashlib.sha256(
         json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     (resources / 'game-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
