@@ -129,4 +129,28 @@ struct ShaderCacheExportTests {
     accepted.append(ShaderCacheGolden.singles)
     _ = try ShaderCacheExport.decode(accepted, limit: 1_000_000)
   }
+
+  @Test
+  func `a newer export is reported as newer even if its key no longer validates here`() throws {
+    let manifest = ShaderCacheExport.Manifest(
+      formatVersion: 2, created: created, key: key, payloadBytes: 3, payloadSHA256: "x",
+      origin: origin)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(manifest)) as? [String: Any])
+    var future = try #require(object["key"] as? [String: Any])
+    future["schemaVersion"] = 2
+    object["key"] = future
+    object["created"] = "2026-10-02T00:00:00Z"
+    let json = try JSONSerialization.data(withJSONObject: object)
+    var data = Data("FC2SHCEX".utf8)
+    data.append(contentsOf: (0..<4).map { UInt8(truncatingIfNeeded: json.count >> (8 * $0)) })
+    data.append(json)
+    data.append(Data("abc".utf8))
+    do {
+      _ = try ShaderCacheExport.decode(data, limit: 1_000)
+      Issue.record("A newer export was accepted")
+    } catch {
+      #expect(error.localizedDescription.contains("newer version"))
+    }
+  }
 }

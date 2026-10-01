@@ -126,7 +126,7 @@ struct FarCry2Session {
       installation: GameInstaller.installedGame(paths: paths),
       backups: try FarCry2Backups(paths: paths).list(),
       keptAside: try FarCry2UserData(paths: paths).keptAside(),
-      shaderCache: try? cache.status())
+      shaderCache: cache.status())
     try JSONEncoder().encode(snapshot).write(
       to: paths.support.appendingPathComponent("launcher-state.json"), options: .atomic)
   }

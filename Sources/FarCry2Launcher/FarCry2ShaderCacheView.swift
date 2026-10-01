@@ -19,7 +19,7 @@ struct FarCry2ShaderCacheView: View {
         .font(.caption).foregroundStyle(.secondary)
         if model.shaderCache.otherBuilds > 0 {
           Text(
-            "\(model.shaderCache.otherBuilds) cache(s) from earlier renderer versions are kept for now and are never used."
+            "^[\(model.shaderCache.otherBuilds) cache](inflect: true) from earlier renderer versions are kept for now and never used."
           )
           .font(.caption).foregroundStyle(.secondary)
         }

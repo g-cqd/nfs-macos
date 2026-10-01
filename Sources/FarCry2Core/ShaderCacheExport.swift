@@ -80,11 +80,11 @@ package enum ShaderCacheExport {
       manifest = try decoder.decode(
         Manifest.self, from: data[(start + bodyStart)..<(start + bodyStart + length)])
     } catch { throw invalid }
-    try manifest.key.validate()
-    let payload = Data(data[(start + bodyStart + length)...])
     guard manifest.formatVersion == formatVersion else {
       throw .operation("This shader cache export was made by a newer version of the starter.")
     }
+    try manifest.key.validate()
+    let payload = Data(data[(start + bodyStart + length)...])
     guard manifest.payloadBytes == payload.count else {
       throw .operation("The shader cache export is incomplete or has extra data.")
     }

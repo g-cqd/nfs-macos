@@ -240,7 +240,8 @@ import rules skip the cache, its lock and its marker if they appear in a player'
   `"shaderCache": true` (Far Cry 2 only): the pinned mtld3d revision, the container format and shader
   schema read from `shader_cache.rs`, and a SHA-256 over the same files and in the same order as
   mtld3d's emitter fingerprint (`Packaging/shader_cache_key.py`; the file set and order were checked
-  against the `rerun-if-changed` list of a real mtld3d build). The build id is a hash of all of them.
+  against the `rerun-if-changed` list of a real mtld3d build; the checkout is the one `verify_inputs` has already
+  hash-checked against the renderer evidence's source manifest). The build id is a hash of all of them.
   Another pin, schema, format or emitter gets a new, empty folder; the old one is never loaded and the
   newest two are kept before the oldest is removed. GPU and macOS are recorded for information, not keyed.
   Carrying a cache across pins by relying on mtld3d's regeneration is possible but is **not enabled**.
@@ -249,7 +250,8 @@ import rules skip the cache, its lock and its marker if they appear in a player'
   a crash loses nothing) takes the file back. Only a regular file with the marker is taken; a link, a file
   the starter did not place, another build's file, an empty file, a file with another schema or one over
   256 MiB never replaces the saved cache. A torn tail is cut. Cache problems are logged and never stop
-  the game.
+  the game. A saved cache that cannot be read at that moment is kept, not deleted, and that launch
+  starts without placing one.
 - **Integrity.** `ShaderCacheFormat` walks the chunks as mtld3d does and checks each xxh3 (`XXH3` is
   reproduced and tested against the `xxhash-rust` crate for every length class), so the starter keeps only
   what the renderer would accept. Records are not decompressed; this app never reads the bytecode.

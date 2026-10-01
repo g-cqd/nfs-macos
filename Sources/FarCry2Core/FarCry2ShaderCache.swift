@@ -90,26 +90,45 @@ package struct FarCry2ShaderCache {
     directory(identifier).appendingPathComponent("info.json")
   }
 
-  /// The saved cache and the renderer build it belongs to.
-  package func status() throws(LauncherError) -> ShaderCacheStatus {
+  /// The saved cache and the renderer build it belongs to. Never fails: the page only reports.
+  package func status() -> ShaderCacheStatus {
     guard let key else { return ShaderCacheStatus(state: .unavailable) }
     let identifier = key.identifier
-    let saved = try savedCache(identifier)
+    var state = ShaderCacheState.empty
+    var bytes = 0
+    do {
+      if let saved = try savedCache(identifier) {
+        state = .warm
+        bytes = saved.count
+      }
+    } catch {
+      // The file exists but cannot be read now; it is reported as saved, never as missing.
+      state = .warm
+      bytes = fileSize(cacheFile(identifier))
+    }
     let info = readInfo(identifier)
     return ShaderCacheStatus(
-      state: saved == nil ? .empty : .warm, bytes: saved?.count ?? 0, saved: info?.saved,
-      origin: info?.origin, otherBuilds: try otherBuilds().count, renderer: key.summary)
+      state: state, bytes: bytes, saved: info?.saved, origin: info?.origin,
+      otherBuilds: (try? otherBuilds().count) ?? 0, renderer: key.summary)
   }
 
-  /// The saved cache cut back to its intact chunks, or nil when there is none or it cannot be used.
+  /// The saved cache cut back to its intact chunks.
+  /// - Returns: Nil when there is none or it is not usable (a link, folder, oversized file, another
+  ///   format or no records), so the caller may replace it.
+  /// - Throws: When a regular file of acceptable size cannot be read. A read failure may be transient,
+  ///   so it must never be treated as a reason to delete the cache.
   func savedCache(_ identifier: String) throws(LauncherError) -> Data? {
     guard let key, let header = key.header else { return nil }
     let url = cacheFile(identifier)
-    // A link, folder or oversized file where the cache belongs is not a cache; callers replace it.
-    guard fileType(url) == .typeRegular, let data = try? BoundedFile.read(url, limit: limit),
-      let layout = ShaderCacheFormat.scan(data), layout.header == header, layout.hasRecords
+    guard fileType(url) == .typeRegular, fileSize(url) <= limit else { return nil }
+    let data = try BoundedFile.read(url, limit: limit)
+    guard let layout = ShaderCacheFormat.scan(data), layout.header == header, layout.hasRecords
     else { return nil }
     return ShaderCacheFormat.trimmed(data, layout: layout)
+  }
+
+  func fileSize(_ url: URL) -> Int {
+    (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
   }
 
   /// The description beside a saved cache; nil when absent or unusable, as it only decorates the cache.

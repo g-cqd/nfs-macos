@@ -14,7 +14,7 @@ struct FarCry2ShaderCacheTests {
     #expect(try harness.cache.prepare(game: harness.game) == .cold)
     #expect(!harness.exists(harness.working))
     #expect(try harness.bytes(harness.marker) == Data((harness.key.identifier + "\n").utf8))
-    let status = try harness.cache.status()
+    let status = harness.cache.status()
     #expect(status.state == .empty && status.bytes == 0 && status.saved == nil)
     #expect(status.firstRunNotice?.contains("first launch") == true)
   }
@@ -30,7 +30,7 @@ struct FarCry2ShaderCacheTests {
         == .saved(bytes: ShaderCacheGolden.singles.count))
     #expect(try harness.bytes(harness.saved) == ShaderCacheGolden.singles)
     #expect(!harness.exists(harness.working) && !harness.exists(harness.marker))
-    let status = try harness.cache.status()
+    let status = harness.cache.status()
     #expect(status.state == .warm && status.bytes == ShaderCacheGolden.singles.count)
     #expect(status.saved != nil && status.origin == ShaderCacheHarness.origin)
     #expect(status.firstRunNotice == nil)
@@ -173,9 +173,36 @@ struct FarCry2ShaderCacheTests {
     try FileManager.default.createDirectory(
       at: harness.saved.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data("garbage".utf8).write(to: harness.saved)
-    #expect(try harness.cache.status().state == .empty)
+    #expect(harness.cache.status().state == .empty)
     #expect(try harness.cache.prepare(game: harness.game) == .cold)
     #expect(!harness.exists(harness.saved) && !harness.exists(harness.working))
+  }
+
+  @Test
+  func
+    `a saved cache that cannot be read is kept, not deleted, and the launch does not replace it`()
+    throws
+  {
+    let harness = try ShaderCacheHarness()
+    defer { harness.remove() }
+    _ = try harness.cache.prepare(game: harness.game)
+    try harness.gameWrites(ShaderCacheGolden.singles)
+    try harness.cache.harvest(game: harness.game)
+    let files = FileManager.default
+    try files.setAttributes([.posixPermissions: 0o000], ofItemAtPath: harness.saved.path)
+    defer { try? files.setAttributes([.posixPermissions: 0o644], ofItemAtPath: harness.saved.path) }
+    let status = harness.cache.status()
+    #expect(status.state == .warm && status.bytes == ShaderCacheGolden.singles.count)
+    #expect(throws: LauncherError.self) { try harness.cache.prepare(game: harness.game) }
+    #expect(throws: LauncherError.self) {
+      try harness.cache.export(
+        to: try harness.outside("x.fc2shadercache"), game: harness.game)
+    }
+    // The game then runs without a marker, so whatever it writes is not taken as this build's.
+    try harness.gameWrites(ShaderCacheGolden.bundle)
+    #expect(try harness.cache.harvest(game: harness.game) == .discarded)
+    try files.setAttributes([.posixPermissions: 0o644], ofItemAtPath: harness.saved.path)
+    #expect(try harness.bytes(harness.saved) == ShaderCacheGolden.singles)
   }
 
   @Test
@@ -213,7 +240,7 @@ struct FarCry2ShaderCacheTests {
     try harness.cache.harvest(game: harness.game)
     try FileManager.default.removeItem(at: harness.fixture.paths.prefix)
     try FileManager.default.removeItem(at: harness.game.deletingLastPathComponent())
-    #expect(try harness.cache.status().state == .warm)
+    #expect(harness.cache.status().state == .warm)
     let update = harness.fixture.paths.game(version: "import-next")
     try FileManager.default.createDirectory(
       at: update.appendingPathComponent("bin"), withIntermediateDirectories: true)
@@ -239,7 +266,7 @@ struct FarCry2ShaderCacheTests {
       let update = harness.other(changed)
       #expect(try update.prepare(game: harness.game) == .cold)
       #expect(!harness.exists(harness.working))
-      let status = try update.status()
+      let status = update.status()
       #expect(status.state == .empty && status.otherBuilds == 1)
     }
     #expect(try harness.bytes(harness.saved) == ShaderCacheGolden.singles, "kept for a rollback")
@@ -277,7 +304,7 @@ struct FarCry2ShaderCacheTests {
     #expect(try harness.cache.prepare(game: harness.game) == .unavailable)
     #expect(try harness.cache.harvest(game: harness.game) == .none)
     #expect(try harness.bytes(harness.working) == ShaderCacheGolden.singles)
-    #expect(try harness.cache.status() == ShaderCacheStatus(state: .unavailable))
+    #expect(harness.cache.status() == ShaderCacheStatus(state: .unavailable))
     #expect(throws: LauncherError.self) {
       try harness.cache.importCache(from: harness.working, game: harness.game)
     }
@@ -320,7 +347,7 @@ struct FarCry2ShaderCacheTests {
     #expect(!harness.exists(older))
     #expect(!harness.exists(harness.marker))
     #expect(harness.exists(stranger))
-    let status = try harness.cache.status()
+    let status = harness.cache.status()
     #expect(status.state == .empty && status.otherBuilds == 0)
   }
 
@@ -335,7 +362,7 @@ struct FarCry2ShaderCacheTests {
       at: harness.cache.root, withDestinationURL: elsewhere)
     #expect(throws: LauncherError.self) { try harness.cache.reset(game: harness.game) }
     #expect(harness.exists(victim))
-    #expect(try harness.cache.status().otherBuilds == 0)
+    #expect(harness.cache.status().otherBuilds == 0)
   }
 
   @Test
@@ -348,7 +375,7 @@ struct FarCry2ShaderCacheTests {
     try FileManager.default.createDirectory(
       at: harness.saved.deletingLastPathComponent(), withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(at: harness.saved, withDestinationURL: decoy)
-    #expect(try harness.cache.status().state == .empty)
+    #expect(harness.cache.status().state == .empty)
     #expect(try harness.cache.prepare(game: harness.game) == .cold)
     #expect(!harness.isLink(harness.saved))
     #expect(try harness.bytes(decoy) == Data("precious".utf8))
