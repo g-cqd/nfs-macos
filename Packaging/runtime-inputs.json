@@ -57,9 +57,13 @@
         "d3dmetalDXGI",
         "x87Sidecar"
       ],
-      "pending": true,
-      "blockedBy": "Build the CX 11.0 runtime carrying the WINE_TF_* gate at ~/Games/NFS2015-debug/src/wine-cx, then pin bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here",
-      "files": {}
+      "files": {
+        "bin/wine": "03985ed96db1781bb38fe7428392929284dce1f37a9b020ba2ce09eb110ff360",
+        "bin/wineserver": "e4aacddb055b0c0a805cf44a0d5c2348048396ad96a66cd65daaaa32b1fed8bc",
+        "lib/wine/x86_64-unix/ntdll.so": "171e363dc8ff69755ebc1ecbeadaad37cf9c06901fa8c2272216d9acc1235270",
+        "lib/wine/x86_64-unix/wine": "86283fa89482996e3865a8bc75d8fe4f8ac535699fe5bde0b781e18c2b0a5a1f",
+        "lib/wine/i386-windows/ntdll.dll": "e64165eba13e581c10dc69ab27e9b316d638e8988fae8c19f7a0ecb0fa27bd86"
+      }
     }
   }
 }
