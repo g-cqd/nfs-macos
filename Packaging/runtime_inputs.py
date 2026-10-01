@@ -150,9 +150,10 @@ def runtime_provenance(recipe, revisions):
             'retainedRuntimePaths': recipe.get('runtimeRetention', []),
             'runtimeTuning': recipe.get('runtimeTuning', {}),
             'referencesInstallation': bool(recipe.get('referencesInstallation')),
-            'renderer': 'Production PROD=1 PERF=1; normal launch disables telemetry',
-            'rendererVerification': '923 passed, 0 failed, 11 ignored; all 535 source hashes match pinned commit',
-            'x87': 'Flat cooperative sidecar; tested CoD4 artifact matches current fork build',
+            'renderer': 'Production PROD=1 PERF=0; perf telemetry is compiled out, not merely silenced',
+            'rendererVerification': '966 passed, 0 failed, 11 ignored per Windows architecture, '
+                                    'plus 2549 host unit tests; all 631 source hashes match pinned commit',
+            'x87': 'Flat cooperative sidecar; artifact rebuilt at the pinned fork revision',
             'minimumMacOS': recipe['minimumMacOS'], 'architecture': 'Apple Silicon with Rosetta',
             'gameModeOptIn': True, 'appSandboxEnabled': False, 'hostDriveMappings': False,
             'personalSavesIncluded': False, 'gameExecutableHashes': recipe['executableHashes']}

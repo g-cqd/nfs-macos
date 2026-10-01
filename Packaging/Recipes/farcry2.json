@@ -11,9 +11,9 @@
   "runtimeProfile": "cod4-tested",
   "editions": ["import"],
   "inputs": {
-    "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
-    "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
-    "rendererEvidence": "{games}/CoD4-tools/performance-20260927-U9gG37",
+    "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
+    "renderer": "{games}/renderer-pins-20261002/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/renderer-pins-20261002",
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "mtld3dSource": "{home}/Developer/mtld3d",
     "x87Source": "{home}/Developer/x87sidecar",

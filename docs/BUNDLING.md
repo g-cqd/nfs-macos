@@ -49,24 +49,24 @@ The current inputs are retained local artifacts:
 | NFS original assets | `~/Games/NFSMW` |
 | NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Desktop/Game Builds/Most Wanted Bundled.app` (preserved v5) |
 | CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
-| Tested latest mtld3d overlay | `~/Games/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine` |
-| Renderer source evidence | `~/Games/CoD4-tools/performance-20260927-U9gG37/source-sha256.json` |
+| Tested latest mtld3d overlay | `~/Games/renderer-pins-20261002/retained-overlay/wine/lib/wine` |
+| Renderer source evidence | `~/Games/renderer-pins-20261002/source-sha256.json` |
 | Latest sidecar / corresponding forks | `~/Developer/x87sidecar/build/bin/x87sidecar`, `~/Developer/{mtld3d,x87sidecar}` |
 
-The mtld3d inputs apply only to the Direct3D 9 recipes. **The pinned mtld3d revision
-`5f5331a` and the local working checkout have diverged:** `~/Developer/mtld3d` is clean at
-`f793993` ("Merge upstream/main into development", 26 commits ahead of `origin/development`),
-and 164 of the 535 pinned source hashes no longer match, with 3 files absent. The revision
-pin, `rendererSourceManifestSHA256` and `rendererFiles` describe one built renderer and must
-move together, so the revision was **not** bumped on its own: doing so would claim provenance
-the staged binaries do not have. An `nfsmw` or `cod4` build therefore needs either the
-checkout returned to `5f5331a` or the renderer rebuilt at the newer revision with all four
-pins refreshed and re-verified. `nfs2015` is unaffected because it declares no mtld3d input.
+The mtld3d inputs apply only to the Direct3D 9 recipes. That divergence is resolved: the
+renderer was rebuilt at `b22073b` and all four pins moved together, which is the only way
+they may move. The revision pin, `rendererSourceManifestSHA256` and `rendererFiles` describe
+one built renderer, so bumping the revision alone would claim provenance the staged binaries
+do not have. `~/Games/renderer-pins-20261002` is that build: `build-command.txt` records the
+exact recipe, `source-sha256.json` the 631 files tracked at the revision, and
+`artifacts-sha256.json` the seven pinned binaries. The build is `PROD=1 PERF=0`, so the perf
+telemetry is compiled out rather than silenced at runtime; `docs/UPSTREAMS.md` explains why
+that matters. `nfs2015` is unaffected because it declares no mtld3d input.
 
 These are assembly inputs, never runtime dependencies on the destination Mac. The
 packager uses APFS clones, keeps source installations unchanged, and rejects artifact
-hash mismatches or a dirty/unpinned source checkout. All 535 renderer source hashes
-match the pinned latest mtld3d revision. The two Wine bases have identical code sections
+hash mismatches or a dirty/unpinned source checkout. All 631 renderer source hashes
+match the pinned mtld3d revision. The two Wine bases have identical code sections
 in their outer loader, server and Unix ntdll and identical i386 ntdll runtime contents;
 NFS retains its separate cursor-corrected inner loader.
 
