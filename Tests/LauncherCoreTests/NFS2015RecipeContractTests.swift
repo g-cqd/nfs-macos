@@ -17,6 +17,17 @@ struct NFS2015RecipeContractTests {
     let originalDirectories: [String: [String]]
     let executableHashes: [String: String]
     let editions: [String]
+    let managedRuntime: Managed
+  }
+
+  /// The recipe's declaration, whose `path` becomes the manifest's `file`.
+  private struct Managed: Decodable {
+    let path: String
+    let sha256: String
+    let version: String
+    let source: String
+    let url: String
+    var declared: ManagedRuntime { ManagedRuntime(file: path, sha256: sha256, version: version) }
   }
 
   private static func recipe(file: StaticString = #filePath) throws -> Recipe {
@@ -40,7 +51,7 @@ struct NFS2015RecipeContractTests {
       gameID: .nfs2015, runtimeTuning: RuntimeTuning(recipe.runtimeTuning),
       storeClient: recipe.storeClient, controllerDevices: recipe.controllerDevices,
       prefixSettings: recipe.prefixSettings + recipe.bundledPrefixSettings,
-      renderers: recipe.renderers)
+      renderers: recipe.renderers, managedRuntime: recipe.managedRuntime.declared)
   }
 
   @Test
@@ -83,5 +94,31 @@ struct NFS2015RecipeContractTests {
     #expect(!rules.contains("gptk") && !rules.contains("mtld3d"))
     #expect(recipe.controllerDevices == ["054C/05C4", "054C/0CE6"])
     #expect(recipe.runtimeTuning["WINE_TF_EMULATION"] == "1")
+  }
+
+  @Test
+  func `serves every EA browser helper with a backend that exists in the runtime`() throws {
+    let recipe = try Self.recipe()
+    let rules = try RendererSelection.compatibilityDatabase(recipe.renderers, kind: .nfs2015)
+    // libcef.dll imports dxgi.dll; a helper with no rule had none to load, so EA's window never
+    // came up. The helper must name the same backend as the client that starts it.
+    #expect(rules.contains("exe=EACefSubProcess.exe;dxgi=dxmt"))
+    let backends = Set(recipe.renderers.map(\.backend))
+    #expect(backends == ["dxmt"])
+  }
+
+  @Test
+  func `installs a pinned managed runtime that the manifest and the recipe agree on`() throws {
+    let recipe = try Self.recipe()
+    let declared = recipe.managedRuntime.declared
+    try declared.validate()
+    #expect(recipe.managedRuntime.path.hasPrefix("Addons/"))
+    #expect(recipe.managedRuntime.source.contains(recipe.managedRuntime.version))
+    #expect(recipe.managedRuntime.url.hasPrefix("https://dl.winehq.org/"))
+    let manifest = Self.manifest(recipe)
+    try manifest.validate()
+    #expect(manifest.managed == declared)
+    // The recipe's pin is the digest of a real Wine Mono installer, never a placeholder.
+    #expect(declared.sha256 != String(repeating: "0", count: 64))
   }
 }

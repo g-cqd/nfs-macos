@@ -63,8 +63,8 @@ No credential, cookie or account file is ever read. If either signal does not ap
 
 | Setting | Value | Status |
 |---|---|---|
-| `WINEDLLOVERRIDES` | `IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml=` | `IGOProxy32` verified: EA's 32-bit overlay faults in wined3d |
-| `WINE_COMPATDB` | `dxgi=dxmt`, for both the game and the client | Measured; see below |
+| `WINEDLLOVERRIDES` | `IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml=`; in a bundled app whose prefix holds Wine Mono, `mscoree` is no longer disabled: `IGOProxy32.exe=d;winemenubuilder.exe=d;mshtml=` | `IGOProxy32` verified: EA's 32-bit overlay faults in wined3d. `mscoree` measured: EA's MSI has a managed custom action (NFS2015.md §13.9) |
+| `WINE_COMPATDB` | `dxgi=dxmt`, for the game, the client and the client's `EACefSubProcess.exe` helpers | Measured; see below and NFS2015.md §13.9 |
 | `WINE_TF_EMULATION` | `1` | Required; recipe configuration |
 | `WINE_TF_MAX_STEPS` | `0` | Required; recipe configuration |
 | `WINE_TF_MAX_NS` | `0` | Required; recipe configuration |

@@ -59,6 +59,9 @@ assert recipe['renderers'], 'A referencing D3D11 recipe must say which backend s
 rules = {r.get('executable'): r for r in recipe['renderers']}
 assert rules['NFS16.exe']['backend'] == 'dxmt', 'The game is served by the measured backend'
 assert rules['EADesktop.exe']['backend'] == 'dxmt', 'The client is served by it too, measured'
+# EA's CEF helper processes import dxgi.dll through libcef.dll. Without a rule they resolve to a
+# backend this runtime does not ship, fail to load, and the EA window never comes up.
+assert rules['EACefSubProcess.exe']['backend'] == 'dxmt', 'The EA browser helpers need a dxgi backend too'
 for rule in recipe['renderers']:
     assert rule['api'] == 'dxgi' and rule['reason'], rule
 assert None not in rules, 'No catch-all may silently serve the game a denied backend'
@@ -67,6 +70,13 @@ assert recipe['runtimeRetention'] == ['lib/wine/dxgi/dxmt'], recipe['runtimeRete
 assert 'vendorRuntimePaths' not in recipe, 'No vendor artifact is retained by this recipe'
 assert not any(r['backend'] == 'gptk' for r in recipe['renderers'])
 assert 'd3dmetalDXGI' not in recipe['requiredRuntimeCapabilities']
+
+# EA's installer runs a managed custom action, so the bundled prefix needs a pinned .NET runtime.
+managed = recipe['managedRuntime']
+assert managed['input'] in recipe['inputs'] and re.fullmatch('[0-9a-f]{64}', managed['sha256'])
+assert managed['path'].startswith('Addons/') and managed['path'].endswith('.msi')
+assert managed['url'].startswith('https://dl.winehq.org/') and managed['sourceURL'].startswith('https://dl.winehq.org/')
+assert managed['version'] in managed['source'] and managed['version'] in managed['url']
 
 # The runtime must actually carry what the recipe selects; a claim alone is not enough.
 verify_runtime_provides(recipe, resolve_inputs(recipe)['runtime'])
@@ -156,6 +166,17 @@ for change in [
     lambda r: r['renderers'][0].update(backend='DXMT'),
     lambda r: r['renderers'][0].update(executable='../escape.exe'),
     lambda r: r['renderers'][0].update(reason='a;exe=*;dxgi=gptk'),
+    lambda r: r['managedRuntime'].update(sha256='abc'),
+    lambda r: r['managedRuntime'].update(sha256='A' * 64),
+    lambda r: r['managedRuntime'].update(path='../Addons/mono.msi'),
+    lambda r: r['managedRuntime'].update(path='mono.msi'),
+    lambda r: r['managedRuntime'].update(path='Addons/mono.exe'),
+    lambda r: r['managedRuntime'].update(source='/etc/passwd'),
+    lambda r: r['managedRuntime'].update(version='10.4.1; id'),
+    lambda r: r['managedRuntime'].update(url='http://dl.winehq.org/mono.msi'),
+    lambda r: r['managedRuntime'].update(input='undeclared'),
+    lambda r: r['managedRuntime'].pop('sourceURL'),
+    lambda r: r.update(managedRuntime='mono'),
     lambda r: r.update(requiredRuntimeCapabilities=['teleportation']),
     lambda r: r['runtimeRetention'].append('../escape'),
     lambda r: r.update(compatibility=[{'path': 'a', 'input': 'packaging', 'source': 'b'}]),
@@ -168,6 +189,22 @@ for change in [
         pass
     else:
         raise AssertionError('Invalid Need for Speed recipe was accepted')
+
+# An import-only recipe is valid without a managed runtime and refused with one: only the bundled
+# edition owns a prefix to install it into.
+importing = deepcopy(recipe)
+importing.update(editions=['import'], originalFiles=[], originalDirectories={}, executableHashes={})
+for key in ['inventorySHA256', 'managedRuntime', 'bundledPrefixSettings']:
+    importing.pop(key)
+importing['inputs'].pop('game')
+validate_recipe(deepcopy(importing))
+importing['managedRuntime'] = recipe['managedRuntime']
+try:
+    validate_recipe(importing)
+except ValueError as error:
+    assert 'Only a bundled edition' in str(error), error
+else:
+    raise AssertionError('An import-only recipe was allowed to install a managed runtime')
 
 # A recipe that packages original data may not claim a store client.
 nfsmw = load_recipe('nfsmw')
@@ -199,6 +236,7 @@ with TemporaryDirectory() as temporary:
     assert manifest['controllerDevices'] == recipe['controllerDevices']
     assert manifest['prefixSettings'] == recipe['prefixSettings']
     assert manifest['renderers'] == recipe['renderers']
+    assert 'managedRuntime' not in manifest, 'An import app runs in the player prefix and never installs it'
     assert len(manifest['version']) == 24
     assert not any((resources / 'Game').rglob('*')), 'No game file may be staged'
     first = manifest['version']

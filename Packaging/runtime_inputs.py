@@ -56,6 +56,10 @@ def verify_inputs(recipe, inputs):
     verify_hashes(inputs['runtime'], profile['files'])
     verify_runtime_provides(recipe, inputs['runtime'])
     verify_hashes(inputs['sidecar'].parent, {inputs['sidecar'].name: PINS['sidecarSHA256']})
+    if 'managedRuntime' in recipe:
+        # The app runs this installer inside the player's prefix, so it is checked before the build starts.
+        declared = recipe['managedRuntime']
+        verify_hashes(inputs[declared['input']], {declared['source']: declared['sha256']})
     if 'renderer' in inputs:
         # Only a Direct3D 9 title replaces the renderer; a D3D11 title never loads mtld3d.
         verify_hashes(inputs['renderer'], PINS['rendererFiles'])

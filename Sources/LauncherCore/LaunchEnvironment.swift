@@ -10,12 +10,20 @@ package enum LaunchEnvironment {
   /// Need for Speed (2015) is launched by EA's client, whose 32-bit in-game overlay faults in
   /// wined3d, so `IGOProxy32.exe` is disabled. `winemenubuilder.exe` is disabled as well so the
   /// client cannot write menu entries into the player's host session.
-  static func overrides(_ kind: GameKind) -> String {
+  ///
+  /// `managedCode` is true when the prefix holds a .NET runtime (Wine Mono). EA's installer and
+  /// its updater run a managed custom action, which cannot start while `mscoree` is disabled, so
+  /// the override that hides it (and its install prompt) is dropped once the runtime is there.
+  /// It never applies to a prefix without the runtime, where it would raise that prompt.
+  static func overrides(_ kind: GameKind, managedCode: Bool = false) -> String {
     switch kind {
     case .nfsmw: "dinput8=n,b;mscoree,mshtml="
     case .cod4: "mscoree,mshtml="
     case .farcry2: "mscoree,mshtml=;d3d10,d3d10_1,d3d10core,dxgi="
-    case .nfs2015: "IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml="
+    case .nfs2015:
+      managedCode
+        ? "IGOProxy32.exe=d;winemenubuilder.exe=d;mshtml="
+        : "IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml="
     }
   }
 
@@ -36,7 +44,8 @@ package enum LaunchEnvironment {
 
   package static func make(
     paths: AppPaths, prefix: URL, home: URL, temporary: URL,
-    tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = []
+    tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = [],
+    managedCode: Bool = false
   ) throws(LauncherError) -> [String: String] {
     var environment = [
       "HOME": home.path,
@@ -47,7 +56,7 @@ package enum LaunchEnvironment {
       "LANG": "en_US.UTF-8",
       "WINEPREFIX": prefix.path,
       "WINEDEBUG": "-all",
-      "WINEDLLOVERRIDES": overrides(paths.kind),
+      "WINEDLLOVERRIDES": overrides(paths.kind, managedCode: managedCode),
       "ROSETTA_X87_PATH": paths.sidecar.path,
       "WINEMSYNC": "1",
       "WINE_COMPATDB": try compatibilityRules(paths.kind, renderers: renderers),

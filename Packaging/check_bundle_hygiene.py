@@ -9,8 +9,9 @@ from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
 
-from assemble import stage_game
-from bundle_hygiene import (audit_app_tree, audit_game_payload, audit_runtime_pins, problems_in)
+from assemble import stage_game, stage_managed_runtime
+from bundle_hygiene import (audit_app_tree, audit_game_payload, audit_managed_runtime, audit_runtime_pins,
+                            problems_in)
 from payload import inventory, inventory_digest
 from recipes import load_recipe, validate_recipe
 
@@ -243,5 +244,69 @@ with TemporaryDirectory() as temporary:
         runtime_app('pe', dll=b'MZ' + b'\1' * 62), pins, recipe, source))
     shutil.rmtree(base / 'ok.app/Contents/SharedSupport/Wine/bin')
     assert any('missing' in p for p in audit_runtime_pins(base / 'ok.app', pins, recipe))
+
+# 5. The managed runtime installer is pinned, staged unchanged, and nothing else rides beside it.
+with TemporaryDirectory() as temporary:
+    base = Path(temporary)
+    source = base / 'source'
+    game_tree(source)
+    addons = base / 'addons'
+    write(addons, 'mono.msi', b'synthetic windows installer package')
+    recipe = synthetic_recipe(source)
+    recipe['inputs']['wineMono'] = str(addons)
+    recipe['managedRuntime'] = {
+        'input': 'wineMono', 'source': 'mono.msi', 'path': 'Addons/mono.msi', 'version': '10.4.1',
+        'sha256': sha(b'synthetic windows installer package'),
+        'url': 'https://example.invalid/mono.msi', 'sourceURL': 'https://example.invalid/mono.tar.xz'}
+    recipe = validate_recipe(recipe)
+    inputs = {'game': source, 'wineMono': addons}
+
+    def make_app(name, include_game=True):
+        app = base / (name + '.app')
+        resources = app / 'Contents/Resources'
+        resources.mkdir(parents=True)
+        manifest = stage_game(resources, recipe, inputs, include_game)
+        if include_game:
+            stage_managed_runtime(resources, recipe, inputs)
+        return app, manifest
+
+    app, manifest = make_app('managed')
+    assert manifest['managedRuntime'] == {'file': 'Addons/mono.msi', 'version': '10.4.1',
+                                          'sha256': sha(b'synthetic windows installer package')}
+    assert audit_managed_runtime(app, manifest, recipe) == []
+    assert (app / 'Contents/Resources/Licenses/wine-mono.txt').is_file()
+
+    def managed_problems(name, mutator, edit=None):
+        copy, copy_manifest = make_app(name)
+        mutator(copy)
+        if edit:
+            edit(copy_manifest)
+        return audit_managed_runtime(copy, copy_manifest, recipe)
+
+    assert any('differs from its pin' in p for p in managed_problems(
+        'altered', lambda a: write(a, 'Contents/Resources/Addons/mono.msi', b'evil installer')))
+    assert any('missing' in p for p in managed_problems(
+        'gone', lambda a: (a / 'Contents/Resources/Addons/mono.msi').unlink()))
+    assert any('Unexpected file beside' in p for p in managed_problems(
+        'extra', lambda a: write(a, 'Contents/Resources/Addons/payload.exe', b'MZ')))
+    assert any('missing' in p for p in managed_problems(
+        'linked', lambda a: ((a / 'Contents/Resources/Addons/mono.msi').unlink(),
+                             (a / 'Contents/Resources/Addons/mono.msi').symlink_to(addons / 'mono.msi'))))
+    assert any('does not declare the pinned' in p for p in managed_problems(
+        'manifest', lambda a: None, lambda m: m.update(managedRuntime={'file': 'Addons/mono.msi',
+                                                                       'sha256': '0' * 64, 'version': '10.4.1'})))
+    assert any('does not declare the pinned' in p for p in managed_problems(
+        'undeclared', lambda a: None, lambda m: m.pop('managedRuntime')))
+    assert any('no notice' in p for p in managed_problems(
+        'notice', lambda a: (a / 'Contents/Resources/Licenses/wine-mono.txt').unlink()))
+    # An app that is not the bundled edition carries none, and says so.
+    plain, plain_manifest = make_app('import', include_game=False)
+    assert audit_managed_runtime(plain, plain_manifest, recipe) == []
+    write(plain, 'Contents/Resources/Addons/mono.msi', b'x')
+    assert any('Addons folder' in p for p in audit_managed_runtime(plain, plain_manifest, recipe))
+    # The staging refuses a changed or linked installer before copying anything.
+    write(addons, 'mono.msi', b'a different installer')
+    expect_refused(lambda: stage_managed_runtime(base / 'refused', recipe, inputs), 'does not match its pin')
+    assert not (base / 'refused').exists()
 
 print('Bundle hygiene and pinned payload regressions passed')

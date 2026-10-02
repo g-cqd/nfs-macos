@@ -35,7 +35,7 @@ struct NFS2015Session {
       let owned = manifest.seedsPrefix
       let runtime = WineRuntime(
         paths: paths, output: output, tuning: manifest.tuning,
-        renderers: manifest.rendererSelection)
+        renderers: manifest.rendererSelection, managedRuntime: manifest.managed)
       var readiness: NFS2015Readiness
       if owned {
         guard options.action != "--choose-installation" else {
@@ -205,13 +205,17 @@ struct NFS2015Session {
   /// Runs the EA app installer the player chose, inside this app's own Windows folder.
   ///
   /// The installer is the player's own download from ea.com; nothing here fetches, verifies or
-  /// alters it. Wine is stopped when it exits, so an EA app it started is not left running.
+  /// alters it. Wine is stopped when it exits, so an EA app it started is not left running. The
+  /// bundled .NET runtime is installed first, because without it the installer's MSI fails.
   private func installClient(
     _ request: URL, plan: StoreClientPlan, runtime: WineRuntime, lease: GameLease
   ) throws {
     let installer = try ClientInstaller.validate(request)
+    try requireRosetta(try runtime.environment(prefix: paths.prefix))
+    // EA's installer runs a managed custom action, which needs a .NET runtime in the prefix; the
+    // environment is read again afterwards because it then enables that runtime.
+    _ = try runtime.installManagedRuntime(into: paths.prefix)
     let environment = try runtime.environment(prefix: paths.prefix)
-    try requireRosetta(environment)
     let status: Int32
     do {
       status = try ProcessCommand(
