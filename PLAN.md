@@ -38,7 +38,7 @@ The app and all native code are ad-hoc signed. Signing and a moved-app Wine exec
 
 Suggested future gates: CI should run `swift test -Xswiftc -warnings-as-errors`, release builds and the artifact audit; build-time strict Swift 6 checking and swift-format should remain enabled. Runtime validation rejects unsafe manifests and incomplete generations. A game benchmark needs a repeatable scene and a quiet Mac before becoming a performance regression gate.
 
-Archive completed: `/Users/gc/Desktop/NFSMW-macOS-preview.zip` (2,744,586,356 bytes). ZIP integrity verification passed for all 7,294 entries. The final relocated artifact audit and binary deployment-target checks passed. Full first game launch remains pending while the existing session is running.
+Archive completed: `~/Desktop/NFSMW-macOS-preview.zip` (2,744,586,356 bytes). ZIP integrity verification passed for all 7,294 entries. The final relocated artifact audit and binary deployment-target checks passed. Full first game launch remains pending while the existing session is running.
 
 ## Preview build 2
 

@@ -48,7 +48,7 @@ x86-64 PE. Its SHA-256 for the final baseline run was
 ## Results on 2026-09-26
 
 The runner used
-`/Users/gc/Games/NFSMW-tools/ea-app-lab/Wine/bin/wine` and its adjacent server.
+`~/Games/NFSMW-tools/ea-app-lab/Wine/bin/wine` and its adjacent server.
 The final run used a freshly created prefix within this diagnostic's private
 session directory. The external watchdog was 45 seconds. The output limit was
 128 KiB, and the diagnostic stream retained only allocation metadata and virtual

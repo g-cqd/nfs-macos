@@ -7,7 +7,7 @@ runs; this publication does not claim a new independent rerun. Generated
 executables, private prefixes, and local logs are not included.
 
 The source/runtime paths and local log names in the retained report refer to
-`/Users/gc/Games/NFSMW-tools/diagnostics/nfs2015-context` and its adjacent
+`~/Games/NFSMW-tools/diagnostics/nfs2015-context` and its adjacent
 matching Wine source/runtime. Create a unique private prefix for any new run.
 
 ---
@@ -176,7 +176,7 @@ Build the new probes from this directory:
 
 The runs used `WINEMSYNC=1`, `WINEDEBUG=-all`,
 `WINEDLLOVERRIDES=winemenubuilder.exe=d`, and this owned prefix:
-`/Users/gc/Games/NFSMW-tools/diagnostics/nfs2015-context/prefix-breakpoint-study`.
+`~/Games/NFSMW-tools/diagnostics/nfs2015-context/prefix-breakpoint-study`.
 The runtime was `../nfs2015-breakpoint-wine/bin/wine` with its adjacent server.
 After the runs, the owned prefix and temporary `../nfs2015-breakpoint-src` and
 `../nfs2015-breakpoint-wine` clones were removed after their server was idle.

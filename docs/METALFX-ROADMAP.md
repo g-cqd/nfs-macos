@@ -16,13 +16,13 @@ A disposable native arm64 Swift probe queried `supportsDevice` on the system def
 }
 ```
 
-The calls were `MTLFXSpatialScalerDescriptor.supportsDevice(device)`, `MTLFXTemporalScalerDescriptor.supportsDevice(device)`, and `MTLFXFrameInterpolatorDescriptor.supportsDevice(device)`. This proves that this OS/device reports support. It does not prove a specific descriptor, format combination, rendered output, image quality, frame rate, or latency. No game ran, and no renderer or dependency changed. The probe executable was removed; source and result remain in `/Users/gc/Library/Caches/metalfx-feasibility-nth5leel`.
+The calls were `MTLFXSpatialScalerDescriptor.supportsDevice(device)`, `MTLFXTemporalScalerDescriptor.supportsDevice(device)`, and `MTLFXFrameInterpolatorDescriptor.supportsDevice(device)`. This proves that this OS/device reports support. It does not prove a specific descriptor, format combination, rendered output, image quality, frame rate, or latency. No game ran, and no renderer or dependency changed. The probe executable was removed; source and result remain in `~/Library/Caches/metalfx-feasibility-nth5leel`.
 
 Apple's documentation makes the ordinary `MTLFXTemporalScaler` API available on macOS 13+, and `MTLFXFrameInterpolator` on macOS 26+. These APIs accept ordinary Metal command buffers; adopting the separate `MTL4FX…` protocols is not a prerequisite. The app's macOS 15 floor can remain: temporal support requires a device check, while frame interpolation requires both the OS gate and a device check. [Temporal support](https://developer.apple.com/documentation/metalfx/mtlfxtemporalscalerdescriptor/supportsdevice(_:)), [frame interpolation support](https://developer.apple.com/documentation/metalfx/mtlfxframeinterpolatordescriptor/supportsdevice(_:)).
 
 ## What the renderer has today
 
-Inspected `/Users/gc/Developer/mtld3d` at commit `5f5331a2d8762356bd49d128271c1b186c31e7ec`.
+Inspected `~/Developer/mtld3d` at commit `5f5331a2d8762356bd49d128271c1b186c31e7ec`.
 
 | Source | Present behavior and extension point |
 | --- | --- |
