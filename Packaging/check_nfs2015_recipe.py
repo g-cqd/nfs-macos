@@ -32,12 +32,33 @@ assert client['gameRoot'] == 'Program Files/EA Games/Need for Speed'
 assert recipe['runtimeTuning'] == {
     'WINE_TF_EMULATION': '1', 'WINE_TF_MAX_STEPS': '0', 'WINE_TF_MAX_NS': '0'}
 
-# A 64-bit Direct3D 11 title keeps the D3DMetal DXGI stack and never loads the D3D9 renderer.
-assert 'lib/wine/dxgi/gptk' in recipe['runtimeRetention']
-assert 'lib/external/D3DMetal.framework' in recipe['runtimeRetention']
-assert 'lib/external/libd3dshared.dylib' in recipe['runtimeRetention']
+# A 64-bit Direct3D 11 title is served by a Vulkan-backed DXGI stack, never by mtld3d, and
+# never by D3DMetal: that combination clears Denuvo and then faults on a timestamp query.
 assert 'renderer' not in recipe['inputs'] and 'mtld3dSource' not in recipe['inputs']
 assert 'lib/wine/d3d9/mtld3d' not in recipe['runtimeRetention']
+assert 'vulkanDXGI' in recipe['requiredRuntimeCapabilities']
+assert 'd3dmetalDXGI' not in recipe['requiredRuntimeCapabilities']
+assert recipe['renderers'], 'A referencing D3D11 recipe must say which backend serves it'
+for rule in recipe['renderers']:
+    assert rule['api'] == 'dxgi' and rule['backend'] == 'dxvk', rule
+    assert rule['reason'], 'A renderer choice must record its justification'
+assert any(r.get('executable') == 'NFS16.exe' for r in recipe['renderers']), \
+    'One rule must key on the game executable so a single runtime can serve both'
+assert not any(name.startswith('lib/external/D3DMetal') for name in recipe['runtimeRetention'])
+assert 'vendorRuntimePaths' not in recipe, 'No Apple-signed framework is retained any more'
+assert any('dxvk' in name for name in recipe['runtimeRetention']), \
+    'DXVK must survive runtime pruning'
+
+# Selecting D3DMetal for this game must be impossible, in the recipe and in the manifest.
+for backend in ['gptk']:
+    altered = deepcopy(recipe)
+    altered['renderers'] = [{'api': 'dxgi', 'backend': backend, 'reason': 'x'}]
+    try:
+        validate_recipe(altered)
+    except ValueError as error:
+        assert 'timestamp' in str(error) or 'Vulkan' in str(error), error
+    else:
+        raise AssertionError('A denied renderer backend was accepted: ' + backend)
 
 # The prefix settings the game needs, which are Wine's and so cannot live in the game's file.
 retina = [s for s in recipe['prefixSettings'] if s['name'] == 'RetinaMode']
@@ -77,6 +98,11 @@ for change in [
     lambda r: r['prefixSettings'][0].update(hive='HKEY_CLASSES_ROOT'),
     lambda r: r['prefixSettings'][0].update(kind='binary'),
     lambda r: r['prefixSettings'][0].update(path='Software\\\\Wine'),
+    lambda r: r.update(renderers=[]),
+    lambda r: r['renderers'][0].update(api='vulkan'),
+    lambda r: r['renderers'][0].update(backend='DXVK'),
+    lambda r: r['renderers'][0].update(executable='../escape.exe'),
+    lambda r: r['renderers'][0].update(reason='a;exe=*;dxgi=gptk'),
     lambda r: r.update(requiredRuntimeCapabilities=['teleportation']),
     lambda r: r['runtimeRetention'].append('../escape'),
     lambda r: r.update(compatibility=[{'path': 'a', 'input': 'packaging', 'source': 'b'}]),
@@ -119,6 +145,7 @@ with TemporaryDirectory() as temporary:
     assert manifest['runtimeTuning'] == recipe['runtimeTuning']
     assert manifest['controllerDevices'] == recipe['controllerDevices']
     assert manifest['prefixSettings'] == recipe['prefixSettings']
+    assert manifest['renderers'] == recipe['renderers']
     assert len(manifest['version']) == 24
     assert not any((resources / 'Game').rglob('*')), 'No game file may be staged'
     first = manifest['version']

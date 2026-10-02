@@ -59,7 +59,8 @@ def stage_game(resources, recipe, inputs, include_game_data):
         manifest.update(referencesInstallation=True, storeClient=recipe['storeClient'],
                         runtimeTuning=recipe.get('runtimeTuning', {}),
                         controllerDevices=recipe.get('controllerDevices', []),
-                        prefixSettings=recipe.get('prefixSettings', []))
+                        prefixSettings=recipe.get('prefixSettings', []),
+                        renderers=recipe.get('renderers', []))
     # The version identifies the contract, not the edition: both editions of one recipe share it.
     fingerprint = {key: value for key, value in manifest.items()
                    if key not in {'version', 'gameDataIncluded'}}

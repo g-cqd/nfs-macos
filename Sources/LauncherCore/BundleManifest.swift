@@ -15,6 +15,8 @@ package struct BundleManifest: Codable {
   let controllerDevices: [String]?
   /// Registry values this game needs in the prefix it runs in.
   let prefixSettings: [RegistrySetting]?
+  /// Which runtime backend serves each graphics API for this game.
+  let renderers: [RendererSelection]?
 
   package var kind: GameKind { gameID ?? .nfsmw }
   package var references: Bool { referencesInstallation ?? false }
@@ -22,12 +24,13 @@ package struct BundleManifest: Codable {
   package var client: StoreClientPlan? { storeClient }
   package var controllers: [String] { controllerDevices ?? [] }
   package var registry: [RegistrySetting] { prefixSettings ?? [] }
+  package var rendererSelection: [RendererSelection] { renderers ?? [] }
 
   init(
     version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
     referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
     storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil,
-    prefixSettings: [RegistrySetting]? = nil
+    prefixSettings: [RegistrySetting]? = nil, renderers: [RendererSelection]? = nil
   ) {
     self.version = version
     self.gameFiles = gameFiles
@@ -37,6 +40,7 @@ package struct BundleManifest: Codable {
     self.storeClient = storeClient
     self.controllerDevices = controllerDevices
     self.prefixSettings = prefixSettings
+    self.renderers = renderers
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -84,7 +88,12 @@ package struct BundleManifest: Codable {
         throw .operation("The manifest lists an invalid controller device.")
       }
       _ = try RegistrySetting.script(registry)
+      // A referencing D3D11 title must say which backend serves it, and may not pick a denied one.
+      _ = try RendererSelection.compatibilityDatabase(rendererSelection, kind: kind)
       return
+    }
+    guard renderers == nil else {
+      throw .operation("Only a referencing manifest selects its renderer backends.")
     }
     guard prefixSettings == nil else {
       // A bundle that owns its prefix imports Defaults/settings.reg during wineboot instead.

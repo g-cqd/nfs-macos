@@ -5,17 +5,23 @@ package struct WineRuntime {
   private let paths: AppPaths
   private let output: FileHandle
   private let tuning: RuntimeTuning
-  package init(paths: AppPaths, output: FileHandle, tuning: RuntimeTuning = RuntimeTuning()) {
+  private let renderers: [RendererSelection]
+  package init(
+    paths: AppPaths, output: FileHandle, tuning: RuntimeTuning = RuntimeTuning(),
+    renderers: [RendererSelection] = []
+  ) {
     self.paths = paths
     self.output = output
     self.tuning = tuning
+    self.renderers = renderers
   }
 
   package func environment(prefix: URL) throws(LauncherError) -> [String: String] {
     try LaunchEnvironment.make(
       paths: paths, prefix: prefix,
       home: paths.support.appendingPathComponent("RuntimeHome/Player"),
-      temporary: paths.support.appendingPathComponent("Temporary"), tuning: tuning)
+      temporary: paths.support.appendingPathComponent("Temporary"), tuning: tuning,
+      renderers: renderers)
   }
 
   /// Initializes an unpublished prefix and always stops its server before returning.

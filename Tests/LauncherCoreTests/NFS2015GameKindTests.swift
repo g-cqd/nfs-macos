@@ -30,8 +30,17 @@ struct NFS2015GameKindTests {
     #expect(!GameKind.nfsmw.requiresStoreClient && !GameKind.cod4.requiresStoreClient)
   }
 
+  static let dxvk = [
+    RendererSelection(
+      api: "dxgi", backend: "dxvk", executable: "NFS16.exe",
+      reason: "Frostbite uses D3D11 timestamp queries"),
+    RendererSelection(api: "dxgi", backend: "dxvk"),
+  ]
+
   @Test
-  func `serves Direct3D 11 through DXGI and never through the Direct3D 9 renderer`() throws {
+  func `serves Direct3D 11 through the bundle's chosen DXGI backend, never through mtld3d`()
+    throws
+  {
     let paths = try AppPaths(
       bundle: URL(fileURLWithPath: "/Applications/Need for Speed.app"),
       support: URL(fileURLWithPath: "/tmp/NFS Player"), game: .nfs2015)
@@ -39,15 +48,60 @@ struct NFS2015GameKindTests {
       paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support,
       tuning: RuntimeTuning([
         "WINE_TF_EMULATION": "1", "WINE_TF_MAX_STEPS": "0", "WINE_TF_MAX_NS": "0",
-      ]))
+      ]), renderers: Self.dxvk)
     let rules = try #require(environment["WINE_COMPATDB"])
-    #expect(rules.contains("dxgi=gptk"))
+    #expect(rules.hasPrefix("v=3\n"))
+    #expect(rules.contains("exe=NFS16.exe;dxgi=dxvk"))
+    #expect(rules.contains("exe=*;dxgi=dxvk"))
     #expect(!rules.contains("mtld3d"))
+    #expect(!rules.contains("gptk"))
     #expect(environment["WINEDLLPATH"] == nil)
     #expect(environment["WINEDLLOVERRIDES"]?.contains("IGOProxy32.exe=d") == true)
     #expect(environment["WINE_TF_EMULATION"] == "1")
     #expect(environment["WINE_TF_MAX_STEPS"] == "0")
     #expect(environment["WINE_TF_MAX_NS"] == "0")
+  }
+
+  @Test
+  func `refuses the renderer backend this game is measured to crash on`() throws {
+    #expect(GameKind.nfs2015.deniedRendererBackends["gptk"] != nil)
+    #expect(GameKind.cod4.deniedRendererBackends.isEmpty)
+    let error = #expect(throws: LauncherError.self) {
+      try RendererSelection.compatibilityDatabase(
+        [RendererSelection(api: "dxgi", backend: "gptk")], kind: .nfs2015)
+    }
+    #expect(error?.localizedDescription.contains("timestamp quer") == true)
+    // The same backend is not denied for a game that has no such measurement.
+    #expect(
+      try RendererSelection.compatibilityDatabase(
+        [RendererSelection(api: "dxgi", backend: "gptk")], kind: .cod4
+      ).contains("dxgi=gptk"))
+  }
+
+  @Test
+  func `keeps the fixed Direct3D 9 rule for a game that declares no selection`() throws {
+    let paths = try AppPaths(
+      bundle: URL(fileURLWithPath: "/tmp/Game.app"),
+      support: URL(fileURLWithPath: "/tmp/Player"), game: .nfsmw)
+    let rules = try #require(
+      try LaunchEnvironment.make(
+        paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support
+      )["WINE_COMPATDB"])
+    #expect(rules.contains("d3d9=mtld3d"))
+    #expect(rules.contains("dxgi=wined3d"))
+  }
+
+  @Test(arguments: [
+    RendererSelection(api: "vulkan", backend: "dxvk"),
+    RendererSelection(api: "dxgi", backend: "DXVK"),
+    RendererSelection(api: "dxgi", backend: "dxvk", executable: "../escape.exe"),
+    RendererSelection(api: "dxgi", backend: "dxvk", executable: "NFS16"),
+    RendererSelection(api: "dxgi", backend: "dxvk", reason: "a;exe=*;dxgi=gptk"),
+  ])
+  func `refuses a renderer rule that is malformed or could inject another rule`(
+    selection: RendererSelection
+  ) {
+    #expect(throws: LauncherError.self) { try selection.validate() }
   }
 
   @Test(arguments: [
@@ -67,9 +121,10 @@ struct NFS2015GameKindTests {
         RegistrySetting(
           hive: .currentUser, path: #"Software\Wine\Mac Driver"#, name: "RetinaMode",
           value: "Y", kind: .string)
-      ])
+      ], renderers: Self.dxvk)
     try manifest.validate()
     #expect(manifest.registry.count == 1)
+    #expect(manifest.rendererSelection.count == 2)
     #expect(manifest.references)
     #expect(manifest.client?.launchRequest == "origin2://game/launch/?offerIds=1024486")
     #expect(manifest.controllers == ["054C/05C4"])
@@ -88,6 +143,10 @@ struct NFS2015GameKindTests {
       BundleManifest(
         version: "abc123", gameFiles: [], gameID: .nfs2015, referencesInstallation: true,
         storeClient: Self.plan, controllerDevices: ["054C"]),
+      BundleManifest(
+        version: "abc123", gameFiles: [], gameID: .nfs2015, referencesInstallation: true,
+        storeClient: Self.plan,
+        renderers: [RendererSelection(api: "dxgi", backend: "gptk")]),
     ] {
       #expect(throws: LauncherError.self) { try manifest.validate() }
     }

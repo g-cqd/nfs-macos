@@ -16,7 +16,12 @@ def safe_relative(value):
 
 
 EDITIONS = {'bundled', 'import'}
-CAPABILITIES = {'trapFlagEmulation', 'd3dmetalDXGI', 'x87Sidecar'}
+CAPABILITIES = {'trapFlagEmulation', 'd3dmetalDXGI', 'vulkanDXGI', 'x87Sidecar'}
+RENDERER_APIS = {'d3d8', 'd3d9', 'd3d10core', 'd3d11', 'dxgi'}
+# A backend measured to break a game, with the reason, so no recipe can select it for that game.
+DENIED_BACKENDS = {
+    'nfs2015': {'gptk': 'D3DMetal does not implement the D3D11 timestamp queries this engine uses'},
+}
 GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
 
 
@@ -95,6 +100,32 @@ def validate_prefix_settings(settings):
         if not isinstance(item.get('reason', ''), str) or len(item.get('reason', '')) > 200:
             raise ValueError('Overlong registry reason')
     return settings
+
+
+def validate_renderers(recipe, renderers):
+    """Mirror of the native RendererSelection validation, plus the per-game denial list."""
+    if not isinstance(renderers, list) or not 1 <= len(renderers) <= 16:
+        raise ValueError('A recipe needs between one and sixteen renderer rules')
+    denied = DENIED_BACKENDS.get(recipe['gameID'], {})
+    for item in renderers:
+        if not isinstance(item, dict) or item.get('api') not in RENDERER_APIS:
+            raise ValueError('Unknown graphics API in a renderer rule')
+        backend = item.get('backend')
+        if not isinstance(backend, str) or not re.fullmatch('[a-z0-9]{1,32}', backend):
+            raise ValueError('A renderer backend must be a plain lowercase name')
+        if backend in denied:
+            raise ValueError(recipe['gameID'] + ' cannot use the ' + backend + ' renderer: '
+                             + denied[backend])
+        if 'vulkanDXGI' in recipe.get('requiredRuntimeCapabilities', []) and backend == 'gptk':
+            raise ValueError('A recipe cannot require a Vulkan backend and select D3DMetal')
+        executable = item.get('executable')
+        if executable is not None and (not isinstance(executable, str)
+                                       or not re.fullmatch(r'[A-Za-z0-9._-]{1,64}\.exe', executable)):
+            raise ValueError('A renderer rule applies to one Windows executable')
+        reason = item.get('reason', '')
+        if not isinstance(reason, str) or len(reason) > 200 or ';' in reason:
+            raise ValueError('Unusable renderer reason')
+    return renderers
 
 
 def validate_recipe(recipe):
@@ -192,12 +223,13 @@ def validate_recipe(recipe):
             raise ValueError('A referencing recipe takes no game input')
         validate_store_client(recipe.get('storeClient'))
         validate_prefix_settings(recipe.get('prefixSettings', []))
+        validate_renderers(recipe, recipe.get('renderers', []))
         devices = recipe.get('controllerDevices', [])
         if not isinstance(devices, list) or len(devices) > 32 or not all(
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
             raise ValueError('Invalid controller device')
     else:
-        for key in ['storeClient', 'controllerDevices', 'prefixSettings']:
+        for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

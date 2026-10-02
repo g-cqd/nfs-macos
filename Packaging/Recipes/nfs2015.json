@@ -11,7 +11,7 @@
   "runtimeProfile": "nfs2015-tf-cx11",
   "requiredRuntimeCapabilities": [
     "trapFlagEmulation",
-    "d3dmetalDXGI"
+    "vulkanDXGI"
   ],
   "editions": [
     "import"
@@ -51,13 +51,14 @@
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
-    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime"
+    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime-dxvk"
   },
   "runtimeRetention": [
-    "lib/wine/dxgi/gptk",
-    "lib/external/D3DMetal.framework",
-    "lib/external/D3DMetal-License.rtf",
-    "lib/external/libd3dshared.dylib"
+    "lib/wine/dxgi/dxvk",
+    "lib/wine/x86_64-windows/dxvk",
+    "lib/external/libMoltenVK.dylib",
+    "lib/external/libvulkan.1.dylib",
+    "lib/external/vulkan"
   ],
   "originalFiles": [],
   "originalDirectories": {},
@@ -66,10 +67,6 @@
   "defaults": [],
   "supportsSP": true,
   "supportsMP": false,
-  "vendorRuntimePaths": [
-    "lib/external/D3DMetal.framework",
-    "lib/external/libd3dshared.dylib"
-  ],
   "prefixSettings": [
     {
       "hive": "HKEY_CURRENT_USER",
@@ -78,6 +75,19 @@
       "value": "Y",
       "kind": "string",
       "reason": "Wine advertises the native panel, so the full-screen mode the game asks for exists"
+    }
+  ],
+  "renderers": [
+    {
+      "api": "dxgi",
+      "backend": "dxvk",
+      "executable": "NFS16.exe",
+      "reason": "Frostbite uses D3D11 timestamp queries, which only the Vulkan backend implements"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxvk",
+      "reason": "The EA client renders through the same backend, so one runtime serves both"
     }
   ]
 }

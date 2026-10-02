@@ -148,6 +148,7 @@ def runtime_provenance(recipe, revisions):
             'runtimeCapabilities': profile.get('capabilities', []),
             'inputSidecarSHA256': PINS['sidecarSHA256'],
             'retainedRuntimePaths': recipe.get('runtimeRetention', []),
+            'rendererSelection': recipe.get('renderers', []),
             'runtimeTuning': recipe.get('runtimeTuning', {}),
             'referencesInstallation': bool(recipe.get('referencesInstallation')),
             'renderer': 'Production PROD=1 PERF=1; normal launch disables telemetry',

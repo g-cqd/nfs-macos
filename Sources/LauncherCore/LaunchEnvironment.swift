@@ -15,18 +15,24 @@ package enum LaunchEnvironment {
     }
   }
 
-  /// The renderer selection rule for this game's runtime.
+  /// The renderer selection rules for this game's runtime.
   ///
-  /// Most Wanted and Call of Duty 4 are Direct3D 9 titles served by mtld3d. Need for Speed
-  /// (2015) is a 64-bit Direct3D 11 title, so it is served through DXGI by the runtime's
-  /// D3DMetal backend; mtld3d implements no part of its renderer.
-  static func compatibilityRules(_ kind: GameKind) -> String {
-    let selection = kind == .nfs2015 ? "dxgi=gptk" : "d3d9=mtld3d;dxgi=wined3d"
-    return "v=3\nname=\(kind.rawValue)-bundle;exe=*;" + selection
+  /// Most Wanted and Call of Duty 4 are Direct3D 9 titles served by mtld3d, and their rule is
+  /// fixed here. A recipe may instead declare its own selections, which is how a Direct3D 11
+  /// title picks a DXGI backend that implements what its engine needs, and how one runtime can
+  /// serve a store client and its game differently.
+  static func compatibilityRules(_ kind: GameKind, renderers: [RendererSelection])
+    throws(LauncherError) -> String
+  {
+    guard !renderers.isEmpty else {
+      return "v=3\nname=\(kind.rawValue)-bundle;exe=*;d3d9=mtld3d;dxgi=wined3d"
+    }
+    return try RendererSelection.compatibilityDatabase(renderers, kind: kind)
   }
 
   package static func make(
-    paths: AppPaths, prefix: URL, home: URL, temporary: URL, tuning: RuntimeTuning = RuntimeTuning()
+    paths: AppPaths, prefix: URL, home: URL, temporary: URL,
+    tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = []
   ) throws(LauncherError) -> [String: String] {
     var environment = [
       "HOME": home.path,
@@ -40,7 +46,7 @@ package enum LaunchEnvironment {
       "WINEDLLOVERRIDES": overrides(paths.kind),
       "ROSETTA_X87_PATH": paths.sidecar.path,
       "WINEMSYNC": "1",
-      "WINE_COMPATDB": compatibilityRules(paths.kind),
+      "WINE_COMPATDB": try compatibilityRules(paths.kind, renderers: renderers),
       "MTL_HUD_ENABLED": "0",
       "RUST_LOG": "warn,mtld3d::perf=off",
     ]
