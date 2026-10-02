@@ -3,7 +3,7 @@
   "sources": {
     "mtld3d": {
       "input": "mtld3dSource",
-      "revision": "845b6c914a55633cbe099a076432d2dbe3656d1d",
+      "revision": "7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f",
       "url": "https://github.com/g-cqd/mtld3d"
     },
     "x87sidecar": {
@@ -14,15 +14,16 @@
   },
   "sidecarSHA256": "160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5",
   "rendererFiles": {
-    "d3d9/mtld3d/i386-windows/d3d8.dll": "24493c04b1c83a3f1f910bd7f6dbbc02d34a0756a4b956ccd253510da4a5b27a",
-    "d3d9/mtld3d/i386-windows/d3d9.dll": "f3a1551aec85a40afdf67fff0b7625d7501709b4df37f9d0ac237c3c50a4463e",
-    "d3d9/mtld3d/i386-windows/mtld3d.dll": "b5066539e7de1fb7d90e5525bac4c14172ad67ef473ab2845a187edb8324ec5f",
-    "d3d9/mtld3d/x86_64-unix/mtld3d.so": "2fb0c4c05540be546f37e9f664a2c6412e5b1d2d5394b52de7bf1e85d9592710",
-    "i386-windows/d3d8.dll": "37f185356de9564ca14b626793e4118d0d3833dd8cb198ea602a27b7e8d5303f",
-    "i386-windows/d3d9.dll": "22f0d97247d0ca89f81abec3b06d614dd054909d4f0e9ef829d96826a598e0cb",
-    "i386-windows/mtld3d.dll": "4b6db9df4199c964e08f74668049e7c98bcb65854f44fba74602cbfd2fce1c72"
+    "d3d9/mtld3d/i386-windows/d3d8.dll": "e2ad939867789ef0563c4898040743a2dbf024199b60a2d3763adce52afd4344",
+    "d3d9/mtld3d/i386-windows/d3d9.dll": "5f0c974cb0c7cef41d0eb8d01e866a6ae067fd4f264c77ea8f89a74893570abf",
+    "d3d9/mtld3d/i386-windows/mtld3d.dll": "396e7bb27d4a1f83b1fd602c652409976a063f47be28b2859e19a902618823f0",
+    "d3d9/mtld3d/x86_64-unix/mtld3d.so": "2d8e2cc50bbe9f359fb9d14a69c9dc0ad4355dc1159af50145f9ed97c51b6d26",
+    "i386-windows/d3d8.dll": "2ec14095b7619f0767646bd65e663b0f98f2ed42feddb648833cf5f3adbf1afa",
+    "i386-windows/d3d9.dll": "2ae214f21f38ed09fbdcaf1ac6444b506da3fcd762a2ddc7f04113f4883673d5",
+    "i386-windows/mtld3d.dll": "82280e97fc178a0fc54167827902a933065cd93b2fb3d81850c441749f1056e1"
   },
-  "rendererSourceManifestSHA256": "2fa019104c230422d29df682736ec165d0670f00378d2b453feb63b547772e23",
+  "rendererSourceManifestSHA256": "fd47420c1ba3c0c51b9b9c2fcb6c4f5efcf94c9acf6894bc6df3ef1683fd445f",
+  "rendererVerification": "1004 passed, 0 failed, 11 ignored per Windows architecture, plus 2563 host unit tests; all 631 source hashes match pinned commit",
   "runtimeProfiles": {
     "nfsmw-cursor": {
       "description": "CX26.3 / Wine11.0 with cooperative x87 handshake and NFS cursor recovery",

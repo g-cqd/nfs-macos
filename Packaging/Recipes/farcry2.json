@@ -15,11 +15,11 @@
   "shaderCache": true,
   "inputs": {
     "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
-    "renderer": "{games}/tools-integrate/renderer-845b6c9/retained-overlay/wine/lib/wine",
-    "rendererEvidence": "{games}/tools-integrate/renderer-845b6c9",
-    "sidecar": "{games}/tools-integrate/sidecar-c396937/x87sidecar",
-    "mtld3dSource": "{games}/tools-integrate/src/mtld3d",
-    "x87Source": "{games}/tools-integrate/src/x87sidecar",
+    "renderer": "{games}/release-build/renderer-20261002-7d108a4/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/release-build/renderer-20261002-7d108a4",
+    "sidecar": "{games}/release-build/sidecar-c396937/x87sidecar",
+    "mtld3dSource": "{games}/release-build/src/mtld3d",
+    "x87Source": "{games}/release-build/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/CoD4-tools/wine"
   },
