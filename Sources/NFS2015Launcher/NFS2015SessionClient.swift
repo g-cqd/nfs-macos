@@ -33,6 +33,15 @@ actor NFS2015SessionClient: NFS2015Serving {
 
   func logLocation() -> URL? { logURL }
 
+  /// Reads the staged game folder of a running first-launch preparation, never the player's files.
+  func preparationProgress() -> PrefixSeed.Progress? {
+    guard let paths = try? AppPaths(bundle: bundle, support: support, game: .nfs2015),
+      let manifest = try? BundleManifest.read(
+        from: paths.resources.appendingPathComponent("game-manifest.json"))
+    else { return nil }
+    return PrefixSeed(paths: paths, manifest: manifest).progress()
+  }
+
   func perform(_ operation: NFS2015Operation) async throws -> NFS2015Snapshot {
     try Task.checkCancellation()
     let paths = try AppPaths(bundle: bundle, support: support, game: .nfs2015)

@@ -35,6 +35,8 @@ enum NFS2015Phase: Equatable {
 final class NFS2015Model {
   private(set) var phase = NFS2015Phase.preparing
   private(set) var snapshot = NFS2015Snapshot()
+  /// How far the first-launch game copy has got, while one runs.
+  private(set) var preparation: PrefixSeed.Progress?
   private(set) var edited = NFS2015Settings()
   var tab = "Play"
   var request = 0
@@ -70,6 +72,12 @@ final class NFS2015Model {
   /// The line beside the Play button: the phase, worded for the edition the player has.
   var statusMessage: String {
     if phase == .preparing, carriesGame, snapshot.installedAt == nil {
+      if let progress = preparation, progress.files > 0 {
+        return """
+          Preparing the game for first use: copied \(progress.files) of \(progress.totalFiles) \
+          game files (\(Int(progress.fraction * 100)) %). This takes a few minutes.
+          """
+      }
       return """
         Preparing the game for first use: creating its Windows folder and copying the game \
         files. This takes a few minutes.
@@ -80,6 +88,14 @@ final class NFS2015Model {
     return snapshot.setup == .installClient
       ? "Install the EA app, then sign in to it."
       : "Open the EA app and sign in, then quit it and play."
+  }
+  /// The determinate share of the first-launch copy; nil while the Windows folder is still being
+  /// created or when nothing is being prepared, which the view shows as an indeterminate spinner.
+  var preparationFraction: Double? {
+    guard phase == .preparing, carriesGame, let progress = preparation, progress.files > 0 else {
+      return nil
+    }
+    return progress.fraction
   }
   var clientVersion: String? { snapshot.clientVersion }
   var installedAt: String? { snapshot.installedAt }
@@ -180,6 +196,13 @@ final class NFS2015Model {
       }
     }
     phase = operation.busyPhase
+    let watcher =
+      operation == .prepare && carriesGame && snapshot.installedAt == nil
+      ? Task { await self.watchPreparation() } : nil
+    defer {
+      watcher?.cancel()
+      preparation = nil
+    }
     do {
       let result = try await service.perform(operation)
       snapshot = result
@@ -194,6 +217,21 @@ final class NFS2015Model {
       phase = .failed(error.localizedDescription)
     } catch {
       phase = .failed(error.localizedDescription)
+    }
+  }
+
+  /// Reads the staged copy once; the watcher repeats this while the helper runs. A reading that
+  /// arrives after the watcher was cancelled is dropped, so a finished run leaves no stale bar.
+  func refreshPreparation() async {
+    let progress = await service.preparationProgress()
+    guard !Task.isCancelled else { return }
+    preparation = progress
+  }
+
+  private func watchPreparation() async {
+    while !Task.isCancelled {
+      await refreshPreparation()
+      do { try await Task.sleep(for: .seconds(1)) } catch { return }
     }
   }
 
