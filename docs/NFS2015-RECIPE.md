@@ -50,11 +50,19 @@ client.
 
 ### Readiness
 
-Step 2 is two bounded host observations, both declared in the recipe, and both must hold:
+Step 2 is bounded host observation, declared in the recipe:
 
-- the client has at least `readinessChildren` live descendant processes (it renders its
-  interface in separate `EACefSubProcess` children; a client without them is wedged), and
-- a timestamp under `readinessEvidence` has advanced past the moment the client was started.
+- the client process is alive, and
+- a timestamp under `readinessEvidence` has advanced past the moment the client was started. The
+  recipe watches `ProgramData/EA Desktop/Logs/cef.log`, which the client's browser helpers write as
+  soon as they start. A location under `ProgramData/` is resolved in the Windows drive; any other
+  one in the player's profile. A location that does not exist yet is observed below its nearest
+  existing folder and counts only once it exists and is newer than the start.
+- `readinessChildren` may demand that many live descendant processes, but the recipe sets it to 0:
+  Wine starts every Windows child detached, so macOS reparents the helpers to launchd and none ever
+  appears below the client (measured: `pgrep -P` on `EADesktop.exe` is empty while five helpers run).
+  The earlier recipe asked for one, and for `AppData/Local/Electronic Arts/EA Desktop/Logs`, a
+  folder created only by the first game activation; neither could be met on a fresh prefix.
 
 No credential, cookie or account file is ever read. If either signal does not appear within
 `readinessSeconds`, the session stops and tells the player to open the EA app themselves.

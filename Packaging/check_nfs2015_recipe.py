@@ -40,6 +40,11 @@ assert not any(item['name'] == 'Install Dir' for item in recipe['prefixSettings'
 
 # The verified launch sequence, as configuration rather than code.
 client = recipe['storeClient']
+# Wine starts every Windows child detached, so the client's helpers are reparented to launchd and a
+# counted child can never be seen; and the activation log folder under the profile only exists after
+# a game is first activated. The wait therefore watches the client's own machine-wide log.
+assert client['readinessChildren'] == 0, 'A counted child process can never be observed under Wine'
+assert client['readinessEvidence'] == ['ProgramData/EA Desktop/Logs/cef.log'], client['readinessEvidence']
 assert client['clientArguments'] == ['--in-process-gpu'], 'The EA interface renders blank without it'
 assert client['clientExecutable'].endswith('EADesktop.exe'), 'The client is started directly'
 assert client['launcherExecutable'].endswith('EALauncher.exe')

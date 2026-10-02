@@ -35,15 +35,20 @@ package struct NFS2015LaunchPlan: Equatable, Sendable {
   /// The bound on step two.
   package let readinessSeconds: Int
 
+  /// Evidence under this folder of the Windows drive is machine-wide; every other location is
+  /// relative to the player's own Windows profile.
+  package static let machineWidePrefix = "ProgramData/"
+
   package static func make(install: NFS2015Install, plan: StoreClientPlan) throws(LauncherError)
     -> Self
   {
     try plan.validate()
+    let driveC = install.prefix.appendingPathComponent("drive_c")
     var evidence: [URL] = []
     for relative in plan.readinessEvidence {
-      if let url = try GuestPath.resolve(relative, in: install.userProfile) {
-        evidence.append(url)
-      }
+      evidence.append(
+        try observationPoint(
+          relative, in: relative.hasPrefix(Self.machineWidePrefix) ? driveC : install.userProfile))
     }
     return Self(
       client: GuestCommand(
@@ -54,6 +59,27 @@ package struct NFS2015LaunchPlan: Equatable, Sendable {
         arguments: [plan.launchRequest]),
       workingDirectory: install.game, readinessEvidence: evidence,
       readinessChildren: plan.readinessChildren, readinessSeconds: plan.readinessSeconds)
+  }
+
+  /// Where to look for a location the client may not have created yet.
+  ///
+  /// A folder such as the client's activation log directory only appears once something writes
+  /// to it, so a location that is absent now is observed below its nearest existing folder and
+  /// counts as ready only once it exists with a modification time after the client started.
+  private static func observationPoint(_ relative: String, in root: URL) throws(LauncherError)
+    -> URL
+  {
+    if let found = try GuestPath.resolve(relative, in: root) { return found }
+    let components = relative.split(separator: "/").map(String.init)
+    for count in stride(from: components.count - 1, through: 1, by: -1) {
+      if let base = try GuestPath.resolve(components.prefix(count).joined(separator: "/"), in: root)
+      {
+        return components.dropFirst(count).reduce(base) { $0.appendingPathComponent($1) }
+      }
+    }
+    return components.reduce(root.standardizedFileURL.resolvingSymlinksInPath()) {
+      $0.appendingPathComponent($1)
+    }
   }
 }
 

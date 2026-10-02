@@ -224,3 +224,34 @@ struct NFS2015ModelTests {
     #expect(model.statusMessage == "Choose the Windows folder that holds the EA app and this game.")
   }
 }
+
+struct NFS2015SupportFolderTests {
+  private let home = URL(fileURLWithPath: "/Users/player")
+
+  @Test
+  func `uses the account's own folder by default`() {
+    let folder = NFS2015SessionClient.supportFolder(environment: [:], home: home)
+    #expect(folder.path == "/Users/player/Library/Application Support/NFS2015Mac")
+  }
+
+  @Test
+  func `HOME does not move the player folder`() {
+    let folder = NFS2015SessionClient.supportFolder(environment: ["HOME": "/tmp/other"], home: home)
+    #expect(folder.path == "/Users/player/Library/Application Support/NFS2015Mac")
+  }
+
+  @Test
+  func `an explicit override points the starter at another folder`() {
+    let folder = NFS2015SessionClient.supportFolder(
+      environment: [NFS2015SessionClient.supportFolderVariable: "/tmp/private support/NFS"],
+      home: home)
+    #expect(folder.path == "/tmp/private support/NFS")
+  }
+
+  @Test(arguments: ["", "relative/folder", "/tmp/../Users/player/Library", "~/folder"])
+  func `ignores an override that is not a plain absolute folder`(value: String) {
+    let folder = NFS2015SessionClient.supportFolder(
+      environment: [NFS2015SessionClient.supportFolderVariable: value], home: home)
+    #expect(folder.path == "/Users/player/Library/Application Support/NFS2015Mac")
+  }
+}

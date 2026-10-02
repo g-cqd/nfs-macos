@@ -8,12 +8,27 @@ actor NFS2015SessionClient: NFS2015Serving {
   private let support: URL
   private var logURL: URL?
 
+  /// The environment variable that points the starter at another player folder, for testing an
+  /// app without touching the real one. `HOME` cannot do this: the system reports the account's
+  /// home folder from the user database, so changing `HOME` never moved the player folder.
+  static let supportFolderVariable = "NFS2015_SUPPORT_FOLDER"
+
+  /// The player folder: the override when it names an absolute folder, else the account's own.
+  static func supportFolder(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    home: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> URL {
+    if let override = environment[supportFolderVariable], override.hasPrefix("/"),
+      !override.split(separator: "/").contains("..")
+    {
+      return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+    }
+    return home.appendingPathComponent("Library/Application Support/NFS2015Mac")
+  }
+
   init(bundle: URL = Bundle.main.bundleURL, support: URL? = nil) {
     self.bundle = bundle
-    self.support =
-      support
-      ?? FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent("Library/Application Support/NFS2015Mac")
+    self.support = support ?? Self.supportFolder()
   }
 
   func logLocation() -> URL? { logURL }
