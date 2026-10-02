@@ -65,6 +65,7 @@ The current inputs are retained local artifacts:
 | Renderer source evidence | `~/Games/release-build/renderer-20261002-7d108a4/source-sha256.json` |
 | Latest sidecar / corresponding forks | `~/Games/release-build/sidecar-c396937/x87sidecar`, `~/Games/release-build/src/{mtld3d,x87sidecar}` |
 | Need for Speed (2015) game payload | `~/Games/NFS2015-game`, a standalone APFS clone of exactly the 144 pinned files |
+| Need for Speed (2015) Wine runtime and its source tree | `~/Games/NFS2015-debug/src/wine-cx/runtime/wine` and `.../src` (a build tree, never the prefix); still a rebuild dependency on that folder |
 
 The mtld3d inputs apply only to the Direct3D 9 recipes. The renderer was rebuilt at
 `7d108a4` and all four pins moved together, which is the only way they may move. The
