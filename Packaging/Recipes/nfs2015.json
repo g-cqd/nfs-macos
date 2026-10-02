@@ -48,8 +48,8 @@
   ],
   "inputs": {
     "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
-    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
-    "x87Source": "{home}/Developer/x87sidecar",
+    "sidecar": "{games}/rebuild-bundles/sidecar-20261002-12afdc2/x87sidecar",
+    "x87Source": "{games}/rebuild-bundles/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
     "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src"

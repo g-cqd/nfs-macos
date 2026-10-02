@@ -94,8 +94,8 @@ The old NFSMW v5 app on the Desktop is still a packaging input for retained Wine
 
 ### Pinned runtime versions in this release
 
-- mtld3d: `b22073b4fe835ec4beb7017898b4593be2f3a018`, built `PROD=1 PERF=0`.
-- x87sidecar: `8aa4d308d90c3cc5ebf873db8c3e851848a332db`.
+- mtld3d: `d5fc324ad79bf3c7cb9ecea975b3aea5cc12fe93`, built `PROD=1 PERF=0` with Rust 1.99.0.
+- x87sidecar: `12afdc2880246a92014b67f83df32696ef77d82b`; its artifact is byte-identical to the one at `8aa4d30`, because the only commit between them changes CI workflows.
 - NFSMW cursor-corrected Wine source: `f064add996bbf4819acf49f48bab263735279800`, CX26.3 / Wine 11.0 lineage.
 
 `Packaging/runtime-inputs.json` pins artifacts as well as sources. The renderer's tested binaries match all 631 recorded source-file hashes at the pinned commit. Windows DLLs and the native Unix bridge must be updated as a compatible set. Do not combine arbitrary Wine versions, PE DLLs, native bridges, and sidecars.
