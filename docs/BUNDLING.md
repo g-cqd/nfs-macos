@@ -43,13 +43,13 @@ The current inputs are retained local artifacts:
 | NFS original assets | `~/Games/NFSMW` |
 | NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Desktop/Most Wanted Bundled.app` (preserved v5) |
 | CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
-| Tested latest mtld3d overlay | `~/Games/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine` |
-| Renderer source evidence | `~/Games/CoD4-tools/performance-20260927-U9gG37/source-sha256.json` |
+| Pinned mtld3d overlay (clean `b22073b`, `PROD=1 PERF=0`) | `~/Games/renderer-pins-20261002/retained-overlay/wine/lib/wine` |
+| Renderer source evidence | `~/Games/renderer-pins-20261002/source-sha256.json` |
 | Latest sidecar / corresponding forks | `~/Developer/x87sidecar/build/bin/x87sidecar`, `~/Developer/{mtld3d,x87sidecar}` |
 
 These are assembly inputs, never runtime dependencies on the destination Mac. The
 packager uses APFS clones, keeps source installations unchanged, and rejects artifact
-hash mismatches or a dirty/unpinned source checkout. All 535 renderer source hashes
+hash mismatches or a dirty/unpinned source checkout. All 631 renderer source hashes
 match the pinned latest mtld3d revision. The two Wine bases have identical code sections
 in their outer loader, server and Unix ntdll and identical i386 ntdll runtime contents;
 NFS retains its separate cursor-corrected inner loader.
@@ -95,7 +95,8 @@ A recipe may declare `"editions": ["import"]` and an `importRules` block instead
 inventory and executable hashes (`Packaging/Recipes/farcry2.json`). The packager then needs no game
 input: the manifest carries the rules and the compatibility files, and the session recognises and
 hashes the player's installation at import time. `build.py` and `assemble.py` refuse a bundled edition
-for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. See
+for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. The whole-game Far Cry 2 app is therefore a separate recipe,
+`farcry2-bundled.json` (`--game farcry2-bundled --game-data bundled`). See
 [Far Cry 2](FARCRY2.md) for the rules, the player-data layout and what is still unverified.
 
 ## Rosetta setup
