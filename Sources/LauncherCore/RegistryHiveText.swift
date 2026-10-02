@@ -9,6 +9,8 @@ enum RegistryHiveText {
   /// The largest hive the app edits; a fresh prefix's `system.reg` is a few megabytes.
   static let hiveLimit = 64 * 1024 * 1024
   static let partLimit = 8 * 1024 * 1024
+  /// The first line of every hive file the bundled Wine writes.
+  static let header = "WINE REGISTRY Version 2"
 
   /// The lowercased keys of a hive's text, with Wine's doubled backslashes undone.
   /// - Complexity: O(lines).
@@ -36,7 +38,7 @@ enum RegistryHiveText {
   /// The hive with the part appended.
   /// - Throws: A failure when the hive is not a Wine hive, or the part names a key it already has.
   static func merged(hive: Data, part: Data) throws(LauncherError) -> Data {
-    guard hive.starts(with: Data("WINE REGEDIT4".utf8)) else {
+    guard hive.starts(with: Data(Self.header.utf8)) else {
       throw .operation("The Windows folder's registry file is not a Wine registry.")
     }
     let existing = keys(in: String(decoding: hive, as: UTF8.self))
