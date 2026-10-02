@@ -21,6 +21,73 @@ struct FarCry2Fixture {
 
     """
 
+  /// The profile Far Cry 2 wrote on its first launch under the bundled Wine and mtld3d, unedited.
+  static let realProfileXML = """
+    <GamerProfile>
+    	<SoundProfile MusicEnabled="1" MasterVolume="100" />
+    	<RenderProfile MultiSampleMode="0" AlphaToCoverage="0" ResolutionX="1280" ResolutionY="800" Quality="optimal" Fullscreen="1" Maximized="0" ForceWidescreen="0" WidescreenFOV="0" AspectRatio="0" VSync="0" RefreshRate="0" DisableMip0Loading="0" MaxDriverBufferedFrames="0" Platform="d3d9" ShowFPS="0" ClustersZPassMaxLOD="1" Brightness="1" Contrast="1" GammaRamp="1" GammaRampR="1" GammaRampG="1" GammaRampB="1" AllowAsynchShaderLoading="1">
+    		<CustomQuality>
+    			<quality ResolutionX="800" ResolutionY="600" EnvironmentQuality="medium" AntiPortalQuality="high" PostFxQuality="medium" TextureQuality="medium" TextureResolutionQuality="medium" WaterQuality="medium" DepthPassQuality="medium" VegetationQuality="medium" TerrainQuality="medium" GeometryQuality="medium" AmbientQuality="medium" ShadowQuality="medium" Hdr="0" HdrFP32="0" Bloom="1" id="custom" />
+    			<quality ResolutionX="800" ResolutionY="600" EnvironmentQuality="high" AntiPortalQuality="high" PostFxQuality="high" TextureQuality="high" TextureResolutionQuality="high" WaterQuality="high" DepthPassQuality="high" VegetationQuality="high" TerrainQuality="high" GeometryQuality="high" AmbientQuality="high" ShadowQuality="high" Hdr="1" HdrFP32="1" Bloom="1" id="customd3d10" />
+    		</CustomQuality>
+    	</RenderProfile>
+    	<NetworkProfile CustomMapMaxUploadRateOnline="10240" OnlineEnginePort="9000" OnlineServicePort="9001" FileTransferHostPort="9002" FileTransferClientPort="9003" LanBroadcastPort="9004" ScanFreePorts="1" ScanPortRange="1000" ScanPortStart="9000" SessionProvider="" DetectPublicAddress="1" MaxUploadOnline="768">
+    		<Accounts />
+    	</NetworkProfile>
+    	<GameProfile Sensitivity="0.9" Invert_y="0" UseMouseSmooth="0" Smoothness="1" Smoothness_Ironsight="1" HelpCrosshair="0" UseCompassMiniMap="1" UseRoadSignHilight="1" UseSubtitles="1" UseAmbx="0" Autosave="1" Machete="0" DifficultyLevel="1" ClanTag="">
+    		<FireConfig QualitySetting="Low" />
+    	</GameProfile>
+    	<RealTreeProfile Quality="Low">
+    		<CustomQuality />
+    	</RealTreeProfile>
+    	<EngineProfile>
+    		<PhysicConfig QualitySetting="Low" />
+    		<QcConfig GatherFPS="1" GatherAICnt="1" IsQcTester="0" />
+    		<InputConfig />
+    	</EngineProfile>
+    </GamerProfile>
+    """
+
+  /// The same profile after choosing 1680 x 1050, 60 Hz, 4X, the High overall preset and High fire, real tree and physics in the game's own Video options.
+  static let usedProfileXML = """
+    <GamerProfile>
+    	<SoundProfile MusicEnabled="1" MasterVolume="100" />
+    	<RenderProfile MultiSampleMode="4" AlphaToCoverage="1" ResolutionX="1680" ResolutionY="1050" Quality="high" Fullscreen="1" Maximized="0" ForceWidescreen="0" WidescreenFOV="0" AspectRatio="0" VSync="0" RefreshRate="60" DisableMip0Loading="0" MaxDriverBufferedFrames="0" Platform="d3d9" ShowFPS="0" ClustersZPassMaxLOD="1" Brightness="1" Contrast="1" GammaRamp="1" GammaRampR="1" GammaRampG="1" GammaRampB="1" AllowAsynchShaderLoading="1">
+    		<CustomQuality>
+    			<quality ResolutionX="800" ResolutionY="600" EnvironmentQuality="medium" AntiPortalQuality="high" PostFxQuality="medium" TextureQuality="medium" TextureResolutionQuality="medium" WaterQuality="medium" DepthPassQuality="medium" VegetationQuality="medium" TerrainQuality="medium" GeometryQuality="medium" AmbientQuality="medium" ShadowQuality="medium" Hdr="0" HdrFP32="0" Bloom="1" id="custom" />
+    			<quality ResolutionX="800" ResolutionY="600" EnvironmentQuality="high" AntiPortalQuality="high" PostFxQuality="high" TextureQuality="high" TextureResolutionQuality="high" WaterQuality="high" DepthPassQuality="high" VegetationQuality="high" TerrainQuality="high" GeometryQuality="high" AmbientQuality="high" ShadowQuality="high" Hdr="1" HdrFP32="1" Bloom="1" id="customd3d10" />
+    		</CustomQuality>
+    	</RenderProfile>
+    	<NetworkProfile CustomMapMaxUploadRateOnline="10240" OnlineEnginePort="9000" OnlineServicePort="9001" FileTransferHostPort="9002" FileTransferClientPort="9003" LanBroadcastPort="9004" ScanFreePorts="1" ScanPortRange="1000" ScanPortStart="9000" SessionProvider="" DetectPublicAddress="1" MaxUploadOnline="768">
+    		<Accounts />
+    	</NetworkProfile>
+    	<GameProfile Sensitivity="0.9" Invert_y="0" UseMouseSmooth="0" Smoothness="1" Smoothness_Ironsight="1" HelpCrosshair="0" UseCompassMiniMap="1" UseRoadSignHilight="1" UseSubtitles="1" UseAmbx="1" Autosave="1" Machete="0" DifficultyLevel="1" ClanTag="">
+    		<FireConfig QualitySetting="High" />
+    	</GameProfile>
+    	<RealTreeProfile Quality="High">
+    		<CustomQuality />
+    	</RealTreeProfile>
+    	<EngineProfile>
+    		<PhysicConfig QualitySetting="High" />
+    		<QcConfig GatherFPS="1" GatherAICnt="1" IsQcTester="0" />
+    		<InputConfig />
+    	</EngineProfile>
+    </GamerProfile>
+    """
+
+  /// A prefix registry reduced to the section the starter edits.
+  static let registryText = """
+    WINE REGISTRY Version 2
+    ;; All keys relative to \\\\User\\\\S-1-5-21-0-0-0-1000
+
+    [Software\\\\Wine] 1759391234
+    "Version"="win10"
+
+    [Software\\\\Wine\\\\Mac Driver] 1759391234
+    "RetinaMode"="Y"
+
+    """
+
   let root: URL
   let paths: AppPaths
   var user: FarCry2UserData { FarCry2UserData(paths: paths) }

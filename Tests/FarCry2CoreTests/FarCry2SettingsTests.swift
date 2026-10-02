@@ -121,10 +121,11 @@ struct FarCry2SettingsTests {
     var settings = FarCry2Settings()
     settings.values["render.scale"] = "0.75"
     settings.values["present.maxFps"] = "30"
-    let original = "# note\ncolor.space = accurate\nshader.asyncCompile = true\nrender.scale = 1\n"
+    let original =
+      "# note\nquery.flushImmediate = true\nshader.asyncCompile = true\nrender.scale = 1\n"
     let text = try settings.rendererConfig(original: original)
     #expect(text.contains("# note"))
-    #expect(text.contains("color.space = accurate"))
+    #expect(text.contains("query.flushImmediate = true"))
     #expect(text.contains("render.scale = 0.75"))
     #expect(text.contains("present.maxFps = 30"))
     #expect(
@@ -142,12 +143,20 @@ struct FarCry2SettingsTests {
     settings.maximumQuality(width: 3456, height: 2234)
     try settings.validate()
     #expect(settings.value("resolution") == "3456x2234")
-    #expect(settings.value("antialiasing") == "4" && settings.value("alphaToCoverage") == "1")
+    #expect(settings.value("antialiasing") == "4" && settings.value("alphaToCoverage") == "0")
     #expect(
       settings.value("render.scale") == "1" && settings.value("shader.asyncCompile") == "false")
     #expect(settings.value("fullscreen") == "1" && settings.value("skipTopMip") == "0")
     #expect(settings.value("showFPS") == "1" && settings.value("asyncShaders") == "0")
     #expect(settings.value("present.maxFps") == "60")
+  }
+
+  @Test
+  func `no preset combines alpha to coverage with multisampling`() {
+    var settings = FarCry2Settings()
+    settings.maximumQuality(width: 3024, height: 1964)
+    #expect(settings.value("alphaToCoverage") == "0")
+    #expect(FarCry2Settings().value("alphaToCoverage") == "0", "the default is also safe")
   }
 
   @Test

@@ -28,7 +28,7 @@ struct FarCry2Session {
         }
       }
       let runtime = WineRuntime(paths: paths, output: output)
-      let environment = try runtime.environment(prefix: paths.prefix)
+      var environment = try runtime.environment(prefix: paths.prefix)
       guard
         try ProcessCommand(
           executable: URL(fileURLWithPath: "/usr/bin/arch"),
@@ -51,6 +51,7 @@ struct FarCry2Session {
       let linked = try FarCry2UserData(paths: paths).install()
       report(linked: linked)
       let store = FarCry2SettingsStore(paths: paths)
+      var plan = FarCry2Settings.LaunchPlan()
       switch options.action {
       case .importGame, .prepare: break
       case .backups:
@@ -59,6 +60,7 @@ struct FarCry2Session {
       case .configure, .play:
         let request = try decode(FarCry2LaunchRequest.self, options.request)
         let state = try store.apply(request.settings)
+        plan = request.settings.launchPlan()
         if state != .ready {
           print("GamerProfile.xml was not changed (\(state.rawValue)); renderer settings were.")
         }
@@ -73,11 +75,13 @@ struct FarCry2Session {
       }
       attempt("place the cache") { report(launch: try cache.prepare(game: game)) }
       try drive.install()
+      for (name, value) in plan.environment { environment[name] = value }
+      let arguments = try launchArguments(plan)
       let status: Int32
       do {
         // The working directory is bin, as when the game is started from its install folder.
         status = try ProcessCommand(
-          executable: paths.wine, arguments: ["C:\\FarCry2\\bin\\FarCry2.exe"],
+          executable: paths.wine, arguments: arguments,
           directory: game.appendingPathComponent("bin"), environment: environment
         ).run(output: output, onStart: lease.record)
         try runtime.stop(paths.prefix)
@@ -96,6 +100,25 @@ struct FarCry2Session {
       try snapshot(cache)
       return status
     }
+  }
+
+  /// The game's own switches, plus the console script when any cheat or world option is chosen.
+  private func launchArguments(_ plan: FarCry2Settings.LaunchPlan) throws -> [String] {
+    var arguments = ["C:\\FarCry2\\bin\\FarCry2.exe"] + plan.arguments
+    let user = FarCry2UserData(paths: paths)
+    let script = user.documents.appendingPathComponent(FarCry2Console.scriptName)
+    if plan.console.isEmpty {
+      if FileManager.default.fileExists(atPath: script.path) {
+        try FileManager.default.removeItem(at: script)
+      }
+      return arguments
+    }
+    try Data(FarCry2Console.script(plan.console).utf8).write(to: script, options: .atomic)
+    let profile = try user.windowsProfile().lastPathComponent
+    arguments += [FarCry2Console.startupSwitch, FarCry2Console.windowsPath(profile: profile)]
+    print(
+      "Console script: \(plan.console.count) line(s) passed with \(FarCry2Console.startupSwitch).")
+    return arguments
   }
 
   private func decode<T: Decodable>(_ type: T.Type, _ url: URL?) throws -> T {

@@ -161,6 +161,7 @@ final class CoD4Model {
     load(snapshot, operation: operation)
   }
   func showLog() { enqueue(.openLog) }
+  func returnToGame() { GameWindow.bringToFront(support: CoD4SessionClient.defaultSupport) }
   func play() { enqueue(.helper(.play(launchRequest()))) }
   func apply() { enqueue(.helper(.configure(launchRequest()))) }
   func reload() { enqueueDiscarding(.helper(.prepare(mode: mode, profile: selectedProfile))) }

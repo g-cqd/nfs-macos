@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "gameID": "farcry2",
+  "displayName": "Far Cry 2",
+  "bundleIdentifier": "local.farcry2.mac",
+  "bundleVersion": "1",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.action-games",
+  "launcher": "FarCry2Launcher",
+  "session": "FarCry2Session",
+  "runtimeProfile": "cod4-tested",
+  "editions": [
+    "bundled"
+  ],
+  "inputs": {
+    "baseApp": "{home}/Desktop/Most Wanted Bundled.app",
+    "renderer": "{games}/renderer-pins-20261002/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/renderer-pins-20261002",
+    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
+    "mtld3dSource": "{home}/Developer/mtld3d",
+    "x87Source": "{home}/Developer/x87sidecar",
+    "packaging": "{project}/Packaging",
+    "runtime": "{games}/CoD4-tools/wine",
+    "game": "{games}/FarCry2"
+  },
+  "originalFiles": [
+    "bin/Dunia.dll",
+    "bin/FC2.dll",
+    "bin/FC2BenchmarkTool.exe",
+    "bin/FC2BenchmarkTool.exe.config",
+    "bin/FC2Editor.exe",
+    "bin/FC2Init.ini",
+    "bin/FC2Launcher.exe",
+    "bin/FC2ServerLauncher.exe",
+    "bin/FC2ServerLauncher_ReadMe.txt",
+    "bin/Microsoft.DirectX.Direct3D.dll",
+    "bin/Microsoft.DirectX.Direct3DX.dll",
+    "bin/Microsoft.DirectX.dll",
+    "bin/SandBar.dll",
+    "bin/SandDock.dll",
+    "bin/binkw32.dll",
+    "bin/dfe",
+    "bin/eax.dll",
+    "bin/extendedpcidevs.txt",
+    "bin/farcry2.exe",
+    "bin/gpudatabase.dll",
+    "bin/lang.ini",
+    "bin/pcidevs.txt",
+    "bin/systemdetection.dll"
+  ],
+  "originalDirectories": {
+    "bin/pb": [],
+    "bin/Resources": [],
+    "Data_Win32": [
+      ".dat",
+      ".fat",
+      ".rml",
+      ".ini",
+      ".bik"
+    ]
+  },
+  "executableHashes": {
+    "bin/farcry2.exe": "2f93751bde46c9f0ac1b0530bc17572815de01c56baab37942728423194c1023",
+    "bin/Dunia.dll": "7b82f20088e5c046a99fcaed65dc8bbb8202fd622a69737be83e00686b172d53"
+  },
+  "compatibility": [
+    {
+      "path": "bin/mtld3d.conf",
+      "input": "packaging",
+      "source": "FarCry2Defaults/mtld3d.conf"
+    }
+  ],
+  "defaults": [
+    {
+      "path": "mtld3d.conf",
+      "input": "packaging",
+      "source": "FarCry2Defaults/mtld3d.conf"
+    },
+    {
+      "path": "settings.reg",
+      "input": "packaging",
+      "source": "FarCry2Defaults/settings.reg"
+    }
+  ],
+  "supportsSP": true,
+  "supportsMP": false
+}

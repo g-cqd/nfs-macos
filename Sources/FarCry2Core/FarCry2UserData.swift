@@ -145,3 +145,21 @@ package struct FarCry2UserData {
     return (ups + to[common...]).joined(separator: "/")
   }
 }
+
+/// The console script the starter hands to the game at launch.
+///
+/// Command names come from strings in `Dunia.dll`. How the retail build treats the start-up switch is
+/// documented in `docs/FARCRY2.md`.
+package enum FarCry2Console {
+  package static let startupSwitch = "-cmdfile"
+  package static let scriptName = "starter-console.txt"
+
+  package static func script(_ lines: [String]) -> String {
+    lines.joined(separator: "\n") + "\n"
+  }
+
+  /// The script's path as the game sees it: inside the Windows user's Documents, which is persistent player data.
+  package static func windowsPath(profile: String) -> String {
+    "C:\\users\\\(profile)\\Documents\\My Games\\Far Cry 2\\\(scriptName)"
+  }
+}

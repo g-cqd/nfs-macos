@@ -164,6 +164,9 @@ final class LauncherModel {
   }
 
   func playAgain() { enqueue("--play") }
+  func returnToGame() {
+    if let support = paths?.support { GameWindow.bringToFront(support: support) }
+  }
   func applySettings() { enqueue("--configure") }
   func reload() {
     if hasPendingChanges { discardConfirmation = true } else { enqueue("--prepare") }

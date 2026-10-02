@@ -146,7 +146,7 @@ for number, line in enumerate(lines):
     assert any(label in ' '.join(block) for label in ('[mtld3d]', '[CoD4]')), 'no source cited: ' + key.strip()
     assert '[unverified]' in ' '.join(block), 'no verification state: ' + key.strip()
 assert active == {'shader.asyncCompile': 'false', 'shaderCache.enable': 'true', 'render.scale': '1',
-                  'present.maxFps': '0'}, active
+                  'present.maxFps': '0', 'adapter.spoof': 'nvidia'}, active
 assert set(active) <= MTLD3D_KEYS, set(active) - MTLD3D_KEYS
 assert '# memory.vramBudgetMB = 1024' in lines, 'the video memory budget stays documented but unset'
 assert not any(line.startswith('memory.vramBudgetMB') for line in lines)
