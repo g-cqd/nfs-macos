@@ -78,13 +78,13 @@ struct NFS2015PlayView: View {
           }
           Text(
             """
-            This app carries your own Need for Speed files and prepared this Windows folder for \
-            them on first launch. Install the EA app from ea.com into it once, sign in to your \
-            own EA account in the EA app, then press Play. This app never stores, copies or \
-            works around your sign-in.
+            This app carries your own Need for Speed files and the EA app, and prepared this \
+            Windows folder for them on first launch. Sign in to your own EA account in the EA \
+            app, then press Play. This app never stores, copies or works around your sign-in.
             """
           ).font(.caption).foregroundStyle(.secondary)
         }
+        if model.needsFirstRunGuide { NFS2015FirstRunView(guide: model.firstRunGuide) }
       } else {
         Section("Your installation") {
           if let folder = model.installedAt {
