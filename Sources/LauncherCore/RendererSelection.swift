@@ -57,6 +57,15 @@ package struct RendererSelection: Codable, Equatable, Sendable {
     "name=\(name);exe=\(executable ?? "*");\(api)=\(backend)"
   }
 
+  /// Whether this rule is one that would serve the game's own executable.
+  ///
+  /// A rule naming another program, such as the store client that starts the game, is a
+  /// different process with different requirements and is judged separately.
+  func serves(_ executable: String) -> Bool {
+    guard let named = self.executable else { return true }
+    return named.lowercased() == executable.lowercased()
+  }
+
   /// Renders the complete `WINE_COMPATDB` value for a game's declared selections.
   package static func compatibilityDatabase(_ selections: [RendererSelection], kind: GameKind)
     throws(LauncherError) -> String
@@ -67,8 +76,10 @@ package struct RendererSelection: Codable, Equatable, Sendable {
     var lines = ["v=3"]
     for (index, selection) in selections.enumerated() {
       try selection.validate()
-      if let reason = kind.deniedRendererBackends[selection.backend] {
-        // A backend known to crash this game must never reach a player's machine.
+      if selection.serves(kind.executable),
+        let reason = kind.deniedRendererBackends[selection.backend]
+      {
+        // A backend measured to break this game must never serve this game's executable.
         throw .operation(
           "\(kind.title) cannot use the \(selection.backend) renderer: \(reason)")
       }

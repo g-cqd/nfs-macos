@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 from assemble import stage_game
 from recipes import load_recipe, resolve_inputs, supports_edition, validate_recipe
-from runtime_inputs import PINS, verify_inputs
+from runtime_inputs import PINS, verify_inputs, verify_runtime_provides
 
 PROJECT = Path(__file__).resolve().parents[1]
 recipe = load_recipe('nfs2015')
@@ -36,29 +36,47 @@ assert recipe['runtimeTuning'] == {
 # never by D3DMetal: that combination clears Denuvo and then faults on a timestamp query.
 assert 'renderer' not in recipe['inputs'] and 'mtld3dSource' not in recipe['inputs']
 assert 'lib/wine/d3d9/mtld3d' not in recipe['runtimeRetention']
-assert 'vulkanDXGI' in recipe['requiredRuntimeCapabilities']
-assert 'd3dmetalDXGI' not in recipe['requiredRuntimeCapabilities']
+assert 'dxmtDXGI' in recipe['requiredRuntimeCapabilities']
 assert recipe['renderers'], 'A referencing D3D11 recipe must say which backend serves it'
+rules = {r.get('executable'): r for r in recipe['renderers']}
+assert rules['NFS16.exe']['backend'] == 'dxmt', 'The game is served by the measured backend'
+assert rules['EADesktop.exe']['backend'] == 'gptk', 'The client keeps its own measured backend'
 for rule in recipe['renderers']:
-    assert rule['api'] == 'dxgi' and rule['backend'] == 'dxvk', rule
-    assert rule['reason'], 'A renderer choice must record its justification'
-assert any(r.get('executable') == 'NFS16.exe' for r in recipe['renderers']), \
-    'One rule must key on the game executable so a single runtime can serve both'
-assert not any(name.startswith('lib/external/D3DMetal') for name in recipe['runtimeRetention'])
-assert 'vendorRuntimePaths' not in recipe, 'No Apple-signed framework is retained any more'
-assert any('dxvk' in name for name in recipe['runtimeRetention']), \
-    'DXVK must survive runtime pruning'
+    assert rule['api'] == 'dxgi' and rule['reason'], rule
+assert None not in rules, 'No catch-all may silently serve the game a denied backend'
+# Every selected backend, and the Apple framework the client's backend needs, survives pruning.
+for name in ['lib/wine/dxgi/dxmt', 'lib/wine/dxgi/gptk', 'lib/external/D3DMetal.framework',
+             'lib/external/libd3dshared.dylib']:
+    assert name in recipe['runtimeRetention'], name
+assert set(recipe['vendorRuntimePaths']) == {'lib/external/D3DMetal.framework',
+                                             'lib/external/libd3dshared.dylib'}
 
-# Selecting D3DMetal for this game must be impossible, in the recipe and in the manifest.
-for backend in ['gptk']:
+# The runtime must actually carry what the recipe selects; a claim alone is not enough.
+verify_runtime_provides(recipe, resolve_inputs(recipe)['runtime'])
+for backend in ['dxvk', 'nonexistent']:
     altered = deepcopy(recipe)
-    altered['renderers'] = [{'api': 'dxgi', 'backend': backend, 'reason': 'x'}]
+    altered['renderers'] = [{'api': 'dxgi', 'backend': backend, 'reason': 'x',
+                             'executable': 'NFS16.exe'}]
+    try:
+        verify_runtime_provides(altered, resolve_inputs(altered)['runtime'])
+    except ValueError as error:
+        assert 'has no dxgi backend named' in str(error), error
+    else:
+        raise AssertionError('A backend absent from the runtime was accepted: ' + backend)
+
+# Selecting D3DMetal for the game itself must be impossible, named or by a catch-all, while
+# the rule naming the store client keeps it.
+for rule in [{'api': 'dxgi', 'backend': 'gptk', 'reason': 'x'},
+             {'api': 'dxgi', 'backend': 'gptk', 'reason': 'x', 'executable': 'NFS16.exe'},
+             {'api': 'dxgi', 'backend': 'gptk', 'reason': 'x', 'executable': 'nfs16.exe'}]:
+    altered = deepcopy(recipe)
+    altered['renderers'] = [rule]
     try:
         validate_recipe(altered)
     except ValueError as error:
-        assert 'timestamp' in str(error) or 'Vulkan' in str(error), error
+        assert 'timestamp' in str(error), error
     else:
-        raise AssertionError('A denied renderer backend was accepted: ' + backend)
+        raise AssertionError('A denied renderer backend was accepted: ' + str(rule))
 
 # The prefix settings the game needs, which are Wine's and so cannot live in the game's file.
 retina = [s for s in recipe['prefixSettings'] if s['name'] == 'RetinaMode']
@@ -100,7 +118,7 @@ for change in [
     lambda r: r['prefixSettings'][0].update(path='Software\\\\Wine'),
     lambda r: r.update(renderers=[]),
     lambda r: r['renderers'][0].update(api='vulkan'),
-    lambda r: r['renderers'][0].update(backend='DXVK'),
+    lambda r: r['renderers'][0].update(backend='DXMT'),
     lambda r: r['renderers'][0].update(executable='../escape.exe'),
     lambda r: r['renderers'][0].update(reason='a;exe=*;dxgi=gptk'),
     lambda r: r.update(requiredRuntimeCapabilities=['teleportation']),

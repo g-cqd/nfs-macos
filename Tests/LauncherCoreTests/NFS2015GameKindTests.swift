@@ -30,11 +30,13 @@ struct NFS2015GameKindTests {
     #expect(!GameKind.nfsmw.requiresStoreClient && !GameKind.cod4.requiresStoreClient)
   }
 
-  static let dxvk = [
+  static let measured = [
     RendererSelection(
-      api: "dxgi", backend: "dxvk", executable: "NFS16.exe",
-      reason: "Frostbite uses D3D11 timestamp queries"),
-    RendererSelection(api: "dxgi", backend: "dxvk"),
+      api: "dxgi", backend: "dxmt", executable: "NFS16.exe",
+      reason: "Reaches menus where D3DMetal faults on a timestamp query"),
+    RendererSelection(
+      api: "dxgi", backend: "gptk", executable: "EADesktop.exe",
+      reason: "The EA client renders its interface correctly on D3DMetal"),
   ]
 
   @Test
@@ -48,13 +50,14 @@ struct NFS2015GameKindTests {
       paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support,
       tuning: RuntimeTuning([
         "WINE_TF_EMULATION": "1", "WINE_TF_MAX_STEPS": "0", "WINE_TF_MAX_NS": "0",
-      ]), renderers: Self.dxvk)
+      ]), renderers: Self.measured)
     let rules = try #require(environment["WINE_COMPATDB"])
     #expect(rules.hasPrefix("v=3\n"))
-    #expect(rules.contains("exe=NFS16.exe;dxgi=dxvk"))
-    #expect(rules.contains("exe=*;dxgi=dxvk"))
+    #expect(rules.contains("exe=NFS16.exe;dxgi=dxmt"))
+    // The store client is a separate program, so the backend denied to the game may serve it.
+    #expect(rules.contains("exe=EADesktop.exe;dxgi=gptk"))
     #expect(!rules.contains("mtld3d"))
-    #expect(!rules.contains("gptk"))
+    #expect(!rules.contains("exe=NFS16.exe;dxgi=gptk"))
     #expect(environment["WINEDLLPATH"] == nil)
     #expect(environment["WINEDLLOVERRIDES"]?.contains("IGOProxy32.exe=d") == true)
     #expect(environment["WINE_TF_EMULATION"] == "1")
@@ -66,11 +69,17 @@ struct NFS2015GameKindTests {
   func `refuses the renderer backend this game is measured to crash on`() throws {
     #expect(GameKind.nfs2015.deniedRendererBackends["gptk"] != nil)
     #expect(GameKind.cod4.deniedRendererBackends.isEmpty)
-    let error = #expect(throws: LauncherError.self) {
-      try RendererSelection.compatibilityDatabase(
-        [RendererSelection(api: "dxgi", backend: "gptk")], kind: .nfs2015)
+    // Named directly, and by a catch-all that would also serve the game.
+    for denied in [
+      RendererSelection(api: "dxgi", backend: "gptk", executable: "NFS16.exe"),
+      RendererSelection(api: "dxgi", backend: "gptk", executable: "nfs16.exe"),
+      RendererSelection(api: "dxgi", backend: "gptk"),
+    ] {
+      let error = #expect(throws: LauncherError.self) {
+        try RendererSelection.compatibilityDatabase([denied], kind: .nfs2015)
+      }
+      #expect(error?.localizedDescription.contains("timestamp quer") == true)
     }
-    #expect(error?.localizedDescription.contains("timestamp quer") == true)
     // The same backend is not denied for a game that has no such measurement.
     #expect(
       try RendererSelection.compatibilityDatabase(
@@ -92,7 +101,6 @@ struct NFS2015GameKindTests {
   }
 
   @Test(arguments: [
-    RendererSelection(api: "vulkan", backend: "dxvk"),
     RendererSelection(api: "dxgi", backend: "DXVK"),
     RendererSelection(api: "dxgi", backend: "dxvk", executable: "../escape.exe"),
     RendererSelection(api: "dxgi", backend: "dxvk", executable: "NFS16"),
@@ -121,7 +129,7 @@ struct NFS2015GameKindTests {
         RegistrySetting(
           hive: .currentUser, path: #"Software\Wine\Mac Driver"#, name: "RetinaMode",
           value: "Y", kind: .string)
-      ], renderers: Self.dxvk)
+      ], renderers: Self.measured)
     try manifest.validate()
     #expect(manifest.registry.count == 1)
     #expect(manifest.rendererSelection.count == 2)
@@ -147,6 +155,10 @@ struct NFS2015GameKindTests {
         version: "abc123", gameFiles: [], gameID: .nfs2015, referencesInstallation: true,
         storeClient: Self.plan,
         renderers: [RendererSelection(api: "dxgi", backend: "gptk")]),
+      BundleManifest(
+        version: "abc123", gameFiles: [], gameID: .nfs2015, referencesInstallation: true,
+        storeClient: Self.plan,
+        renderers: [RendererSelection(api: "dxgi", backend: "gptk", executable: "NFS16.exe")]),
     ] {
       #expect(throws: LauncherError.self) { try manifest.validate() }
     }
