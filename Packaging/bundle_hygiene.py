@@ -98,6 +98,41 @@ def audit_app_tree(app):
     return problems
 
 
+def audit_managed_runtime(app, manifest, recipe):
+    """A bundled app carries exactly the pinned managed runtime installer; any other app carries none.
+
+    The app installs this file into its own Windows folder and runs it, so it is held to its pin
+    here as well as at run time, and nothing else may sit beside it.
+    """
+    app = Path(app)
+    resources = app / 'Contents/Resources'
+    declared = recipe.get('managedRuntime')
+    bundled = manifest.get('gameDataIncluded', True) and bool(manifest.get('storeClient'))
+    problems = []
+    if declared is None or not bundled:
+        if manifest.get('managedRuntime') is not None:
+            problems.append('The manifest declares a managed runtime this app is not built to install')
+        if (resources / 'Addons').exists():
+            problems.append('An app without a managed runtime carries an Addons folder')
+        return problems
+    expected = {'file': declared['path'], 'sha256': declared['sha256'], 'version': declared['version']}
+    if manifest.get('managedRuntime') != expected:
+        problems.append('The manifest does not declare the pinned managed runtime')
+    target = resources / declared['path']
+    if target.is_symlink() or not target.is_file():
+        problems.append('The pinned managed runtime installer is missing: ' + declared['path'])
+    elif hashlib.sha256(target.read_bytes()).hexdigest() != declared['sha256']:
+        problems.append('The managed runtime installer differs from its pin')
+    folder = target.parent
+    if folder.is_dir():
+        for path in sorted(folder.rglob('*')):
+            if path != target:
+                problems.append('Unexpected file beside the managed runtime: ' + path.relative_to(app).as_posix())
+    if not (resources / 'Licenses/wine-mono.txt').is_file():
+        problems.append('The managed runtime has no notice')
+    return problems
+
+
 def same_runtime_image(staged, pinned):
     """Whether two Windows modules hold the same runtime bytes; a file that is no module never matches."""
     try:

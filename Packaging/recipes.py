@@ -225,6 +225,30 @@ def validate_runtime_source(source):
     return source
 
 
+def validate_managed_runtime(declared):
+    """Mirror of the native ManagedRuntime validation, plus where it comes from.
+
+    EA's installer runs a managed custom action, so the bundled prefix needs a .NET runtime; this is
+    Wine's own free one, pinned by digest and installed by the app before the installer runs.
+    """
+    if not isinstance(declared, dict):
+        raise ValueError('The managed runtime must be an object')
+    if not isinstance(declared.get('input'), str):
+        raise ValueError('The managed runtime needs a declared input')
+    safe_relative(declared.get('source'))
+    path = safe_relative(declared.get('path'))
+    if not path.lower().endswith('.msi') or '/' not in path:
+        raise ValueError('The managed runtime installer must be an .msi inside a resource folder')
+    if not SHA256.fullmatch(str(declared.get('sha256'))):
+        raise ValueError('The managed runtime needs its SHA-256 pin')
+    if not re.fullmatch(r'[0-9]{1,6}(?:\.[0-9]{1,6}){0,3}', str(declared.get('version'))):
+        raise ValueError('The managed runtime needs its upstream version')
+    for key in ['url', 'sourceURL']:
+        if not str(declared.get(key, '')).startswith('https://'):
+            raise ValueError('The managed runtime needs an https ' + key)
+    return declared
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -356,6 +380,12 @@ def validate_recipe(recipe):
         validate_store_client(recipe.get('storeClient'))
         validate_prefix_settings(recipe.get('prefixSettings', []))
         validate_renderers(recipe, recipe.get('renderers', []))
+        if 'managedRuntime' in recipe:
+            declared = validate_managed_runtime(recipe['managedRuntime'])
+            if declared['input'] not in recipe['inputs']:
+                raise ValueError('Undeclared managed runtime input')
+            if 'bundled' not in editions:
+                raise ValueError('Only a bundled edition installs a managed runtime into its prefix')
         if 'runtimeSource' in recipe:
             declared = validate_runtime_source(recipe['runtimeSource'])
             if declared['input'] not in recipe['inputs']:
@@ -366,7 +396,7 @@ def validate_recipe(recipe):
             raise ValueError('Invalid controller device')
     else:
         for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
-                    'bundledPrefixSettings']:
+                    'bundledPrefixSettings', 'managedRuntime']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

@@ -19,6 +19,8 @@ package struct BundleManifest: Codable {
   let prefixSettings: [RegistrySetting]?
   /// Which runtime backend serves each graphics API for this game.
   let renderers: [RendererSelection]?
+  /// A .NET runtime installed into a seeded prefix before the store client's installer runs.
+  let managedRuntime: ManagedRuntime?
 
   package var kind: GameKind { gameID ?? .nfsmw }
   package var references: Bool { referencesInstallation ?? false }
@@ -29,13 +31,15 @@ package struct BundleManifest: Codable {
   package var controllers: [String] { controllerDevices ?? [] }
   package var registry: [RegistrySetting] { prefixSettings ?? [] }
   package var rendererSelection: [RendererSelection] { renderers ?? [] }
+  package var managed: ManagedRuntime? { managedRuntime }
 
   init(
     version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
     importRules: ImportRules? = nil,
     referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
     storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil,
-    prefixSettings: [RegistrySetting]? = nil, renderers: [RendererSelection]? = nil
+    prefixSettings: [RegistrySetting]? = nil, renderers: [RendererSelection]? = nil,
+    managedRuntime: ManagedRuntime? = nil
   ) {
     self.version = version
     self.gameFiles = gameFiles
@@ -47,6 +51,7 @@ package struct BundleManifest: Codable {
     self.controllerDevices = controllerDevices
     self.prefixSettings = prefixSettings
     self.renderers = renderers
+    self.managedRuntime = managedRuntime
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -74,6 +79,13 @@ package struct BundleManifest: Codable {
       throw .operation("The game manifest has an invalid version or file count.")
     }
     try tuning.validate()
+    // Only a bundled store-client edition seeds a prefix of its own to install it into.
+    if let managedRuntime {
+      guard seedsPrefix else {
+        throw .operation("Only a bundled store-client manifest declares a managed runtime.")
+      }
+      try managedRuntime.validate()
+    }
     // Only a store-client game references an installation; it either does, or ships its own files.
     guard !references || kind.requiresStoreClient else {
       throw .operation("The game manifest does not match this app's installation contract.")

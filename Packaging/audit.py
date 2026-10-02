@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import struct
-from bundle_hygiene import audit_app_tree, audit_game_payload, audit_runtime_pins
+from bundle_hygiene import audit_app_tree, audit_game_payload, audit_managed_runtime, audit_runtime_pins
 from game_data import bundled_entries
 from recipes import validate_recipe
 from runtime_inputs import PINS
@@ -97,6 +97,7 @@ assert actual_game_paths == expected_game_paths, 'Unexpected or missing game pay
 hazards = audit_app_tree(app)
 if recipe_path.exists():
     hazards += audit_runtime_pins(app, PINS, embedded, pinned_runtime)
+    hazards += audit_managed_runtime(app, manifest, embedded)
     if manifest.get('gameDataIncluded', True) and manifest.get('storeClient'):
         hazards += audit_game_payload(app, manifest, embedded)
         report['pinnedExecutables'] = len(embedded.get('executableHashes', {}))

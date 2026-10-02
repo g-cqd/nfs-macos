@@ -54,7 +54,8 @@
     "packaging": "{project}/Packaging",
     "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
     "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src",
-    "game": "{games}/NFS2015-debug/opus/Prefix/drive_c/Program Files/EA Games/Need for Speed"
+    "game": "{games}/NFS2015-debug/opus/Prefix/drive_c/Program Files/EA Games/Need for Speed",
+    "wineMono": "{home}/.cache/wine"
   },
   "runtimeRetention": [
     "lib/wine/dxgi/dxmt"
@@ -146,8 +147,24 @@
       "backend": "dxmt",
       "executable": "EADesktop.exe",
       "reason": "Measured: renders the full client UI with none of the shared-handle failures D3DMetal logs"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "EACefSubProcess.exe",
+      "reason": "Measured: its libcef.dll imports dxgi.dll, which no other backend supplies here, so every browser helper failed to load and the EA window never came up"
     }
   ],
+  "managedRuntime": {
+    "input": "wineMono",
+    "source": "wine-mono-10.4.1-x86.msi",
+    "path": "Addons/wine-mono-10.4.1-x86.msi",
+    "version": "10.4.1",
+    "sha256": "071f4b2887e1c97a11d791ff3d65be9429eed6dec4c2708888bfd546ba358e23",
+    "url": "https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-x86.msi",
+    "sourceURL": "https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-src.tar.xz",
+    "reason": "Measured: EA's installer package runs a managed custom action; without a .NET runtime Windows Installer fails it with error 1603 and the install ends with status 1"
+  },
   "runtimeSource": {
     "input": "packaging",
     "source": "NFS2015Runtime",

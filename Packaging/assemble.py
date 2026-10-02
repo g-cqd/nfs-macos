@@ -78,6 +78,11 @@ def stage_game(resources, recipe, inputs, include_game_data):
         settings = list(recipe.get('prefixSettings', []))
         if seeded:
             settings += recipe.get('bundledPrefixSettings', [])
+        if seeded and 'managedRuntime' in recipe:
+            # The app installs this into its own prefix before EA's installer, which needs a .NET runtime.
+            declared = recipe['managedRuntime']
+            manifest['managedRuntime'] = {'file': declared['path'], 'sha256': declared['sha256'],
+                                          'version': declared['version']}
         manifest.update(referencesInstallation=not seeded, storeClient=recipe['storeClient'],
                         runtimeTuning=recipe.get('runtimeTuning', {}),
                         controllerDevices=recipe.get('controllerDevices', []),
@@ -90,6 +95,38 @@ def stage_game(resources, recipe, inputs, include_game_data):
         json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     (resources / 'game-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
+
+
+def stage_managed_runtime(resources, recipe, inputs):
+    """Ship Wine Mono beside the app's resources, verified against its pin, with its notice.
+
+    Only the bundled edition installs it, into the prefix it owns; an import app runs in the
+    player's own prefix and never carries it. The notice names the exact upstream release and
+    where its complete source is published, as the component's licences require.
+    """
+    declared = recipe.get('managedRuntime')
+    if declared is None:
+        return None
+    source = inputs[declared['input']] / declared['source']
+    root = inputs[declared['input']]
+    if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(root.resolve()):
+        raise ValueError('Missing or linked managed runtime installer: ' + declared['source'])
+    if digest(source) != declared['sha256']:
+        raise ValueError('The managed runtime installer does not match its pin')
+    clone(source, resources / declared['path'])
+    notice = ('Wine Mono ' + declared['version'] + '\n\n'
+              'The .NET runtime Wine ships as a free replacement for Microsoft .NET. This app installs it '
+              'unchanged into its own Windows folder, because the EA app installer runs a managed '
+              'custom action that cannot start without one.\n\n'
+              'Installer: ' + declared['path'] + ' (SHA-256 ' + declared['sha256'] + ')\n'
+              'Downloaded from: ' + declared['url'] + '\n'
+              'Complete corresponding source: ' + declared['sourceURL'] + '\n'
+              'Wine Mono is free software made of components under several free licences. Their texts '
+              'are in the source release named above, which is the authority for them.\n')
+    (resources / 'Licenses').mkdir(exist_ok=True)
+    (resources / 'Licenses' / 'wine-mono.txt').write_text(notice)
+    return {'version': declared['version'], 'sha256': declared['sha256'], 'url': declared['url'],
+            'sourceURL': declared['sourceURL']}
 
 
 def stage_runtime_source(resources, recipe, inputs):
@@ -170,8 +207,12 @@ def assemble(recipe, inputs, destination, include_game_data):
         stage_resources(recipe['defaults'], inputs, resources / 'Defaults')
         revisions = collect_sources(resources, inputs)
         stage_runtime_source(resources, recipe, inputs)
+        managed = stage_managed_runtime(resources, recipe, inputs) if include_game_data else None
         stage_cache_key(resources, recipe, inputs, PINS['sources']['mtld3d']['revision'])
-        stage_metadata(contents, recipe, runtime_provenance(recipe, revisions), include_game_data)
+        provenance = runtime_provenance(recipe, revisions)
+        if managed:
+            provenance['managedRuntime'] = managed
+        stage_metadata(contents, recipe, provenance, include_game_data)
         if destination.exists():
             raise FileExistsError('Output appeared during assembly; preserving it')
         app.rename(destination)
