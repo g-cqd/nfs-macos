@@ -36,12 +36,7 @@ package struct RendererSelection: Codable, Equatable, Sendable {
       throw .operation("A renderer backend must be a plain lowercase name: \(backend)")
     }
     if let executable {
-      guard (1...64).contains(executable.utf8.count), executable.hasSuffix(".exe"),
-        executable.utf8.allSatisfy({
-          (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
-            || $0 == 46 || $0 == 95 || $0 == 45
-        })
-      else {
+      guard Self.isExecutableName(executable) else {
         throw .operation("A renderer rule applies to one Windows executable: \(executable)")
       }
     }
@@ -50,6 +45,15 @@ package struct RendererSelection: Codable, Equatable, Sendable {
     else {
       throw .operation("The bundle declares an unusable renderer reason.")
     }
+  }
+
+  /// Whether a name is one plain Windows executable file name, such as `NFS16.exe`.
+  static func isExecutableName(_ name: String) -> Bool {
+    (1...64).contains(name.utf8.count) && name.hasSuffix(".exe")
+      && name.utf8.allSatisfy({
+        (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+          || $0 == 46 || $0 == 95 || $0 == 45
+      })
   }
 
   /// One compatibility-database rule line.
@@ -67,9 +71,15 @@ package struct RendererSelection: Codable, Equatable, Sendable {
   }
 
   /// Renders the complete `WINE_COMPATDB` value for a game's declared selections.
-  package static func compatibilityDatabase(_ selections: [RendererSelection], kind: GameKind)
-    throws(LauncherError) -> String
-  {
+  ///
+  /// `environments` add per-program environment variables. An environment for a program that
+  /// already has a rule here joins that rule's line, so each program keeps exactly one rule, and
+  /// one for a program with no rule gets a rule of its own. With none, the text is what it was
+  /// before environments existed.
+  package static func compatibilityDatabase(
+    _ selections: [RendererSelection], kind: GameKind,
+    environments: [ExecutableEnvironment] = []
+  ) throws(LauncherError) -> String {
     guard (1...16).contains(selections.count) else {
       throw .operation("A bundle needs between one and sixteen renderer rules.")
     }
@@ -85,6 +95,7 @@ package struct RendererSelection: Codable, Equatable, Sendable {
       }
       lines.append(selection.rule(name: "\(kind.rawValue)-\(index)"))
     }
+    try ExecutableEnvironment.attach(environments, to: &lines, selections: selections, kind: kind)
     return lines.joined(separator: "\n")
   }
 }
