@@ -58,7 +58,7 @@
         "x87Sidecar"
       ],
       "pending": true,
-      "blockedBy": "Build the Vulkan-preserving CX 11.0 runtime carrying the WINE_TF_* gate at ~/Games/NFS2015-debug/src/wine-cx/runtime-dxvk, then pin bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here",
+      "blockedBy": "Build the Vulkan-preserving CX 11.0 runtime carrying the WINE_TF_* gate, then pin its bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here. Note that the wine-cx tree installs into <runtime>/wine, so the recipe runtime input needs that suffix; the D3DMetal build at src/wine-cx/runtime/wine is complete but ships dxgi/{dxmt,gptk,wined3d} and no dxvk",
       "files": {}
     }
   }
