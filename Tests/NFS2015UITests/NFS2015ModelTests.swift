@@ -11,6 +11,7 @@ struct NFS2015ModelTests {
   final class FakeService: NFS2015Serving, @unchecked Sendable {
     var snapshot: NFS2015Snapshot
     var failure: (any Error)?
+    var progress: PrefixSeed.Progress?
     private(set) var performed: [NFS2015Operation] = []
 
     init(snapshot: NFS2015Snapshot) { self.snapshot = snapshot }
@@ -22,6 +23,8 @@ struct NFS2015ModelTests {
     }
 
     func logLocation() async -> URL? { nil }
+
+    func preparationProgress() async -> PrefixSeed.Progress? { progress }
   }
 
   struct FakeRosetta: RosettaProviding {
@@ -239,6 +242,35 @@ struct NFS2015ModelTests {
     #expect(importing.statusMessage == "Checking your installation…")
     await carrying.run()
     #expect(!carrying.statusMessage.contains("first use"))
+  }
+
+  @Test
+  func `shows how many game files the first start has copied`() async {
+    let (model, service) = bundled(setup: nil)
+    // The Windows folder is still being created: an indeterminate wait, the plain explanation.
+    service.progress = PrefixSeed.Progress(files: 0, totalFiles: 144, bytes: 0, totalBytes: 1000)
+    await model.refreshPreparation()
+    #expect(model.preparationFraction == nil)
+    #expect(model.statusMessage.contains("creating its Windows folder"))
+
+    service.progress = PrefixSeed.Progress(files: 36, totalFiles: 144, bytes: 250, totalBytes: 1000)
+    await model.refreshPreparation()
+    #expect(model.preparationFraction == 0.25)
+    #expect(model.statusMessage.contains("copied 36 of 144 game files (25 %)"))
+    #expect(model.statusMessage.contains("few minutes"))
+
+    // Once the helper has finished, the line goes back to the ordinary status and no bar remains.
+    await model.run()
+    #expect(model.preparationFraction == nil)
+    #expect(model.statusMessage == "Ready to play")
+  }
+
+  @Test
+  func `an app that carries no game never shows a copy progress`() async {
+    let (model, service) = bundled(setup: nil, carriesGame: false)
+    service.progress = PrefixSeed.Progress(files: 36, totalFiles: 144, bytes: 250, totalBytes: 1000)
+    await model.refreshPreparation()
+    #expect(model.statusMessage == "Checking your installation…")
   }
 
   @Test

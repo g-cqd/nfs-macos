@@ -16,6 +16,27 @@ package struct PrefixSeed {
     package let bytes: Int
   }
 
+  /// How far a first-launch preparation has got, read from its staging folder alone.
+  package struct Progress: Equatable, Sendable {
+    /// Game files that have reached the staged folder at their full size.
+    package let files: Int
+    package let totalFiles: Int
+    package let bytes: Int
+    package let totalBytes: Int
+
+    package init(files: Int, totalFiles: Int, bytes: Int, totalBytes: Int) {
+      self.files = files
+      self.totalFiles = totalFiles
+      self.bytes = bytes
+      self.totalBytes = totalBytes
+    }
+
+    /// The share of the payload staged so far, from 0 to 1; 0 when the payload is empty.
+    package var fraction: Double {
+      totalBytes > 0 ? min(1, Double(bytes) / Double(totalBytes)) : 0
+    }
+  }
+
   /// Free space the preparation must leave on the player's volume.
   static let reserve = 1_000_000_000
 
@@ -38,6 +59,34 @@ package struct PrefixSeed {
 
   /// Whether the preparation completed on an earlier launch.
   package var isSeeded: Bool { files.fileExists(atPath: recordURL.path) }
+
+  /// How many of the manifest's files the running preparation has staged, or nil when none is
+  /// running. It only looks: a file counts once it is a regular file of exactly its manifest
+  /// size, so a half-written file, a link or a missing file does not, and nothing is read or
+  /// changed. The copy hashes each file right after it appears, so this is at most one file ahead
+  /// of the verification.
+  /// - Complexity: O(manifest files), one `lstat` each.
+  package func progress() -> Progress? {
+    let stage = paths.support.appendingPathComponent(".preparing")
+    var isDirectory: ObjCBool = false
+    guard files.fileExists(atPath: stage.path, isDirectory: &isDirectory), isDirectory.boolValue,
+      let plan = manifest.client
+    else { return nil }
+    let game = stage.appendingPathComponent("Prefix/drive_c").appendingPathComponent(plan.gameRoot)
+    var staged = (files: 0, bytes: 0)
+    for file in manifest.gameFiles {
+      let url = game.appendingPathComponent(file.path)
+      guard let attributes = try? files.attributesOfItem(atPath: url.path),
+        attributes[.type] as? FileAttributeType == .typeRegular,
+        (attributes[.size] as? NSNumber)?.intValue == file.size
+      else { continue }
+      staged.files += 1
+      staged.bytes += file.size
+    }
+    return Progress(
+      files: staged.files, totalFiles: manifest.gameFiles.count, bytes: staged.bytes,
+      totalBytes: manifest.gameFiles.reduce(0) { $0 + $1.size })
+  }
 
   package static func availableCapacity(at url: URL) -> Int? {
     let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])

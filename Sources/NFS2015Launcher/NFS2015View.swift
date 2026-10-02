@@ -152,7 +152,11 @@ struct NFS2015View: View {
         .disabled(model.isBusy)
         Divider()
         HStack {
-          if model.isBusy { ProgressView().controlSize(.small) }
+          if let fraction = model.preparationFraction {
+            ProgressView(value: fraction).frame(width: 120)
+          } else if model.isBusy {
+            ProgressView().controlSize(.small)
+          }
           Text(model.statusMessage).font(.callout)
             .foregroundStyle(model.errorMessage == nil ? .secondary : .primary)
           Spacer()

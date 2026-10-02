@@ -196,6 +196,80 @@ struct PrefixSeedTests {
     #expect(initializations == 0)
   }
 
+  // MARK: Progress of the first-launch copy
+
+  /// Writes `text` where the running preparation stages a game file, as the copy does.
+  private func stage(_ path: String, _ text: String, in fixture: SeededFixture) throws {
+    let url = fixture.paths.support
+      .appendingPathComponent(".preparing/Prefix/drive_c").appendingPathComponent(
+        SeededFixture.gameRoot
+      ).appendingPathComponent(path)
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(text.utf8).write(to: url)
+  }
+
+  @Test
+  func `reports no progress while no preparation is staged`() throws {
+    let fixture = try SeededFixture()
+    defer { fixture.remove() }
+    #expect(PrefixSeed(paths: fixture.paths, manifest: fixture.manifest).progress() == nil)
+  }
+
+  @Test
+  func `counts only staged files of exactly their manifest size`() throws {
+    let fixture = try SeededFixture()
+    defer { fixture.remove() }
+    let seed = PrefixSeed(paths: fixture.paths, manifest: fixture.manifest)
+    let contents = SeededFixture.contents
+    let totalBytes = contents.values.reduce(0) { $0 + $1.utf8.count }
+    // The staging folder exists before the Windows folder is made: nothing is copied yet.
+    try FileManager.default.createDirectory(
+      at: fixture.paths.support.appendingPathComponent(".preparing/Prefix"),
+      withIntermediateDirectories: true)
+    #expect(
+      seed.progress()
+        == PrefixSeed.Progress(
+          files: 0, totalFiles: contents.count, bytes: 0, totalBytes: totalBytes))
+
+    try stage("NFS16.exe", contents["NFS16.exe"]!, in: fixture)
+    try stage("Core/Activation64.dll", "half of it", in: fixture)  // still being written
+    let linked = fixture.paths.support.appendingPathComponent(
+      ".preparing/Prefix/drive_c/\(SeededFixture.gameRoot)/Support/mnfst.txt")
+    try FileManager.default.createDirectory(
+      at: linked.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      at: linked, withDestinationURL: fixture.paths.template.appendingPathComponent("NFS16.exe"))
+    let partial = try #require(seed.progress())
+    #expect(partial.files == 1)
+    #expect(partial.bytes == contents["NFS16.exe"]!.utf8.count)
+    #expect(partial.totalFiles == contents.count && partial.totalBytes == totalBytes)
+    #expect(partial.fraction > 0 && partial.fraction < 1)
+
+    try FileManager.default.removeItem(at: linked)
+    for (path, text) in contents { try stage(path, text, in: fixture) }
+    #expect(
+      seed.progress()
+        == PrefixSeed.Progress(
+          files: contents.count, totalFiles: contents.count, bytes: totalBytes,
+          totalBytes: totalBytes))
+    #expect(seed.progress()?.fraction == 1)
+  }
+
+  @Test
+  func `sees the staging folder while the prefix is created and not once it is published`() throws {
+    let fixture = try SeededFixture()
+    defer { fixture.remove() }
+    let seed = PrefixSeed(paths: fixture.paths, manifest: fixture.manifest)
+    var seen: [PrefixSeed.Progress?] = []
+    _ = try seed.prepare { prefix in
+      seen.append(seed.progress())
+      try Self.wineboot(prefix)
+    }
+    #expect(seen.count == 1 && seen[0]?.files == 0 && seen[0]?.totalFiles == 4)
+    #expect(seed.progress() == nil)
+  }
+
   @Test
   func `refuses a manifest that does not seed a prefix`() throws {
     let fixture = try SeededFixture()

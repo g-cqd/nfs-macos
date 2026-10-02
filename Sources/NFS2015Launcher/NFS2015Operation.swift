@@ -1,4 +1,5 @@
 import Foundation
+import LauncherCore
 import NFS2015Core
 
 /// One helper transaction; a request carries settings only for the operation that applies them.
@@ -38,4 +39,10 @@ extension NFS2015Operation {
 protocol NFS2015Serving: Sendable {
   func perform(_ operation: NFS2015Operation) async throws -> NFS2015Snapshot
   func logLocation() async -> URL?
+  /// How far a running first-launch preparation has got; nil when none is staged.
+  func preparationProgress() async -> PrefixSeed.Progress?
+}
+
+extension NFS2015Serving {
+  func preparationProgress() async -> PrefixSeed.Progress? { nil }
 }
