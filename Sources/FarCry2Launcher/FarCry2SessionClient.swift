@@ -53,6 +53,10 @@ actor FarCry2SessionClient: FarCry2Serving {
     case .backups(let request):
       arguments.append("--backups")
       data = try JSONEncoder().encode(request)
+    case .shaderCache(let request):
+      _ = try request.file()
+      arguments.append("--shader-cache")
+      data = try JSONEncoder().encode(request)
     case .importGame(let source): arguments += ["--import-game", "--request", source.path]
     }
     if let data {

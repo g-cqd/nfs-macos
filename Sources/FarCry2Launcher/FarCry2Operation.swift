@@ -7,6 +7,7 @@ enum FarCry2Operation: Sendable {
   case play(FarCry2LaunchRequest)
   case configure(FarCry2LaunchRequest)
   case backups(FarCry2BackupRequest)
+  case shaderCache(FarCry2ShaderCacheRequest)
   case importGame(URL)
 
   var launchRequest: FarCry2LaunchRequest? {

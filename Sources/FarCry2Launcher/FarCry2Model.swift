@@ -10,7 +10,7 @@ import SwiftUI
 final class FarCry2Model {
   enum Action {
     case helper(FarCry2Operation)
-    case importGame, importSetup, exportSetup
+    case importGame, importSetup, exportSetup, exportShaderCache, importShaderCache
     case installRosetta, refreshRosetta, openLog
   }
 
@@ -21,12 +21,14 @@ final class FarCry2Model {
   private(set) var installation: InstalledGame?
   private(set) var backups: [FarCry2Backup] = []
   private(set) var keptAside = 0
+  private(set) var shaderCache = ShaderCacheStatus(state: .unavailable)
   var settings = FarCry2Settings()
   var tab = "Play"
   var backupSelection = ""
   var discardConfirmation = false
   var restoreConfirmation = false
   var removalConfirmation = false
+  var shaderResetConfirmation = false
   let rosetta: RosettaSetup
   let service: any FarCry2Serving
   private var appliedSettings = FarCry2Settings()
@@ -108,7 +110,8 @@ final class FarCry2Model {
       switch currentAction {
       case .helper(let operation):
         if let request = operation.launchRequest { try request.settings.validate() }
-        load(try await service.perform(operation))
+        let snapshot = try await service.perform(operation)
+        if case .shaderCache = operation { updateShaderCache(snapshot) } else { load(snapshot) }
       case .installRosetta, .refreshRosetta:
         guard hasGameData else {
           phase = .needsGameData
@@ -118,6 +121,8 @@ final class FarCry2Model {
       case .importGame: try await importGameFolder()
       case .importSetup: try await importSetupFile()
       case .exportSetup: try await exportSetupFile()
+      case .exportShaderCache: try await exportShaderCacheFile()
+      case .importShaderCache: try await importShaderCacheFile()
       case .openLog: break
       }
       try Task.checkCancellation()
@@ -132,6 +137,7 @@ final class FarCry2Model {
     installation = snapshot.installation
     backups = snapshot.backups
     keptAside = snapshot.keptAside
+    updateShaderCache(snapshot)
     settings = snapshot.settings
     if settings.values["resolution"] == nil, let detectedDisplay {
       settings.values["resolution"] = detectedDisplay.id
@@ -140,6 +146,10 @@ final class FarCry2Model {
     if !backups.contains(where: { $0.id == backupSelection }) {
       backupSelection = backups.first?.id ?? ""
     }
+  }
+
+  func updateShaderCache(_ snapshot: FarCry2Snapshot) {
+    shaderCache = snapshot.shaderCache ?? ShaderCacheStatus(state: .unavailable)
   }
 
   func finishGameImport(_ snapshot: FarCry2Snapshot) {
@@ -213,7 +223,7 @@ final class FarCry2Model {
   }
 
   private func launchRequest() -> FarCry2LaunchRequest { .init(settings: settings) }
-  private func enqueue(_ action: Action) {
+  func enqueue(_ action: Action) {
     guard !isBusy else { return }
     self.action = action
     phase = isPlay(action) ? .playing : .preparing

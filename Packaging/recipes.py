@@ -233,6 +233,11 @@ def validate_recipe(recipe):
     for key in ['supportsSP', 'supportsMP']:
         if key in recipe and not isinstance(recipe[key], bool):
             raise ValueError('Launch support flags must be Boolean')
+    if 'shaderCache' in recipe:
+        if not isinstance(recipe['shaderCache'], bool):
+            raise ValueError('The shaderCache flag must be Boolean')
+        if recipe['shaderCache'] and 'mtld3dSource' not in recipe.get('inputs', {}):
+            raise ValueError('A persistent shader cache needs the mtld3dSource input')
     if not isinstance(recipe.get('inputs'), dict) or not recipe['inputs']:
         raise ValueError('Recipe needs input roots')
     for key, value in recipe['inputs'].items():

@@ -12,8 +12,9 @@ import uuid
 from payload import inventory
 from recipes import load_recipe, resolve_inputs, supports_edition
 from rosetta_request import build_rosetta_request
-from runtime_inputs import (PROJECT, clone, collect_sources, digest, runtime_provenance,
+from runtime_inputs import (PINS, PROJECT, clone, collect_sources, digest, runtime_provenance,
                             stage_runtime, verify_hashes, verify_inputs)
+from shader_cache_key import stage_cache_key
 
 
 def stage_resources(items, inputs, destination):
@@ -153,6 +154,7 @@ def assemble(recipe, inputs, destination, include_game_data):
         stage_resources(recipe['defaults'], inputs, resources / 'Defaults')
         revisions = collect_sources(resources, inputs)
         stage_runtime_source(resources, recipe, inputs)
+        stage_cache_key(resources, recipe, inputs, PINS['sources']['mtld3d']['revision'])
         stage_metadata(contents, recipe, runtime_provenance(recipe, revisions), include_game_data)
         if destination.exists():
             raise FileExistsError('Output appeared during assembly; preserving it')

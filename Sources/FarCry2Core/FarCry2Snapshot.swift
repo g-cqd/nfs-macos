@@ -25,14 +25,17 @@ package struct FarCry2Snapshot: Codable, Equatable, Sendable {
   package let backups: [FarCry2Backup]
   /// Folders from an earlier setup that conflicted with saved data and were kept in `Saves/FarCry2/Conflicts`.
   package let keptAside: Int
+  /// The saved shader cache; nil in a state file written before the cache existed.
+  package let shaderCache: ShaderCacheStatus?
   package init(
     settings: FarCry2Settings, profile: FarCry2ProfileState, installation: InstalledGame?,
-    backups: [FarCry2Backup], keptAside: Int = 0
+    backups: [FarCry2Backup], keptAside: Int = 0, shaderCache: ShaderCacheStatus? = nil
   ) {
     self.settings = settings
     self.profile = profile
     self.installation = installation
     self.backups = backups
     self.keptAside = keptAside
+    self.shaderCache = shaderCache
   }
 }
