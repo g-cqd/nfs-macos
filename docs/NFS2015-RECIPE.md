@@ -63,72 +63,68 @@ No credential, cookie or account file is ever read. If either signal does not ap
 | Setting | Value | Status |
 |---|---|---|
 | `WINEDLLOVERRIDES` | `IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml=` | `IGOProxy32` verified: EA's 32-bit overlay faults in wined3d |
-| `WINE_COMPATDB` | `dxgi=dxmt` for the game, `dxgi=gptk` for the client | Measured; see below |
+| `WINE_COMPATDB` | `dxgi=dxmt`, for both the game and the client | Measured; see below |
 | `WINE_TF_EMULATION` | `1` | Required; recipe configuration |
 | `WINE_TF_MAX_STEPS` | `0` | Required; recipe configuration |
 | `WINE_TF_MAX_NS` | `0` | Required; recipe configuration |
 
-### Direct3D: dxmt for the game, D3DMetal for the client
+### Direct3D: dxmt, for both the game and the client
 
 `NFS16.exe` is a 64-bit Direct3D 11 binary. mtld3d implements Direct3D 9 and 8, so it plays no
-part in this game's renderer: the recipe declares no `renderer`, `rendererEvidence` or
-`mtld3dSource` input, the packager neither verifies nor stages mtld3d for it, and the bundle
-carries no mtld3d source archive.
+part here: the recipe declares no `renderer`, `rendererEvidence` or `mtld3dSource` input, the
+packager neither verifies nor stages mtld3d, and the bundle carries no mtld3d source archive.
 
-The backend is chosen per executable, which is what lets one runtime serve both programs:
+Both programs are served by **dxmt**, a Metal-backed Direct3D 11 implementation, selected per
+executable:
 
 | Executable | Backend | Why |
 |---|---|---|
 | `NFS16.exe` | `dxmt` | Measured: reaches menus and compiles shaders, where D3DMetal faults |
-| `EADesktop.exe` | `gptk` (D3DMetal) | Measured: the EA client renders its interface correctly |
+| `EADesktop.exe` | `dxmt` | Measured: renders the full client interface with none of the shared-handle failures D3DMetal logs |
 
-**This is the second reversal on this branch, and both were caused by naming a backend before
+**This settled after two reversals, and both had the same cause: naming a backend before
 measuring it.** The first choice was D3DMetal, reasoned from the runtime selecting it for 64-bit
-DXGI. The second was DXVK, after D3DMetal was measured to fault. The settled answer is `dxmt`,
-which was present in the runtime the whole time.
+DXGI. The second was DXVK, after D3DMetal was measured to fault. The answer was `dxmt`, which was
+in the runtime the whole time.
 
-What was measured, by the startup worker, on the CX 11.0 runtime at `src/wine-cx/runtime/wine`:
+What was measured, on the CX 11.0 runtime at `src/wine-cx/runtime/wine`:
 
-- With **D3DMetal**: the game clears Denuvo — zero trap-flag stops, no `-6` exit — then dies at
+- **D3DMetal, game:** clears the protection — zero trap-flag stops, no `-6` exit — then dies at
   about 2:52 with `c0000005`, a wild-pointer read at `NFS16.exe` RVA `0x341FB95`, immediately
   after the runtime logs `[D3DMetal] Unsupported: D3D11 timestamp query`. Frostbite uses GPU
   timestamp queries.
-- With **dxmt** for `NFS16.exe` and `gptk` left to `EADesktop.exe`: the compatibility database
-  logs `dxgi = dxmt` and `dxgi = gptk` respectively, `lsof` confirms
-  `lib/wine/dxgi/dxmt/x86_64-windows/d3d11.dll` is mapped, there is no fault at that RVA, memory
-  grows from 128 MB to 1053 MB, 3.4 MB of Metal shaders compile, and the game reaches the title
-  and controller-layout screens. Full screen came up at 2560×1600 matching
-  `PROFILEOPTIONS_profile`, which confirms the `RetinaMode` fix works rather than merely being
-  set.
+- **dxmt, game:** no fault at that address, 3.4 MB of compiled Metal shaders, `lsof` confirms
+  `lib/wine/dxgi/dxmt/x86_64-windows/d3d11.dll` is the mapped library, full screen at 2560×1600
+  matching the game's own options file, title and controller-layout screens reached.
+- **D3DMetal, client:** worked, but logged 4–10 `Could not get offscreen texture shared handle`
+  errors per session, and those dropped the EA session and killed the game.
+- **dxmt, client:** full Home interface in 30 s — sidebar, store banner, artwork, avatar, the
+  game under Installed, signed in — with **zero** such errors.
 
 The mechanism of the D3DMetal fault remains **inferred**: that RVA was not disassembled and sits
-inside the protected image. The choice between the two backends is not inferred — one reaches a
-menu and the other faults.
+inside the protected image. The choice between backends is not inferred.
 
-Because that is a measured failure rather than a slow path, `gptk` is *denied* rather than merely
-unselected. `GameKind.nfs2015.deniedRendererBackends` records it with the reason;
+Because the game's failure was measured rather than suspected, `gptk` is *denied* rather than
+merely unselected. `GameKind.nfs2015.deniedRendererBackends` records it with the reason;
 `RendererSelection.compatibilityDatabase` refuses it; `recipes.py` refuses to load a recipe
-naming it; manifest validation refuses it on the player's machine. The denial is scoped two
-ways, and both matter:
+naming it; manifest validation refuses it on the player's machine. The denial is scoped two ways,
+and both still matter even though nothing selects it now:
 
-- **Per game.** `gptk` stays a legitimate choice for a title with no such measurement.
-- **Per executable.** The denial applies to a rule that would serve the game's own executable,
-  whether it names `NFS16.exe` or is a catch-all. A rule naming another program is a separate
-  process judged on its own evidence — which is exactly how `EADesktop.exe` keeps D3DMetal. A
-  catch-all rule is therefore refused for this recipe, so no future edit can quietly route the
-  game back onto a faulting backend.
+- **Per game.** `gptk` stays a legitimate choice for a title with no such measurement, and is
+  still the right backend for others.
+- **Per executable.** The denial applies to any rule that would serve the game's own executable,
+  named or catch-all. A rule naming another program is judged on its own evidence — which is how
+  the client's rule was free to differ before it was measured onto dxmt. A catch-all is refused
+  for this recipe, so no later edit can quietly route the game back onto a faulting backend.
 
-Retention follows the backends. The packager prunes a fixed list, and `runtimeRetention` keeps
-`lib/wine/dxgi/dxmt` and `lib/wine/dxgi/gptk` plus the D3DMetal framework and `libd3dshared`
-that the client's backend needs. `dxmt` itself needs none of those: it carries its own
-`winemetal.so` and links no Apple framework.
+Retention follows the backends, and now needs only one path, `lib/wine/dxgi/dxmt`. dxmt carries
+its own `winemetal.so` and links no Apple framework.
 
-**The Apple licensing question is therefore back.** Retaining `D3DMetal.framework` for the EA
-client means redistributing an Apple-signed framework under Apple's licence. It is unresolved
-and is a decision for whoever owns distribution, not something settled here. If the client turns
-out to render acceptably on `dxmt` or `wined3d`, the framework leaves the bundle and the question
-goes away — that is one measurement, not a code change, because the backend is recipe
-configuration.
+**The Apple licensing question is closed, by measurement rather than by a licence judgement.**
+Nothing selects `gptk`, so `D3DMetal.framework` and `libd3dshared.dylib` are no longer retained
+and no Apple-signed artifact ships. The `vendorRuntimePaths` mechanism that made retaining one
+safe stays in the packager, unused by any recipe, for whenever a vendor-signed artifact does have
+to be kept — and the findings that motivated it still stand for any recipe that does so.
 
 ### Measuring the runtime instead of trusting it
 

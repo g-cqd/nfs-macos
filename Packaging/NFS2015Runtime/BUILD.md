@@ -80,9 +80,8 @@ is pinned by SHA-256 there:
 
 | Component | Version | Source | Used by |
 |---|---|---|---|
-| dxmt | v0.80 | `3Shain/dxmt`, release asset `dxmt-v0.80-builtin.tar.gz` | The Direct3D 11 backend that serves `NFS16.exe` |
-| Apple D3DMetal (Game Porting Toolkit) | 4.0 beta 2 | Apple, mirrored as a release asset because Apple's download needs an Apple ID session | The `gptk` backend that serves `EADesktop.exe` |
+| dxmt | v0.80 | `3Shain/dxmt`, release asset `dxmt-v0.80-builtin.tar.gz` | The Direct3D 11 backend that serves both `NFS16.exe` and `EADesktop.exe` |
+| Apple D3DMetal (Game Porting Toolkit) | 4.0 beta 2 | Apple, mirrored as a release asset because Apple's download needs an Apple ID session | The `gptk` backend; **not selected and not shipped by this recipe** |
 | mtld3d | v0.7.0 | `athei/mtld3d` | Direct3D 9; **not used by this title** and not retained in this bundle |
 
-See [NOTICE.md](NOTICE.md) for the licence position, including the unresolved question about
-redistributing Apple's framework.
+Only dxmt is retained in the bundle. See [NOTICE.md](NOTICE.md) for the licence position.

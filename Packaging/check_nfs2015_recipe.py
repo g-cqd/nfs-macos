@@ -40,16 +40,15 @@ assert 'dxmtDXGI' in recipe['requiredRuntimeCapabilities']
 assert recipe['renderers'], 'A referencing D3D11 recipe must say which backend serves it'
 rules = {r.get('executable'): r for r in recipe['renderers']}
 assert rules['NFS16.exe']['backend'] == 'dxmt', 'The game is served by the measured backend'
-assert rules['EADesktop.exe']['backend'] == 'gptk', 'The client keeps its own measured backend'
+assert rules['EADesktop.exe']['backend'] == 'dxmt', 'The client is served by it too, measured'
 for rule in recipe['renderers']:
     assert rule['api'] == 'dxgi' and rule['reason'], rule
 assert None not in rules, 'No catch-all may silently serve the game a denied backend'
-# Every selected backend, and the Apple framework the client's backend needs, survives pruning.
-for name in ['lib/wine/dxgi/dxmt', 'lib/wine/dxgi/gptk', 'lib/external/D3DMetal.framework',
-             'lib/external/libd3dshared.dylib']:
-    assert name in recipe['runtimeRetention'], name
-assert set(recipe['vendorRuntimePaths']) == {'lib/external/D3DMetal.framework',
-                                             'lib/external/libd3dshared.dylib'}
+# Nothing selects D3DMetal, so no Apple-signed artifact is retained and none may be exempted.
+assert recipe['runtimeRetention'] == ['lib/wine/dxgi/dxmt'], recipe['runtimeRetention']
+assert 'vendorRuntimePaths' not in recipe, 'No vendor artifact is retained by this recipe'
+assert not any(r['backend'] == 'gptk' for r in recipe['renderers'])
+assert 'd3dmetalDXGI' not in recipe['requiredRuntimeCapabilities']
 
 # The runtime must actually carry what the recipe selects; a claim alone is not enough.
 verify_runtime_provides(recipe, resolve_inputs(recipe)['runtime'])
