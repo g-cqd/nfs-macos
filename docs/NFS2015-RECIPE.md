@@ -119,7 +119,20 @@ lib/external/libMoltenVK.dylib  lib/external/libvulkan.1.dylib  lib/external/vul
 ```
 
 Those names are **unconfirmed**: `src/wine-cx/runtime-dxvk` does not exist yet, so the layout
-has not been inspected. Retaining a path that does not exist is a no-op, and the pruning list
+has not been inspected. What has been inspected is the D3DMetal build beside it, which finished
+at `src/wine-cx/runtime/wine` — note the nested `wine` directory, so a recipe's `runtime` input
+needs that suffix. It reports `wine-11.0`, its `lib/wine/x86_64-unix/ntdll.so` does contain the
+`WINE_TF_EMULATION`, `WINE_TF_MAX_STEPS` and `WINE_TF_MAX_NS` strings, and it offers
+`lib/wine/dxgi/{dxmt,gptk,wined3d}` with **no `dxvk`**. That confirms both that the trap-flag
+gate is real in a built runtime and that a separate Vulkan-preserving build is genuinely
+required rather than a configuration change.
+
+It also means a third backend is sitting unused: `dxmt` is a Metal-backed Direct3D 11
+implementation already present in that runtime. It was tried once and produced no window, but
+that was before the trap-flag work let the game clear Denuvo at all, so the result says nothing
+about the renderer. Measuring it would cost one run and no new runtime, and if it implements
+timestamp queries it would remove the need for DXVK and MoltenVK entirely. That is a question
+for whoever owns the runtime, not a change made here. Retaining a path that does not exist is a no-op, and the pruning list
 does not currently name any DXVK path, so a wrong name here cannot delete the wrong thing — but
 check them against the runtime before trusting the first build.
 
