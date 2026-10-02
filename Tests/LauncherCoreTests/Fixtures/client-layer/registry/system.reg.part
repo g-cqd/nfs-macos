@@ -1,0 +1,20 @@
+[Software\\Classes\\Installer\\Products\\5802262C2DBA5E94A89B3D6D6A240C19] 1767225600
+#time=1dc7ab192810000
+"ProductName"="EA app"
+"Clients"=str(7):":\0"
+
+[Software\\Electronic Arts\\EA Desktop] 1767225600
+#time=1dc7ab192810000
+"ClientPath"="C:\\Program Files\\Electronic Arts\\EA Desktop\\EA Desktop\\EADesktop.exe"
+
+[Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Products\\5802262C2DBA5E94A89B3D6D6A240C19\\InstallProperties] 1767225600
+#time=1dc7ab192810000
+"InstallDate"="20260101"
+"LocalPackage"="C:\\windows\\Installer\\eaapp.msi"
+"Size"=hex:01,02,\
+  03,04
+
+[System\\ControlSet001\\Services\\EABackgroundService] 1767225600
+#time=1dc7ab192810000
+"ImagePath"=str(2):"C:\\Program Files\\Electronic Arts\\EA Desktop\\EA Desktop\\EABackgroundService.exe -start"
+

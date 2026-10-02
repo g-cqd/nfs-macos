@@ -1,0 +1,39 @@
+{
+  "accepted": [
+    "Program Files/Electronic Arts/EA Desktop/13.796.0.6309/EA Desktop/EADesktop.exe",
+    "Program Files/Electronic Arts/EA Desktop/EA Desktop?",
+    "Program Files/Electronic Arts/EA Desktop/13.796.0.6309/EA Desktop/legacyPM/EACore_App.ini",
+    "Program Files/Common Files/EAInstaller/EA app",
+    "ProgramData/Package Cache/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}v12.0.0.0/EAapp.msi",
+    "ProgramData/Package Cache/{b3468fcd-fa10-4a55-8d82-bed839e8189e}/EAappInstaller.exe",
+    "windows/Installer/eaapp.msi",
+    "windows/Installer/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}/ProductIcon.ico"
+  ],
+  "rejected": [
+    "ProgramData/EA Desktop/machine.ini",
+    "ProgramData/EA Desktop/Logs/EADesktop.log",
+    "users/crossover/AppData/Local/Electronic Arts/EA Desktop/cache.bin",
+    "Program Files/EA Games/Need for Speed/NFS16.exe",
+    "Program Files/Electronic Arts/EA Desktop/user_123.ini",
+    "Program Files/Electronic Arts/EA Desktop/other.ini",
+    "Program Files/Electronic Arts/EA Desktop/13.796.0.6309/EA Desktop/machine.ini",
+    "program files/electronic arts/EA Desktop/MACHINE.INI",
+    "Program Files/Electronic Arts/EA Desktop/Cookies",
+    "Program Files/Electronic Arts/EA Desktop/EA.lnk",
+    "Program Files/Electronic Arts/EA Desktop/trace.log",
+    "Program Files/Electronic Arts/EA Desktop/store.sqlite",
+    "Program Files/Electronic Arts/EA Desktop/archive.zip",
+    "Program Files/Electronic Arts/EA Desktop/user.reg",
+    "Program Files/Electronic Arts/../evil",
+    "Program Files/Electronic Arts//double",
+    "Program Files/Electronic Arts/./dot",
+    "Program Files/Electronic Arts/a\\b",
+    "/Program Files/Electronic Arts/EA Desktop/EADesktop.exe",
+    "windows/system32/kernel32.dll",
+    "windows/Installer.bak/x",
+    "ProgramData/Package Cache/{b3468fcd-fa10-4a55-8d82-bed839e8189e}/state.rsm",
+    "ProgramData/Microsoft/Windows/Start Menu/Programs/EA/EA.lnk",
+    "Program Files/Common Files/Other/x.dll",
+    ""
+  ]
+}

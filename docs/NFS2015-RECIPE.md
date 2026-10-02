@@ -238,6 +238,31 @@ every pinned file matches and the whole payload inventory equals `inventorySHA25
 is the supported way to build: the packager would otherwise write a `.zip` and a `.sha256`, and the
 audit refuses either inside the app.
 
+## The client layer (the complete portable app)
+
+A bundled app can carry EA's own client, pre-installed and never signed in, as a *client layer*: the
+files and registry entries EA's official installer creates, captured once at build time and applied to the
+app's new prefix on first start, so the player needs no installer. The recipe declares it in `clientLayer`:
+
+```json
+"clientLayer": { "input": "clientLayer", "path": "ClientLayer",
+  "layerSHA256": "<digest of client-layer.json>",
+  "client": { "name": "EA app", "version": "...", "installer": {fileName, sha256, bytes, signer}, "package": {fileName, sha256, bytes} } }
+```
+
+`input` names the layer folder (built by `tools/capture-client-layer.py`, see
+[NFS2015.md §15](NFS2015.md#15-the-complete-portable-app-the-ea-client-comes-with-it)); `layerSHA256` pins every byte of
+it; `client` pins the installer and MSI it was made from, and must equal the layer's own record. It is valid only in a
+recipe that has a bundled edition. The packager copies the folder to `Contents/Resources/<path>` after
+`client_layer.verify_layer` accepts it, writes `clientLayer` into `game-manifest.json` (so it is part of the manifest
+version) and a notice to `Licenses/ea-client.txt`; the audit repeats the check on the finished app and refuses the
+folder, the notice or the manifest entry in any app whose recipe has none.
+
+At first start the session applies it after Wine Mono and before the game is copied. Readiness is unchanged: a seeded
+prefix has the client but no `AppData/Local/Electronic Arts/EA Desktop` folder, so the starter shows **Open EA App**
+until the client has started once, exactly as it did after EA's installer, and the readiness log rule of the
+Readiness section above applies to the client that the layer installed.
+
 ## What is verified and what is not
 
 Verified: the game reaches its title and controller-layout screens on `dxmt`, at 2560×1600 full

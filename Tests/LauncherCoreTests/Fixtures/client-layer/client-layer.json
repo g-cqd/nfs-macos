@@ -1,0 +1,154 @@
+{
+ "client": {
+  "installer": {
+   "bytes": 11,
+   "fileName": "Setup.exe",
+   "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "signer": "Example Publisher"
+  },
+  "name": "EA app",
+  "package": {
+   "bytes": 13,
+   "fileName": "Setup-1.2.3.4.msi",
+   "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "version": "1.2.3.4"
+ },
+ "entries": [
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Common Files/EAInstaller"
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Common Files/EAInstaller/EA app",
+   "xattrs": {
+    "user.DOSATTRIB": "MHgy"
+   }
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts"
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop"
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4"
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop"
+  },
+  {
+   "kind": "file",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/EADesktop.exe",
+   "sha256": "b9d1569691bc202bad2992e9427674f7ac506d029fb1cefdbe8d80f933e279e9",
+   "size": 9
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/legacyPM"
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/legacyPM/EACore_App.ini",
+   "sha256": "0dd123d51af9c04bb60f3b190c61d9623b3a207d49772dd70d6642a706471294",
+   "size": 33
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/qml"
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/qml/main.qml",
+   "sha256": "8ef8580725b33350c09a34e05f255d0f1ff0b03b9c3bd4a55ee62d7e383db66b",
+   "size": 14
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "Program Files/Electronic Arts/EA Desktop/EA Desktop?",
+   "xattrs": {
+    "user.WINEREPARSE": "DAAAoHJlcGFyc2U="
+   }
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "ProgramData/Package Cache"
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "ProgramData/Package Cache/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}v12.0.0.0"
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "ProgramData/Package Cache/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}v12.0.0.0/Setup-1.2.3.4.msi",
+   "sha256": "88604a9e3a4eb0af3449c6daafe3474d34fe821e69b119c2cd688b0354ea2d5f",
+   "size": 50
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "ProgramData/Package Cache/{b3468fcd-fa10-4a55-8d82-bed839e8189e}"
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "ProgramData/Package Cache/{b3468fcd-fa10-4a55-8d82-bed839e8189e}/Setup.exe",
+   "sha256": "02ebf67f170de6b2c33c3b5904af8e187531a8d02ff3ca935ed0fe0b1a26aea0",
+   "size": 18
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "windows/Installer/eaapp.msi",
+   "sha256": "88604a9e3a4eb0af3449c6daafe3474d34fe821e69b119c2cd688b0354ea2d5f",
+   "size": 50
+  },
+  {
+   "kind": "directory",
+   "mode": 493,
+   "path": "windows/Installer/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}"
+  },
+  {
+   "kind": "file",
+   "mode": 420,
+   "path": "windows/Installer/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}/ProductIcon.ico",
+   "sha256": "c51052ef06b65a956d9edade6297b03388457a6521544a6d11e1c0507173b2f3",
+   "size": 3
+  }
+ ],
+ "format": 1,
+ "registry": [
+  {
+   "file": "registry/system.reg.part",
+   "hive": "system.reg",
+   "keys": 4,
+   "sha256": "42fdbc35042c68ffb9093db393175c3e055f67b81dc7afbf8788212655154390"
+  },
+  {
+   "file": "registry/user.reg.part",
+   "hive": "user.reg",
+   "keys": 1,
+   "sha256": "b0b0a563b0b9e96b36e1c4cd96a15d3d0ee9db467a26568c32b07cc74a3efb69"
+  }
+ ]
+}
