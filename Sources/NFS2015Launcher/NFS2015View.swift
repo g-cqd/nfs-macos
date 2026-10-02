@@ -1,65 +1,6 @@
 import NFS2015Core
 import SwiftUI
 
-struct NFS2015SettingRow: View {
-  let setting: NFS2015Setting
-  @Binding var value: String
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      switch setting.kind {
-      case .choices(let choices):
-        Picker(setting.title, selection: $value) {
-          ForEach(choices) { Text($0.title).tag($0.id) }
-        }
-      case .number(let range, _):
-        HStack {
-          Text(setting.title)
-          Spacer()
-          TextField(setting.title, text: $value).frame(width: 90)
-            .multilineTextAlignment(.trailing)
-        }
-        Text("\(range.lowerBound.formatted())–\(range.upperBound.formatted())").font(.caption)
-          .foregroundStyle(.secondary)
-      case .resolution:
-        TextField(setting.title, text: $value)
-      }
-      if !setting.help.isEmpty { Text(setting.help).font(.caption).foregroundStyle(.secondary) }
-    }
-  }
-}
-
-struct NFS2015SettingsView: View {
-  @Bindable var model: NFS2015Model
-
-  var body: some View {
-    Form {
-      if let notice = model.settingsNotice {
-        Section { Text(notice).font(.callout) }
-      }
-      ForEach(NFS2015Catalog.groups, id: \.self) { group in
-        Section(group) {
-          ForEach(model.settings(in: group)) { setting in
-            NFS2015SettingRow(setting: setting, value: model.binding(setting.id))
-          }
-        }
-      }
-      Section("Controller") {
-        Text(
-          """
-          This game reads controllers through XInput only. If a connected pad is not detected, \
-          let the app record the one Wine setting that presents it as an Xbox controller.
-          """
-        ).font(.caption).foregroundStyle(.secondary)
-        Button("Enable Controller Support", action: model.enableController)
-          .disabled(model.isBusy || model.blocker != nil)
-      }
-    }
-    .formStyle(.grouped)
-    .disabled(!model.canEditSettings)
-  }
-}
-
 struct NFS2015PlayView: View {
   let model: NFS2015Model
 
@@ -137,7 +78,7 @@ struct NFS2015View: View {
     NavigationSplitView {
       List(selection: $model.tab) {
         Label("Play", systemImage: "play.fill").tag("Play")
-        Label("Display & controls", systemImage: "display").tag("Settings")
+        Label("Settings", systemImage: "slider.horizontal.3").tag("Settings")
       }
       .navigationSplitViewColumnWidth(min: 185, ideal: 205, max: 250)
       .navigationTitle("Need for Speed")
@@ -170,7 +111,7 @@ struct NFS2015View: View {
         }.padding()
       }
       .frame(minWidth: 660, minHeight: 560)
-      .navigationTitle(model.tab == "Play" ? "Need for Speed" : "Display & controls")
+      .navigationTitle(model.tab == "Play" ? "Need for Speed" : "Settings")
       .toolbar {
         Button("Reload", systemImage: "arrow.clockwise", action: model.reload)
           .disabled(model.isBusy)
