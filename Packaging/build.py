@@ -40,6 +40,7 @@ def main():
         [sys.executable, 'Packaging/check_game_data.py'],
         [sys.executable, 'Packaging/check_cod4_data.py'],
         [sys.executable, 'Packaging/check_recipes.py'],
+        [sys.executable, 'Packaging/check_farcry2_recipe.py'],
         [sys.executable, 'Packaging/check_nfs2015_recipe.py'],
         [sys.executable, 'Packaging/check_runtime_inputs.py'],
         [sys.executable, 'Packaging/check_assembly.py'],

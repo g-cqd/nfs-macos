@@ -10,9 +10,9 @@
   "session": "CoD4Session",
   "runtimeProfile": "cod4-tested",
   "inputs": {
-    "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
-    "renderer": "{games}/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine",
-    "rendererEvidence": "{games}/CoD4-tools/performance-20260927-U9gG37",
+    "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
+    "renderer": "{games}/renderer-pins-20261002/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/renderer-pins-20261002",
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "mtld3dSource": "{home}/Developer/mtld3d",
     "x87Source": "{home}/Developer/x87sidecar",

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "gameID": "farcry2",
+  "displayName": "Far Cry 2",
+  "bundleIdentifier": "local.farcry2.mac",
+  "bundleVersion": "1",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.action-games",
+  "launcher": "FarCry2Launcher",
+  "session": "FarCry2Session",
+  "runtimeProfile": "cod4-tested",
+  "editions": ["import"],
+  "inputs": {
+    "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
+    "renderer": "{games}/renderer-pins-20261002/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/renderer-pins-20261002",
+    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
+    "mtld3dSource": "{home}/Developer/mtld3d",
+    "x87Source": "{home}/Developer/x87sidecar",
+    "packaging": "{project}/Packaging",
+    "runtime": "{games}/CoD4-tools/wine"
+  },
+  "originalFiles": [],
+  "originalDirectories": {},
+  "executableHashes": {},
+  "importRules": {
+    "executable": "bin/FarCry2.exe",
+    "machine": "i386",
+    "required": [
+      {"path": "bin/FarCry2.exe", "minimumSize": 1048576},
+      {"path": "bin/Dunia.dll", "minimumSize": 1048576}
+    ],
+    "directories": [
+      {
+        "path": "bin",
+        "minimumBytes": 0,
+        "excludedNames": ["mtld3d.conf", "mtld3d_shaders.bin"],
+        "excludedSuffixes": [".log", ".tmp"],
+        "excludedDirectories": ["mtld3d-logs"]
+      },
+      {
+        "path": "Data_Win32",
+        "minimumBytes": 1073741824,
+        "excludedNames": [],
+        "excludedSuffixes": [".log", ".tmp"],
+        "excludedDirectories": []
+      }
+    ],
+    "pairings": [
+      {"directory": "Data_Win32", "primarySuffix": ".fat", "companionSuffix": ".dat"},
+      {"directory": "Data_Win32", "primarySuffix": ".dat", "companionSuffix": ".fat"}
+    ],
+    "markers": [
+      {"name": "gog", "patterns": ["goggame-*.info", "goglog.ini", "unins000.exe"]},
+      {"name": "steam", "patterns": ["steam_api.dll", "steam_appid.txt"]},
+      {"name": "uplay", "patterns": ["uplay*.dll", "uplay*.exe", "upc.exe"]}
+    ],
+    "knownBuilds": [],
+    "maximumFiles": 20000,
+    "maximumBytes": 16000000000
+  },
+  "compatibility": [
+    {
+      "path": "bin/mtld3d.conf",
+      "input": "packaging",
+      "source": "FarCry2Defaults/mtld3d.conf"
+    }
+  ],
+  "defaults": [
+    {
+      "path": "mtld3d.conf",
+      "input": "packaging",
+      "source": "FarCry2Defaults/mtld3d.conf"
+    },
+    {
+      "path": "settings.reg",
+      "input": "packaging",
+      "source": "FarCry2Defaults/settings.reg"
+    }
+  ],
+  "supportsSP": true,
+  "supportsMP": false
+}

@@ -53,28 +53,35 @@ The current inputs are retained local artifacts:
 | Input | Default |
 |---|---|
 | NFS original assets | `~/Games/NFSMW` |
-| NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Desktop/Game Builds/Most Wanted Bundled.app` (preserved v5) |
+| NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app` (preserved v5) |
 | CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
-| Tested latest mtld3d overlay | `~/Games/CoD4-tools/performance-20260927-U9gG37/retained-overlay/wine/lib/wine` |
-| Renderer source evidence | `~/Games/CoD4-tools/performance-20260927-U9gG37/source-sha256.json` |
+| Tested latest mtld3d overlay | `~/Games/renderer-pins-20261002/retained-overlay/wine/lib/wine` |
+| Renderer source evidence | `~/Games/renderer-pins-20261002/source-sha256.json` |
 | Latest sidecar / corresponding forks | `~/Developer/x87sidecar/build/bin/x87sidecar`, `~/Developer/{mtld3d,x87sidecar}` |
 
-The mtld3d inputs apply only to the Direct3D 9 recipes. **The pinned mtld3d revision
-`5f5331a` and the local working checkout have diverged:** `~/Developer/mtld3d` is clean at
-`f793993` ("Merge upstream/main into development", 26 commits ahead of `origin/development`),
-and 164 of the 535 pinned source hashes no longer match, with 3 files absent. The revision
-pin, `rendererSourceManifestSHA256` and `rendererFiles` describe one built renderer and must
-move together, so the revision was **not** bumped on its own: doing so would claim provenance
-the staged binaries do not have. An `nfsmw` or `cod4` build therefore needs either the
-checkout returned to `5f5331a` or the renderer rebuilt at the newer revision with all four
-pins refreshed and re-verified. `nfs2015` is unaffected because it declares no mtld3d input.
+The mtld3d inputs apply only to the Direct3D 9 recipes. That divergence is resolved: the
+renderer was rebuilt at `b22073b` and all four pins moved together, which is the only way
+they may move. The revision pin, `rendererSourceManifestSHA256` and `rendererFiles` describe
+one built renderer, so bumping the revision alone would claim provenance the staged binaries
+do not have. `~/Games/renderer-pins-20261002` is that build: `build-command.txt` records the
+exact recipe, `source-sha256.json` the 631 files tracked at the revision, and
+`artifacts-sha256.json` the seven pinned binaries. The build is `PROD=1 PERF=0`, so the perf
+telemetry is compiled out rather than silenced at runtime; `docs/UPSTREAMS.md` explains why
+that matters. `nfs2015` is unaffected because it declares no mtld3d input.
 
 These are assembly inputs, never runtime dependencies on the destination Mac. The
 packager uses APFS clones, keeps source installations unchanged, and rejects artifact
-hash mismatches or a dirty/unpinned source checkout. All 535 renderer source hashes
-match the pinned latest mtld3d revision. The two Wine bases have identical code sections
+hash mismatches or a dirty/unpinned source checkout. All 631 renderer source hashes
+match the pinned mtld3d revision. The two Wine bases have identical code sections
 in their outer loader, server and Unix ntdll and identical i386 ntdll runtime contents;
 NFS retains its separate cursor-corrected inner loader.
+
+The retained app is the **v5** build, and it is the only acceptable source of the
+`nfsmw-cursor` Wine: the pinned hashes are the artifacts as they were *before* signing, and
+the v6 app in `~/Desktop/Game Builds` carries the same Wine re-signed, so every one of those
+five hashes differs there and `verify_inputs` rejects it. v5 now lives in iCloud Drive under
+`Shared - Games`, not on the Desktop. Keep it materialised locally; an evicted copy makes the
+build stall on download rather than fail.
 
 Override a relocated input with `--input NAME=/absolute/path`. The declared names are
 in each recipe. For example, `--input baseApp=/archive/Most\ Wanted\ Bundled.app` changes
@@ -111,6 +118,15 @@ omitting original game bytes. See [CoD4](COD4.md) for its payload and first-run 
    `gameDataIncluded`, `supportsSP` and `supportsMP` describe package contents, not online
    service availability or successful gameplay verification.
 
+## Import-only recipes
+
+A recipe may declare `"editions": ["import"]` and an `importRules` block instead of an original-file
+inventory and executable hashes (`Packaging/Recipes/farcry2.json`). The packager then needs no game
+input: the manifest carries the rules and the compatibility files, and the session recognises and
+hashes the player's installation at import time. `build.py` and `assemble.py` refuse a bundled edition
+for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. See
+[Far Cry 2](FARCRY2.md) for the rules, the player-data layout and what is still unverified.
+
 ## Rosetta setup
 
 Both editions check Intel execution before preparing or launching Wine. If Rosetta is absent, the Play screen offers **Install Rosetta…** and **Refresh**. Installation opens an Intel-only helper through Launch Services so macOS presents its own installation request. The starter checks again after the request and whenever it becomes active. Cancelling or failing the installation keeps Play disabled and leaves the setup retryable. An external installation is detected by Refresh; no app restart is required.
@@ -132,7 +148,20 @@ xcrun stapler validate "Build/Most Wanted Import.app"
 spctl --assess --type execute --verbose=2 "Build/Most Wanted Import.app"
 ```
 
-Recreate the ZIP, verify its entries, and regenerate SHA-256 after stapling. Check Apple's submission result before labeling a build notarized.
+Recreate the ZIP and regenerate SHA-256 after stapling using the shared archive stage:
+
+```sh
+python3 Packaging/app_archive.py "Build/Most Wanted Import.app" "Build/Most Wanted Import.zip"
+```
+
+Use a new output path, or remove only the superseded ZIP before recreating it. The
+stage verifies every entry's CRC before publishing, preserves executable permissions
+and internal links, and supports ZIP64 for bundles above 4 GiB. Signatures and stapled
+tickets remain in the archived files; Finder metadata and ACLs are not copied. The
+signing stage clears extended attributes before signing. A regression fixture forces
+ZIP64 and verifies extraction with macOS `ditto`. This avoids the invalid central
+directory offsets observed when `ditto` created the large CoD4 release ZIP.
+Check Apple's submission result before labeling a build notarized.
 
 ## Import your game data
 
@@ -154,8 +183,7 @@ python3 Packaging/build.py --game nfsmw --game-data import --output "Build/Most 
 | `bundled` | Whole game, Wine, mtld3d, x87sidecar, launcher, compatibility files, notices and sources | Prepare the player folder and play |
 | `import` | Same runtime, launcher and fixes; no original game assets | Select **Import game data…** and choose the supported PC installation |
 
-Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe and `--game nfs2015` for Need for Speed (2015), which
-accepts `--game-data import` only. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
+Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe, `--game farcry2 --game-data import` for Far Cry 2, and `--game nfs2015` for Need for Speed (2015); the last two accept `--game-data import` only. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
 
 Both modes currently need the pinned local assembly inputs above, including the source game installation used to generate the complete import inventory. The import variant retains that inventory but omits the original payload. Builds do not include personal careers or an existing Wine prefix.
 

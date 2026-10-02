@@ -94,11 +94,11 @@ The old NFSMW v5 app on the Desktop is still a packaging input for retained Wine
 
 ### Pinned runtime versions in this release
 
-- mtld3d: `5f5331a2d8762356bd49d128271c1b186c31e7ec`.
-- x87sidecar: `dbd680d4cbe14afa12774d53670a18758f15110e`.
+- mtld3d: `b22073b4fe835ec4beb7017898b4593be2f3a018`, built `PROD=1 PERF=0`.
+- x87sidecar: `8aa4d308d90c3cc5ebf873db8c3e851848a332db`.
 - NFSMW cursor-corrected Wine source: `f064add996bbf4819acf49f48bab263735279800`, CX26.3 / Wine 11.0 lineage.
 
-`Packaging/runtime-inputs.json` pins artifacts as well as sources. The renderer's tested retained binaries match all 535 recorded source-file hashes at the pinned commit. Windows DLLs and the native Unix bridge must be updated as a compatible set. Do not combine arbitrary Wine versions, PE DLLs, native bridges, and sidecars.
+`Packaging/runtime-inputs.json` pins artifacts as well as sources. The renderer's tested binaries match all 631 recorded source-file hashes at the pinned commit. Windows DLLs and the native Unix bridge must be updated as a compatible set. Do not combine arbitrary Wine versions, PE DLLs, native bridges, and sidecars.
 
 ## 5. Current status: what is actually established
 

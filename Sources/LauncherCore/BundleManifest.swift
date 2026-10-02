@@ -5,6 +5,8 @@ package struct BundleManifest: Codable {
   let version: String
   let gameFiles: [ManifestFile]
   let gameID: GameKind?
+  /// Present for an import-only app: the player's files are recognised and inventoried at import time.
+  package let importRules: ImportRules?
   /// Set when the app references the player's installation in place instead of copying it.
   let referencesInstallation: Bool?
   /// Runtime switches the recipe declares for the staged Wine build.
@@ -28,6 +30,7 @@ package struct BundleManifest: Codable {
 
   init(
     version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
+    importRules: ImportRules? = nil,
     referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
     storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil,
     prefixSettings: [RegistrySetting]? = nil, renderers: [RendererSelection]? = nil
@@ -35,6 +38,7 @@ package struct BundleManifest: Codable {
     self.version = version
     self.gameFiles = gameFiles
     self.gameID = gameID
+    self.importRules = importRules
     self.referencesInstallation = referencesInstallation
     self.runtimeTuning = runtimeTuning
     self.storeClient = storeClient
@@ -106,7 +110,7 @@ package struct BundleManifest: Codable {
     var total = 0
     for file in gameFiles {
       try ManifestFile.validate(path: file.path)
-      guard file.size >= 0, file.size <= 2_000_000_000,
+      guard file.size >= 0, file.size <= kind.fileByteLimit,
         file.sha256.utf8.count == 64,
         file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
         seen.insert(file.path.lowercased()).inserted
@@ -118,8 +122,18 @@ package struct BundleManifest: Codable {
         throw .operation("The game payload exceeds its size limit.")
       }
     }
-    guard seen.contains(kind.executable) else {
-      throw .operation("The game executable is missing from the manifest.")
+    if let importRules {
+      try importRules.validate()
+      guard importRules.executable.lowercased() == kind.executable.lowercased() else {
+        throw .operation("The game recognition rules belong to a different executable.")
+      }
+      guard importRules.maximumBytes <= kind.byteLimit else {
+        throw .operation("The game recognition rules allow more data than this game supports.")
+      }
+    } else {
+      guard seen.contains(kind.executable.lowercased()) else {
+        throw .operation("The game executable is missing from the manifest.")
+      }
     }
   }
 }
