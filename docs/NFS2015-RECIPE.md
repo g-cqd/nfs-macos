@@ -226,9 +226,9 @@ linked folder keeps its file, and an interrupted edit is replayed before anythin
 
 ```sh
 python3 Packaging/build.py --game nfs2015 --game-data import \
-  --output "/Users/gc/Games/nfs2015-bundled/out/Need for Speed Import.app" --no-archive
+  --output "~/Games/nfs2015-bundled/out/Need for Speed Import.app" --no-archive
 python3 Packaging/build.py --game nfs2015 --game-data bundled \
-  --output "/Users/gc/Games/nfs2015-bundled/out/Need for Speed Bundled.app" --no-archive
+  --output "~/Games/nfs2015-bundled/out/Need for Speed Bundled.app" --no-archive
 ```
 
 `--game-data bundled` packages the user's own verified installation (the recipe's `game` input,

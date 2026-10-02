@@ -4,7 +4,7 @@ The original EA-lab Wine runtime passed all seven checks in a separate prefix. T
 
 ## Result
 
-Test environment: Apple Silicon, macOS 27, custom Wine 11 from CrossOver 26.3. The runtime was `/Users/gc/Games/NFSMW-tools/ea-app-lab/Wine/bin/wine`; its `lib/wine/x86_64-unix/ntdll.so` SHA-256 was `3bc4baa14ae578036896e1cee462871e52a3815a7624bc35ed8292a5bc7508ba`.
+Test environment: Apple Silicon, macOS 27, custom Wine 11 from CrossOver 26.3. The runtime was `~/Games/NFSMW-tools/ea-app-lab/Wine/bin/wine`; its `lib/wine/x86_64-unix/ntdll.so` SHA-256 was `3bc4baa14ae578036896e1cee462871e52a3815a7624bc35ed8292a5bc7508ba`.
 
 | Test | Process exit | Checks | Exceptions | Overflow |
 | --- | --- | --- | --- | --- |
