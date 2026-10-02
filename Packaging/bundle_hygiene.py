@@ -7,6 +7,7 @@ the source files before anything is staged, and on the finished app by the audit
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import tarfile
 
 from optimize_runtime import pe_runtime_signature
 from payload import inventory_digest
@@ -179,4 +180,42 @@ def audit_runtime_pins(app, pins, recipe, runtime=None):
             problems.append('The input runtime no longer matches its pin: ' + relative)
         elif data != source.read_bytes() and not same_runtime_image(data, source.read_bytes()):
             problems.append('Runtime file differs from its pinned input: ' + relative)
+    return problems
+
+
+def audit_build_paths(app, home):
+    """The files this project writes must not name the Mac that built them.
+
+    Searched as raw bytes, and as UTF-16 for Windows text, in every file of the app except the two
+    trees that are not ours: the third-party Wine runtime, whose binaries carry the paths of the
+    tree they were compiled in and are pinned by digest instead, and the game payload, which is the
+    publisher's. Source archives are opened and searched member by member, because compression
+    hides their text from a plain search. The names it reports are the ones to fix or to list.
+    """
+    app = Path(app)
+    needles = [str(home).encode(), str(home).encode('utf-16-le')]
+    skipped = [app / 'Contents/SharedSupport/Wine', app / 'Contents/Resources/Game']
+    problems = []
+
+    def holds_home(stream):
+        tail = b''
+        keep = max(len(needle) for needle in needles) - 1
+        while block := stream.read(8 * 1024 * 1024):
+            data = tail + block
+            if any(needle in data for needle in needles):
+                return True
+            tail = data[-keep:]
+        return False
+
+    for path in sorted(app.rglob('*')):
+        if path.is_symlink() or not path.is_file() or any(root in path.parents for root in skipped):
+            continue
+        relative = path.relative_to(app).as_posix()
+        if path.name.endswith('.tar.gz'):
+            with tarfile.open(path, 'r:gz') as archive:
+                for member in archive:
+                    if member.isfile() and holds_home(archive.extractfile(member)):
+                        problems.append('Build Mac path in ' + relative + ' (' + member.name + ')')
+        elif holds_home(path.open('rb')):
+            problems.append('Build Mac path in ' + relative)
     return problems

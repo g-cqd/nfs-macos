@@ -12,11 +12,21 @@ import uuid
 from bundle_hygiene import problems_in
 from payload import inventory, inventory_digest
 from privacy import USAGE_DESCRIPTIONS
-from recipes import load_recipe, resolve_inputs, supports_edition
+from recipes import load_recipe, resolve_inputs, shipped_recipe, supports_edition
 from rosetta_request import build_rosetta_request
 from runtime_inputs import (PINS, PROJECT, clone, collect_sources, digest, runtime_provenance,
                             stage_runtime, verify_hashes, verify_inputs)
 from shader_cache_key import stage_cache_key
+
+
+def strip_debug_map(binary):
+    """Drop the linker's debug map from a binary this project built.
+
+    It lists the absolute path of every object file on the build Mac (the account name, the
+    checkout and the build folder), which has no use on the machine that runs the app. Only debug
+    symbols go: the code, the Swift metadata and the symbol table the runtime uses are untouched.
+    """
+    subprocess.run(['/usr/bin/strip', '-S', str(binary)], check=True)
 
 
 def stage_resources(items, inputs, destination):
@@ -164,15 +174,6 @@ def stage_runtime_source(resources, recipe, inputs):
                     '-o', str(resources / 'Sources' / declared['archive'])], check=True)
 
 
-def embedded_recipe(recipe):
-    """The recipe as it ships: its input locations are paths on the build Mac, so they stay behind.
-
-    Everything else is kept; the audit validates the shipped copy with the same rules, and the
-    resource lists still name their inputs, only without saying where those inputs were.
-    """
-    return {**recipe, 'inputs': {name: 'build input, not shipped' for name in recipe['inputs']}}
-
-
 def stage_metadata(contents, recipe, provenance, include_game_data):
     resources = contents / 'Resources'
     provenance.update(gameID=recipe['gameID'], gameDataIncluded=include_game_data)
@@ -186,7 +187,7 @@ def stage_metadata(contents, recipe, provenance, include_game_data):
             'NSHumanReadableCopyright': 'Unofficial local macOS package. Component notices are included.'}
     info.update(USAGE_DESCRIPTIONS)
     (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
-    (resources / 'bundle-recipe.json').write_text(json.dumps(embedded_recipe(recipe), indent=2) + '\n')
+    (resources / 'bundle-recipe.json').write_text(json.dumps(shipped_recipe(recipe), indent=2) + '\n')
 
 
 def assemble(recipe, inputs, destination, include_game_data):
@@ -211,6 +212,8 @@ def assemble(recipe, inputs, destination, include_game_data):
         resources.mkdir(parents=True)
         clone(binary_dir / recipe['launcher'], contents / 'MacOS' / recipe['launcher'])
         clone(binary_dir / recipe['session'], contents / 'Helpers' / recipe['session'])
+        for built in [contents / 'MacOS' / recipe['launcher'], contents / 'Helpers' / recipe['session']]:
+            strip_debug_map(built)
         build_rosetta_request(app, recipe['bundleIdentifier'])
         optimization = stage_runtime(contents, recipe, inputs)
         (resources / 'size-optimization.json').write_text(json.dumps(optimization, indent=2) + '\n')

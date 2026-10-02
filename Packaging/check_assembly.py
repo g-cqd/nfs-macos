@@ -3,8 +3,9 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
-from assemble import embedded_recipe, stage_game, stage_resources
-from recipes import load_recipe, validate_recipe
+import subprocess
+from assemble import stage_game, stage_resources, strip_debug_map
+from recipes import load_recipe, shipped_recipe, validate_recipe
 from game_data import bundled_entries
 
 
@@ -40,11 +41,24 @@ with TemporaryDirectory() as temporary:
 # validates under the same rules the audit applies to it.
 for name in ['nfsmw', 'cod4', 'farcry2', 'nfs2015']:
     recipe = load_recipe(name)
-    shipped = embedded_recipe(recipe)
+    shipped = shipped_recipe(recipe)
     assert set(shipped['inputs']) == set(recipe['inputs']) and validate_recipe(json.loads(json.dumps(shipped)))
     text = json.dumps(shipped)
     for leak in ['/Users', '{home}', '{games}', '{tools}', '{project}', 'Mobile Documents',
                  'NFS2015-debug', 'drive_c']:
         assert leak not in text, name + ' ships a build location: ' + leak
     assert recipe['inputs'] != shipped['inputs'], 'The build recipe itself must keep its inputs'
+# A binary this project builds names every object file's absolute path on the build Mac in its debug
+# map. Stripping it removes those paths and leaves a working program.
+with TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    (root / 'hello.c').write_text('#include <stdio.h>\nint main(void) { puts("ready"); return 0; }\n')
+    subprocess.run(['/usr/bin/cc', '-g', '-c', str(root / 'hello.c'), '-o', str(root / 'hello.o')], check=True)
+    subprocess.run(['/usr/bin/cc', str(root / 'hello.o'), '-o', str(root / 'hello')], check=True)
+    before = subprocess.check_output(['/usr/bin/nm', '-a', str(root / 'hello')], text=True)
+    assert str(root.resolve()) in before or str(root) in before, 'The fixture binary has no debug map to strip'
+    strip_debug_map(root / 'hello')
+    after = subprocess.check_output(['/usr/bin/nm', '-a', str(root / 'hello')], text=True)
+    assert str(root) not in after and str(root.resolve()) not in after, 'The debug map survived stripping'
+    assert subprocess.check_output([str(root / 'hello')], text=True) == 'ready\n'
 print('Shared bundled/import assembly regressions passed')
