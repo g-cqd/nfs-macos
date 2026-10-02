@@ -139,6 +139,30 @@ struct FarCry2ModelTests {
     #expect(sut.hasGameData)
   }
 
+  @Test func `docking asks for permission and makes the game windowed and borderless`() async {
+    let sut = makeModel(service: SessionStub())
+    var asked = 0
+    sut.requestAccessibility = { asked += 1 }
+    await sut.run()
+    sut.settings.values["fullscreen"] = "1"
+    sut.setDock(true)
+    #expect(sut.dockEnabled)
+    #expect(sut.settings.value("fullscreen") == "0" && sut.settings.value("borderless") == "1")
+    #expect(asked == (GameDock.isTrusted ? 0 : 1))
+    sut.setDock(false)
+    #expect(!sut.dockEnabled && sut.settings.value("borderless") == "0")
+    #expect(sut.settings.value("fullscreen") == "0", "fullscreen is left for the player to choose")
+  }
+
+  @Test func `the game view is as large as the chosen resolution`() async {
+    let sut = makeModel(service: SessionStub())
+    await sut.run()
+    sut.settings.values["resolution"] = "1280x800"
+    #expect(sut.gameViewSize == CGSize(width: 1280, height: 800))
+    sut.settings.values["resolution"] = "bad"
+    #expect(sut.gameViewSize == nil)
+  }
+
   private func makeModel(service: SessionStub, available: Bool = true) -> FarCry2Model {
     FarCry2Model(
       service: service, rosetta: RosettaSetup(service: RosettaStub(available: available)),

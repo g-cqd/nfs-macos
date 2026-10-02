@@ -21,10 +21,25 @@ import app was built with `--input baseApp="<Game Builds>/Most Wanted Bundled.ap
 `Sources` and `Licenses`) and `--input mtld3dSource=<clean clone checked out at 5f5331a>`. No source
 tree was modified.
 
-**There is no bundled edition.** `Packaging/Recipes/farcry2.json` declares `"editions": ["import"]`;
-`build.py --game-data bundled` and `assemble.stage_game(..., include_game_data=True)` refuse it. A
-bundled edition needs pinned executable hashes of a verified build, and none exists for this game
-(see "What is not verified"). Adding one later is a recipe decision, not a code change.
+**Bundled edition.** `Packaging/Recipes/farcry2.json` stays import-only
+(`"editions": ["import"]`); `build.py --game-data bundled` refuses it, and a recipe with `importRules`
+can never be bundled. The bundled app uses its own recipe, `farcry2-bundled.json`: no `importRules`,
+the explicit original-file list of one GOG "Far Cry 2 with Fortunes Pack" 1.0.0.7 installation
+(`bin` files, `bin/pb`, `bin/Resources`, and the `.dat`, `.fat`, `.rml`, `.ini`, `.bik` files of `Data_Win32`:
+76 files, 3,535,518,982 bytes) and pinned digests of `bin/farcry2.exe`
+(`2f93751bde46c9f0ac1b0530bc17572815de01c56baab37942728423194c1023`) and `bin/Dunia.dll`
+(`7b82f20088e5c046a99fcaed65dc8bbb8202fd622a69737be83e00686b172d53`). Installer leftovers
+(`unins00*`, `goggame.dll`, manual, ReadMe, icons), the installer's temporary `Data_Win32/is-*.tmp`, and the
+renderer's `mtld3d_shaders.bin`, lock and logs are not packaged, exactly as in the import rules. The
+installation is read from `~/Games/FarCry2` (the `game` input), extracted from the supplied `Far Cry 2.zip`.
+The session then treats the app like Call of Duty 4: it copies and hash-verifies `Resources/Game` into a
+generation under `Application Support/FarCry2Mac`, and the starter's Import button remains available.
+
+```sh
+python3 Packaging/build.py --game farcry2-bundled --game-data bundled \
+  --input baseApp="<Game Builds>/Most Wanted Bundled.app" --input mtld3dSource=<clean clone at 5f5331a> \
+  --output "<Game Builds>/Far Cry 2 Bundled.app"
+```
 
 ## Status at a glance
 
@@ -34,13 +49,16 @@ bundled edition needs pinned executable hashes of a verified build, and none exi
 | `GamerProfile.xml` in-place editor, settings catalog, Maximum Quality preset | **Implemented**, tested with an invented profile built from public attribute names |
 | Player data outside the prefix, links, backups and restore | **Implemented**, tested against a synthetic Wine profile layout |
 | Direct3D 9 forced (profile attribute and hidden D3D10 libraries) | **Implemented**; effect on the real game **unverified** |
-| Session helper, SwiftUI starter, developer launcher script | **Implemented**; never run against the real game |
+| Session helper, SwiftUI starter, developer launcher script | **Implemented**; the game itself has run under the bundled Wine and mtld3d (see "Observed on the real game"); the app has not |
 | Import, links, `G:` working directory, cleanup on the real bundled Wine | **Demonstrated** with a synthetic game tree (`tools/farcry2/smoke_session.py`, 22 checks): a stand-in executable ran as `C:\FarCry2\bin\FarCry2.exe` with `G:\bin` as its working directory, then `G:` and the lease were removed and no wineserver remained |
 | mtld3d profile for `FarCry2.exe` | **Proposed** only (below); mtld3d was not edited |
-| Known-build digests, exact file list, exact setting value ranges | **Unverified**: need a legitimate install |
-| Start-up, rendering, input, audio, saves, x87 use, stutter | **Unverified**: no game run exists |
+| Known-build digests, exact file list | **Measured** for one GOG 1.0.0.7 install (bundled recipe); the import recipe still pins none |
+| Profile attributes, defaults and value domains | **Observed** in a real `GamerProfile.xml` the game wrote; level names for three sections inferred from the engine |
+| Retina, MetalFX scale, Command and Option keys, renderer keys | **Implemented** (Mac & MetalFX tab); keys checked against the bundled `winemac.so` and mtld3d's `mtld3d.conf` |
+| Cheats and console script | **Implemented**; command names are engine strings; acceptance of `-cmdfile` and `SetSetting` by the retail build is **unverified** |
+| Rendering, input, audio, saves in the app, x87 use | **Unverified** in the app; the game reached its Video options screen and the menus under the bundled Wine and mtld3d |
 
-Nothing here shows that Far Cry 2 runs. A recipe alone does not prove compatibility.
+The game reached its menus and Video options under the bundled Wine and mtld3d (see "Observed on the real game"), but nobody has played it through, and the app itself has not been run against it. A recipe alone does not prove compatibility.
 
 ## How a legitimate installation is recognised
 
@@ -145,35 +163,157 @@ bundle, and that route is **untested and unsupported**. The DX9 path is forced t
    any profile exists. **Not verified on the real game**; if the game needs `dxgi.dll` for something
    unexpected, remove the override in `LaunchEnvironment`.
 
-## Settings and the Maximum Quality preset
+## Observed on the real game
 
-Only options with public evidence of their attribute name and values are exposed. They are read from
-reports of the game's `GamerProfile.xml` (AnandTech thread, Steam and PCGamingWiki posts) and are the
-starter's limits, not claims about the engine's full range.
+On 2026-10-02 a GOG 1.0.0.7 installation (`bin` and `Data_Win32`, 76 files, 3,535,518,982 bytes) was run once, with
+the bundled Wine, mtld3d and **without** x87sidecar, in a throwaway prefix on an APFS clone. The first launch
+created `GamerProfile.xml` within 15 seconds and showed the game's own Video options screen (Basic options,
+Color, General performance, Advanced options). Choosing 1680 x 1050, 60 Hz, 4X, the High overall preset and High
+fire, real tree and physics there rewrote the profile as expected; both versions are test fixtures
+(`FarCry2Fixture.realProfileXML`, `usedProfileXML`).
 
-| Option | Stored as | Values offered |
+What the file taught the starter:
+
+- **Sections:** `SoundProfile`, `RenderProfile` (with `CustomQuality/quality` entries `custom` and `customd3d10`),
+  `NetworkProfile`, `GameProfile` (with `FireConfig`), `RealTreeProfile`, `EngineProfile` (with `PhysicConfig`).
+- **Overall preset** is `RenderProfile@Quality`: `optimal`, `low`, `medium`, `high`, `veryhigh`, `ultrahigh` or `custom`
+  (the same list is in `Dunia.dll`). The game wrote `high` for the High preset and left the `custom` entry unchanged,
+  so the per-level attributes in `CustomQuality` apply only when Overall is `custom`.
+- **Fire, real tree and physics** use capitalised ids: the game wrote `Low` and `High`; `VeryHigh` and `Low` are
+  engine strings. `Medium` is assumed.
+- **Per-level attributes** (`EnvironmentQuality`, `TextureQuality`, `ShadowQuality` and nine more) hold
+  `low`/`medium`/`high` in the file; `veryhigh` is offered because the engine names it. Which on-screen label
+  maps to which attribute is inferred: Shading is `EnvironmentQuality`; water, depth pass and anti-portal have no
+  on-screen row.
+- **`UseAmbx`** changed from 0 to 1 by itself during that session; it is exposed but its meaning (amBX lighting) is
+  from the attribute name only.
+
+The earlier recorded crash (`FATAL code=0xc000001d`) is a Rust panic in mtld3d's perf telemetry
+(`windows/core/src/perf.rs:449`, `state.borrow_mut()` under `cfg(perf_tracking)`), not an x87 fault. The app sets
+`RUST_LOG=warn,mtld3d::perf=off`, which skips that path.
+
+## Settings, Mac options and cheats
+
+The starter now exposes every attribute of that profile that has a known meaning, in four tabs.
+
+| Tab | Groups | Stored in |
 | --- | --- | --- |
-| Resolution | `RenderProfile` `ResolutionX/Y` **and** every `CustomQuality/quality` `ResolutionX/Y` | `WxH`, 640 to 7680 by 480 to 4320 |
-| Fullscreen, vertical sync, show frame rate | `Fullscreen`, `VSync`, `ShowFPS` | 0, 1 |
-| Refresh rate | `RefreshRate` | 0 (display default), 60, 120 |
-| Anti-aliasing | `MultiSampleMode` | 0, 2, 4 |
-| Alpha to coverage | `AlphaToCoverage` | 0, 1 |
-| Skip highest texture detail | `DisableMip0Loading` | 0, 1 |
-| Game shader loading | `AllowAsynchShaderLoading` | 0, 1 |
-| Rendering scale | `render.scale` in `bin/mtld3d.conf` | 0.5, 0.67, 0.75, 1 |
-| Compile shaders asynchronously | `shader.asyncCompile` | false, true |
-| Frame limit | `present.maxFps` | 0, 30, 60, 120 |
+| Graphics | Display, Color, Image quality, Detail levels | `GamerProfile.xml` attributes, edited in place |
+| Mac & MetalFX | Display & MetalFX, Keyboard, Renderer | `mtld3d.conf`, the prefix's `Mac Driver` registry key, and launcher options |
+| Game & controls | Gameplay, Mouse, Audio, Launch options | `GamerProfile.xml` attributes and the game's own switches |
+| Cheats | Player, Weapons, World | launcher options, turned into a console script at launch |
 
-Options whose attribute is absent from a profile are reported and **not created**. Detail levels
-(`EnvironmentQuality`, `TextureQuality`, `ShadowQuality`, HDR, bloom and the like) are deliberately
-not exposed because public reports show the attributes but not their value ranges; the starter keeps
-whatever the game wrote.
+`Packaging` and the tests derive nothing from these tables; `FarCry2Catalog` is the single source and a test
+asserts that every profile-backed option exists in the real profile.
 
-**Maximum Quality** sets: the display's native pixel size, fullscreen, vertical sync off, 4x MSAA with
-alpha to coverage, the highest texture level (`DisableMip0Loading=0`), `render.scale=1` (MetalFX is not
-used) and synchronous shader compilation. It does not touch sound, input or detail levels. For the
-game's own top preset, choose **Ultra High** in the in-game Video options once; the starter keeps it.
-Whether the display mode is offered, and what 4x MSAA with `ATOC` costs, is unverified.
+**Mac & MetalFX.** *Retina output* is `RetinaMode` (`Y`/`N`) in `HKCU\Software\Wine\Mac Driver`, edited in `user.reg`
+while Wine is stopped, as the Need for Speed app does. *Command and Option keys* are `LeftCommandIsCtrl`,
+`RightCommandIsCtrl`, `LeftOptionIsAlt`, `RightOptionIsAlt` (all four names are in the bundled `winemac.so`). *MetalFX
+render scale* is `render.scale` (spatial upscaling below 100%; no temporal upscaling or frame generation). Also
+`render.lodBias`, `present.maxFps`, `color.hdr.enable`, `color.space`, `cursor.scale`, `cursor.software`,
+`shader.asyncCompile`, `shaderCache.enable`, `memory.vramBudgetMB`, `memory.vbibRetentionCapMB`,
+`memory.pageboxPoolCapMB`, `adapter.spoof`, `caps.dfFormats`, `render.preserveDiscardBackbuffer` and
+`display.legacy4By3`, all documented in the pinned `mtld3d.conf`. The Metal performance overlay is `MTL_HUD_ENABLED`.
+Debug, Intel-only and query-shortcut keys are not exposed.
+
+**Launch options** are switches found in `Dunia.dll`: `-borderless`, `-nosound`, `-nopad`, `-noexmouse`.
+
+**Cheats** are console lines written to `Documents/My Games/Far Cry 2/starter-console.txt` and passed with
+`-cmdfile`. Names come from the engine: the variables `cheat_GodMode`, `cheat_UnlimitedAmmo`,
+`cheat_UnlimitedReliability`, `cheat_AllWeaponsUnlock`, `env_Hour`, `env_TimeScale`, `env_WindForce`, `env_WindDir`
+(each has help text such as "Sets the god mode cheat."), set through `SetSetting <name> <value>`, and the commands
+`Cheat_AddDiamonds`, `set_health`, `set_no_weapon_mode`. **Unverified:** that the retail build runs a `-cmdfile`
+script at launch, that `SetSetting` accepts these names, and the scale of `set_health`. `-logFile` produced no file in
+this build, so the effect cannot be read back from outside. To verify: enable *God mode* and *Add diamonds*, press
+Play, start a game and look for the diamond count and invulnerability. If nothing happens, try `-exec` (the engine
+also has it) by changing `FarCry2Console.startupSwitch`.
+
+## Game view and returning to the game
+
+**Return to Game.** All three starters show a *Return to Game* button while a game runs. The session records the game's
+process in `game-session.json` (process id plus kernel start time); the button reads it, shows the game's application
+if Wine hid it, then activates it. The start time makes a reused process number harmless. On the real game
+(2026-10-02) `NSRunningApplication` resolved the Wine process as "Far Cry 2" with `isHidden = true`, which is why a
+hidden game could not be reached from the starter. Without the starter:
+
+```sh
+PID=$(pgrep -f 'C:.FarCry2.bin.FarCry2.exe' | head -1)      # the app launches C:\FarCry2\bin\FarCry2.exe
+osascript -e "tell application \"System Events\" to set visible of (first process whose unix id is $PID) to true" \
+          -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $PID) to true"
+```
+
+The same for the other games: `pgrep -f 'C:.CoD4.iw3sp.exe'` (single player) and `pgrep -f 'C:.NFSMW.speed.exe'`. The first
+use asks to let your terminal control System Events. `cat ~/Library/Application\ Support/FarCry2Mac/game-session.json`
+shows the recorded process.
+
+**Game view (experimental).** Turning on *Show the game in the Game view* (Game view tab, or Launch options) sets
+Fullscreen off and the `-borderless` switch, then keeps the running game's window over a placeholder the size of the
+game's resolution. macOS has no public API to host another program's window in a view, and Wine's window cannot be
+resized from outside; it can be moved. Measured on 2026-10-02 with the Accessibility API against the real game
+running borderless at 1280 x 800: its window was found (title "Far Cry 2"), moved to another position, and a resize
+request was ignored. So the game is positioned over the view, not embedded: clicking the starter puts the game behind
+it (use Return to Game), and it needs Accessibility permission for the app, which an ad-hoc signed build asks for
+again after each rebuild. A true embedded view would need mtld3d to share its presented frames (an `IOSurface` or
+remote layer) plus input forwarding; that is a renderer change, not a starter change. The Swift path is covered by
+tests of the coordinate conversion and settings; the actual window following has not been run from the app.
+
+## Foliage and speed findings (2026-10-02)
+
+Measured in the intro jeep ride (`-world world1 -spawn ...`, 1280 x 800 windowed, Metal HUD, one sample per run, so
+approximate; screenshots and logs were kept in `/tmp/fc2-lab`, not in the repository):
+
+| Configuration | FPS | Foliage |
+| --- | --- | --- |
+| old renderer, no sidecar | 3.6 | opaque cards |
+| old renderer, either sidecar | 38 | opaque cards |
+| new renderer (`b22073b`), new sidecar, A2C on + 4x MSAA | 41 | opaque cards |
+| A2C off + 4x MSAA | 41 | correct |
+| A2C on + MSAA off | 41 | correct |
+
+- **Foliage** breaks only when alpha to coverage and MSAA are both on; the newer renderer does not change that.
+  Maximum Quality now leaves alpha to coverage off and the catalog default is off. Cause not yet found in the
+  renderer (suspect: coverage from the alpha-to-coverage token not taking effect while `alpha_func` is zeroed in
+  `unix/unix/src/draw.rs`); a diagnostic patch idea is in the static analysis notes.
+- **Speed.** Without x87sidecar the game runs at about 3.6 fps; with it, about 38-42. Retina, MSAA and shader-compile
+  mode did not change the frame rate, so the game is CPU-bound. The sidecar's "resetting cache" lines are capped at the
+  first ten and then every 1000th by the sidecar itself, so they do not show thrashing.
+- **Crash.** The old renderer with perf telemetry on panicked in `perf.rs` (`RefCell::borrow_mut`) at `:449` and `:585`.
+  The app disables that path and the repinned renderer compiles it out.
+- **Scene.** The game's benchmark mode cannot run on the GOG install (its `Benchmark_*` recordings are absent).
+  `-cmdfile <path>` is a real switch that takes a path.
+
+## Where the time goes (read-only analysis, 2026-10-02)
+
+From one saved x87sidecar guest-PC profile of the intro jeep ride (53,255 samples of the main thread, 2 kHz,
+module map taken from the same file; Dunia.dll disassembled with `llvm-objdump`):
+
+- **Module share:** `Dunia.dll` 86.3%, `msvcr80.dll` 12.0%, Wine (`ntdll`, `win32u`, `winemac`, `kernel32`) about 1.2%,
+  mtld3d's d3d9.dll and the Unix bridge below 1%. The game's own code is the bottleneck; renderer and Wine changes
+  cannot raise the frame rate by much.
+- **Flat profile:** the 15 hottest 64-byte regions are 0.3-2.0% each. There is no single function to fix.
+- **Instruction mix inside Dunia:** 49.5% of the samples sit on x87 instructions (`flds` 18%, `fstps` 16%, `fstp` 3%,
+  `fildl` 3%, `fmuls` 2%), 32% on integer/memory, 10% SSE, 8% branches and calls. Static x87 share of the code is only
+  about 5%, so each x87 instruction is far more expensive than a native one. (Sampling skid makes single addresses
+  uncertain; the class totals are the finding.)
+- **Pattern:** the hot x87 code is mostly isolated one-off `flds`/`fstps` float copies and `fildl`/`fcompi` sequences
+  interleaved with SSE, for example `flds (%eax); movss ...; fstps 0x30(%esi)`. The non-x87 instruction between them
+  ends the sidecar's "run", so each is translated by the single-op fast path (`TranslatorX87Single.cpp`), which
+  reads and rewrites the x87 status/tag word in memory and computes the register slot for every op (about 15-20
+  AArch64 instructions plus a store-to-load chain on the status word). A native copy is two instructions.
+- **Implication:** the highest-leverage fix is in x87sidecar: fuse a `fld m32` with a later `fstp m32/m64` across
+  independent non-x87 instructions (net stack effect none) into a plain load/convert/store without touching TOP or
+  tags, and cheapen `fildl` + `fcompi` flag production. This is a design change to run detection, not a flag.
+  No sidecar flag tried so far helped: `X87_FAST_ROUND=2` was slower, FMA, `msync` and silent start were within noise.
+- **Ceiling:** the main thread is single-threaded game logic under Rosetta. How much faster the sidecar can make
+  these isolated ops, and whether that reaches 60 fps everywhere, is **unmeasured**; a microbenchmark of the
+  `flds; fstps` pair against native would size it first. Frame rates vary strongly by scene (6-160 fps in the
+  earlier matrix) and by machine load, so single HUD samples are not reliable.
+
+## Maximum Quality preset
+
+Sets the display's native pixel size, fullscreen, vertical sync off, 4x MSAA with alpha to coverage **off**, the highest
+texture level, the `ultrahigh` overall preset, Retina output, `render.scale=1` and synchronous shader
+compilation. It does not touch sound, input or gameplay.
 
 ## Proposed mtld3d profile (not applied, not verified)
 

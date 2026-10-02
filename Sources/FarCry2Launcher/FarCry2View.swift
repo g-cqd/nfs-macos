@@ -1,3 +1,4 @@
+import FarCry2Core
 import SwiftUI
 
 struct FarCry2View: View {
@@ -8,6 +9,10 @@ struct FarCry2View: View {
         Label("Play", systemImage: "play.fill").tag("Play")
         Section("Your experience") {
           Label("Graphics", systemImage: "display").tag("Graphics")
+          Label("Game view", systemImage: "rectangle.on.rectangle").tag("Game view")
+          Label("Mac & MetalFX", systemImage: "macbook.and.iphone").tag("Mac")
+          Label("Game & controls", systemImage: "gamecontroller").tag("Game")
+          Label("Cheats", systemImage: "wand.and.stars").tag("Cheats")
         }
         Section("Your progress") {
           Label("Saves & backups", systemImage: "externaldrive.badge.timemachine").tag("Saves")
@@ -21,6 +26,25 @@ struct FarCry2View: View {
         Group {
           switch model.tab {
           case "Graphics": FarCry2GraphicsView(model: model)
+          case "Game view": FarCry2GameView(model: model)
+          case "Mac":
+            FarCry2PanelView(
+              model: model, groups: FarCry2Catalog.macGroups,
+              notice:
+                "Retina and keyboard options are Wine settings and apply the next time the game starts. Renderer options are written to mtld3d.conf next to the game's executable."
+            )
+          case "Game":
+            FarCry2PanelView(
+              model: model, groups: FarCry2Catalog.gameGroups,
+              notice:
+                "Gameplay and mouse options are the game's own profile values. Launch options are the game's command-line switches."
+            )
+          case "Cheats":
+            FarCry2PanelView(
+              model: model, groups: FarCry2Catalog.cheatGroups,
+              notice:
+                "Cheats are applied as console commands when the game starts. The command and variable names come from the game's engine; whether the retail build accepts them at launch is described in the Far Cry 2 documentation."
+            )
           case "Saves": FarCry2SavesView(model: model)
           case "Setup": FarCry2SetupView(model: model)
           default: FarCry2PlayView(model: model)
@@ -35,6 +59,10 @@ struct FarCry2View: View {
           Spacer()
           if model.hasPendingChanges {
             Text("Unsaved changes").font(.caption).foregroundStyle(.secondary)
+          }
+          if model.phase == .playing {
+            Button(
+              "Return to Game", systemImage: "arrow.uturn.backward", action: model.returnToGame)
           }
           Button("Save Settings", action: model.apply).disabled(
             !model.canPlay || !model.hasPendingChanges)

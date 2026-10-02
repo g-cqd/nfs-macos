@@ -7,9 +7,15 @@ package struct FarCry2Settings: Codable, Equatable, Sendable {
 
   package init() { values = [:] }
 
-  /// Reads the managed options that are present and valid in the game's profile and renderer file.
+  /// The Wine registry section the Mac driver reads, as written in `user.reg`.
+  package static let macDriverSection = "Software\\\\Wine\\\\Mac Driver"
+
+  /// Reads the managed options that are present and valid in each place the game keeps them.
   /// Unknown or out-of-range values are left alone rather than imported.
-  package init(profile: GamerProfileDocument?, renderer: String?) throws(LauncherError) {
+  package init(
+    profile: GamerProfileDocument?, renderer: String?, registry: String? = nil,
+    launcher: Data? = nil
+  ) throws(LauncherError) {
     self.init()
     if let profile {
       for setting in FarCry2Catalog.settings {
@@ -31,6 +37,24 @@ package struct FarCry2Settings: Codable, Equatable, Sendable {
         if let value = config.value(section: "", key: setting.id), setting.accepts(value) {
           values[setting.id] = value
         }
+      }
+    }
+    if let registry {
+      let config = try ConfigText(registry)
+      for setting in FarCry2Catalog.settings {
+        guard let name = setting.registryName,
+          let raw = config.value(section: Self.macDriverSection, key: "\"\(name)\"")
+        else { continue }
+        let text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        values[setting.id] = ["y", "t", "1"].contains(text.lowercased().prefix(1)) ? "1" : "0"
+      }
+    }
+    if let launcher {
+      guard let saved = try? JSONDecoder().decode([String: String].self, from: launcher) else {
+        throw .operation("The saved launcher options are unreadable.")
+      }
+      for setting in FarCry2Catalog.settings where setting.isLauncher {
+        if let value = saved[setting.id], setting.accepts(value) { values[setting.id] = value }
       }
     }
     try validate()
@@ -83,7 +107,7 @@ package struct FarCry2Settings: Codable, Equatable, Sendable {
           changed += try profile.set(parts[index % 2], for: target)
         }
       } else {
-        changed = try profile.set(chosen, for: targets[0])
+        for target in targets { changed += try profile.set(chosen, for: target) }
       }
       if changed > 0 { applied.append(setting.id) } else { absent.append(setting.id) }
     }
@@ -111,16 +135,72 @@ package struct FarCry2Settings: Codable, Equatable, Sendable {
     return config.text
   }
 
-  /// The highest-quality preset that public evidence supports: native resolution, 4× MSAA with alpha
-  /// to coverage, the game's top texture level, full-resolution rendering and synchronous pipelines.
-  /// Detail levels are not touched; select Ultra High in the game's Video options.
+  /// Updates only the Mac driver values the starter owns in the prefix's `user.reg`.
+  /// - Returns: nil when the file is not a Wine registry, which is then left alone.
+  package func registryConfig(original: String) throws(LauncherError) -> String? {
+    try validate()
+    guard original.hasPrefix("WINE REGISTRY Version 2") else { return nil }
+    var config = try ConfigText(original)
+    for setting in FarCry2Catalog.settings {
+      guard let name = setting.registryName else { continue }
+      config.set(
+        section: Self.macDriverSection, key: "\"\(name)\"",
+        value: value(setting.id) == "1" ? "\"Y\"" : "\"N\"", compact: true)
+    }
+    return config.text
+  }
+
+  /// The launcher-owned options, as persisted next to the player data.
+  package func launcherData() throws(LauncherError) -> Data {
+    try validate()
+    var saved: [String: String] = [:]
+    for setting in FarCry2Catalog.settings where setting.isLauncher {
+      saved[setting.id] = value(setting.id)
+    }
+    do {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      return try encoder.encode(saved)
+    } catch { throw .operation("Could not encode the launcher options.") }
+  }
+
+  /// Environment, switches and console lines the chosen launcher options turn into.
+  package struct LaunchPlan: Equatable, Sendable {
+    package var environment: [String: String] = [:]
+    package var arguments: [String] = []
+    package var console: [String] = []
+    package init() {}
+  }
+
+  package func launchPlan() -> LaunchPlan {
+    var plan = LaunchPlan()
+    for setting in FarCry2Catalog.settings where setting.isLauncher {
+      let chosen = value(setting.id)
+      switch setting.launch {
+      case .none: break
+      case .environment(let name): plan.environment[name] = chosen
+      case .argument(let switchName): if chosen == "1" { plan.arguments.append(switchName) }
+      case .console(let template):
+        if !setting.isDefault(chosen) {
+          plan.console.append(template.replacingOccurrences(of: "{value}", with: chosen))
+        }
+      }
+    }
+    return plan
+  }
+
+  /// The highest-quality preset the evidence supports: native resolution, 4× MSAA with alpha to
+  /// coverage off (the two together draw foliage as opaque cards), the game's top texture level and top overall preset, Retina output, full-resolution
+  /// rendering and synchronous pipelines.
   package mutating func maximumQuality(width: Int, height: Int) {
     values["resolution"] = "\(width)x\(height)"
     values["fullscreen"] = "1"
     values["vsync"] = "0"
     values["antialiasing"] = "4"
-    values["alphaToCoverage"] = "1"
+    values["alphaToCoverage"] = "0"
     values["skipTopMip"] = "0"
+    values["quality"] = "ultrahigh"
+    values["retina"] = "1"
     values["render.scale"] = "1"
     values["shader.asyncCompile"] = "false"
   }
