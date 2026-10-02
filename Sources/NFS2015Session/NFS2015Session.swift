@@ -133,7 +133,9 @@ struct NFS2015Session {
   }
 
   /// Builds the unpublished prefix of a bundled app: Wine's defaults, then exactly the registry
-  /// values the recipe declares, including the controller key, which is this app's to write.
+  /// values the recipe declares, including the controller key, which is this app's to write, then
+  /// the .NET runtime the EA client's own updater needs, then the EA client that comes with the
+  /// app. The client layer is applied last and while Wine is stopped, because it edits the hives.
   private func initialize(_ prefix: URL, manifest: BundleManifest, runtime: WineRuntime) throws {
     try requireRosetta(try runtime.environment(prefix: prefix))
     try runtime.initializeBare(prefix)
@@ -144,11 +146,19 @@ struct NFS2015Session {
           try NFS2015Controller.registry(devices: manifest.controllers), named: "controller",
           prefix: prefix, runtime: runtime)
       }
+      _ = try runtime.installManagedRuntime(into: prefix)
     } catch {
       do { try runtime.stop(prefix) } catch { print("Wine setup cleanup failed: \(error)") }
       throw error
     }
     try runtime.stop(prefix)
+    if let reference = manifest.layer {
+      let layer = try ClientLayer(
+        root: paths.resources.appendingPathComponent(reference.path),
+        expectedSHA256: reference.manifestSHA256)
+      print("Installing the \(layer.summary) that comes with this app, without signing in to it.")
+      try layer.apply(to: prefix)
+    }
   }
 
   private func requireRosetta(_ environment: [String: String]) throws {
