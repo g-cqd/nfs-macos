@@ -30,9 +30,11 @@ def stage_resources(items, inputs, destination):
 def stage_game(resources, recipe, inputs, include_game_data):
     if include_game_data and not supports_edition(recipe, 'bundled'):
         raise ValueError('This recipe supports the import edition only; no game files are packaged')
+    rules = recipe.get('importRules')
     references = bool(recipe.get('referencesInstallation'))
-    if references:
-        # The player's own installation is recognised on their Mac; nothing is inventoried here.
+    if rules is not None or references:
+        # The player's own installation is recognised on their Mac, either by the import
+        # rules at import time or by reference; nothing is inventoried here either way.
         entries = []
     else:
         verify_hashes(inputs['game'], recipe['executableHashes'])
@@ -54,6 +56,9 @@ def stage_game(resources, recipe, inputs, include_game_data):
                 'gameDataIncluded': include_game_data,
                 'compatibilityFiles': [item['path'] for item in recipe['compatibility']],
                 'supportsSP': recipe.get('supportsSP', True), 'supportsMP': recipe.get('supportsMP', False)}
+    if rules is not None:
+        # Recognition happens on the player's Mac, so the rules are part of the contract.
+        manifest['importRules'] = rules
     if references:
         # Without an inventory, the recognition and launch contract is what the version covers.
         manifest.update(referencesInstallation=True, storeClient=recipe['storeClient'],

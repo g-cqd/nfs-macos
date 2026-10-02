@@ -4,6 +4,9 @@ import Foundation
 package enum LaunchEnvironment {
   /// The DLL override list each game needs, and nothing more.
   ///
+  /// Far Cry 2 also ships a Direct3D 10 renderer that mtld3d does not provide. The game supported
+  /// Windows XP, which has none of these libraries, so hiding them leaves only its Direct3D 9 path.
+  ///
   /// Need for Speed (2015) is launched by EA's client, whose 32-bit in-game overlay faults in
   /// wined3d, so `IGOProxy32.exe` is disabled. `winemenubuilder.exe` is disabled as well so the
   /// client cannot write menu entries into the player's host session.
@@ -11,6 +14,7 @@ package enum LaunchEnvironment {
     switch kind {
     case .nfsmw: "dinput8=n,b;mscoree,mshtml="
     case .cod4: "mscoree,mshtml="
+    case .farcry2: "mscoree,mshtml=;d3d10,d3d10_1,d3d10core,dxgi="
     case .nfs2015: "IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml="
     }
   }
@@ -50,7 +54,10 @@ package enum LaunchEnvironment {
       "MTL_HUD_ENABLED": "0",
       "RUST_LOG": "warn,mtld3d::perf=off",
     ]
-    if paths.kind == .cod4 {
+    // Only the games served out of the renderer subtree get it on the DLL search path. Most
+    // Wanted loads mtld3d from the default directory, and Need for Speed (2015) is a Direct3D 11
+    // title served through DXGI by D3DMetal, so mtld3d must not be on its path at all.
+    if paths.kind == .cod4 || paths.kind == .farcry2 {
       environment["WINEDLLPATH"] =
         paths.wine.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(
           "lib/wine/d3d9/mtld3d"

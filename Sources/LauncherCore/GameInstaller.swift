@@ -54,9 +54,12 @@ package struct GameInstaller {
       }
       let origin = originalData?.standardizedFileURL.resolvingSymlinksInPath()
       let version = origin == nil ? manifest.version : "import-" + UUID().uuidString
-      let metadata = GameGeneration(bundleVersion: manifest.version, imported: origin != nil)
+      let plan = try plan(origin: origin, isNewSource: source != nil, current: current)
+      let metadata = GameGeneration(
+        bundleVersion: manifest.version, imported: origin != nil, installation: plan.installation)
       if !files.fileExists(atPath: paths.data.path) {
-        try initialize(version: version, originalData: origin, metadata: metadata, initializePrefix)
+        try initialize(
+          version: version, originalData: origin, metadata: metadata, plan: plan, initializePrefix)
       } else {
         guard files.fileExists(atPath: paths.prefix.path),
           files.fileExists(atPath: paths.saves.path)
@@ -64,7 +67,7 @@ package struct GameInstaller {
           throw LauncherError.operation(
             "Player data is incomplete. Keep this folder and check the session log.")
         }
-        try updateGeneration(version: version, originalData: origin, metadata: metadata)
+        try updateGeneration(version: version, originalData: origin, metadata: metadata, plan: plan)
       }
       return paths.game(version: version)
     } catch let error as LauncherError { throw error } catch {
@@ -72,8 +75,67 @@ package struct GameInstaller {
     }
   }
 
+  /// The files one generation is built from, and what is recorded about the installation they came from.
+  private struct Plan {
+    let files: [ManifestFile]
+    let installation: InstalledGame?
+    /// The player's own files, when recognised at import time; saved so an app update can verify them.
+    let inventory: [ManifestFile]?
+  }
+
+  /// Fixed-manifest games copy their manifest. Import-only games recognise the selected folder first,
+  /// then reuse the saved inventory when an app update re-verifies the active imported copy.
+  private func plan(
+    origin: URL?, isNewSource: Bool, current: (game: URL, metadata: GameGeneration)?
+  ) throws -> Plan {
+    guard let rules = manifest.importRules else {
+      return Plan(files: manifest.gameFiles, installation: nil, inventory: nil)
+    }
+    guard let origin else {
+      throw LauncherError.operation("Import your installed PC game folder first.")
+    }
+    let inventory: [ManifestFile]
+    let installation: InstalledGame?
+    if isNewSource {
+      let scan = try InstallScanner.scan(origin, rules: rules)
+      try scan.game.validate()
+      inventory = scan.files
+      installation = scan.game
+    } else {
+      guard let current else {
+        throw LauncherError.operation("The imported game copy is missing. Import it again.")
+      }
+      inventory = try Self.storedInventory(of: current.game)
+      installation = current.metadata.installation
+    }
+    let combined = BundleManifest(
+      version: manifest.version, gameFiles: inventory + manifest.gameFiles, gameID: manifest.gameID)
+    try combined.validate()
+    return Plan(
+      files: combined.gameFiles, installation: installation, inventory: inventory)
+  }
+
+  private static func storedInventory(of game: URL) throws -> [ManifestFile] {
+    let url = game.deletingLastPathComponent().appendingPathComponent("inventory.json")
+    // 30,000 entries at up to 512-byte paths stay well below this cap, so a saved inventory is always readable.
+    let entries = try JSONDecoder().decode(
+      [ManifestFile].self, from: BoundedFile.read(url, limit: 32 * 1024 * 1024))
+    guard !entries.isEmpty, entries.count <= 30_000 else {
+      throw LauncherError.operation("The imported game inventory is invalid. Import it again.")
+    }
+    for entry in entries { try ManifestFile.validate(path: entry.path) }
+    return entries
+  }
+
+  /// What the active imported generation was recognised as, or nil for a fixed-manifest game.
+  package static func installedGame(paths: AppPaths) -> InstalledGame? {
+    let url = paths.data.appendingPathComponent("Current/origin.json")
+    guard let data = try? BoundedFile.read(url, limit: 16_384) else { return nil }
+    return (try? JSONDecoder().decode(GameGeneration.self, from: data))?.installation
+  }
+
   private func initialize(
-    version: String, originalData: URL?, metadata: GameGeneration,
+    version: String, originalData: URL?, metadata: GameGeneration, plan: Plan,
     _ initializePrefix: (URL) throws -> Void
   ) throws {
     let stage = paths.support.appendingPathComponent(".preparing")
@@ -81,7 +143,7 @@ package struct GameInstaller {
     try files.createDirectory(at: stage, withIntermediateDirectories: false)
     do {
       let game = stage.appendingPathComponent("Versions/\(version)/Game")
-      try copyVerifiedGame(to: game, originalData: originalData, metadata: metadata)
+      try copyVerifiedGame(to: game, originalData: originalData, metadata: metadata, plan: plan)
       try files.createDirectory(
         at: stage.appendingPathComponent("Saves"), withIntermediateDirectories: false)
       try files.createSymbolicLink(
@@ -108,9 +170,9 @@ package struct GameInstaller {
     }
   }
 
-  private func updateGeneration(version: String, originalData: URL?, metadata: GameGeneration)
-    throws
-  {
+  private func updateGeneration(
+    version: String, originalData: URL?, metadata: GameGeneration, plan: Plan
+  ) throws {
     let generation = paths.game(version: version).deletingLastPathComponent()
     let current = paths.data.appendingPathComponent("Current")
     if !files.fileExists(atPath: generation.path) {
@@ -118,7 +180,8 @@ package struct GameInstaller {
       if files.fileExists(atPath: stage.path) { try files.removeItem(at: stage) }
       do {
         try copyVerifiedGame(
-          to: stage.appendingPathComponent("Game"), originalData: originalData, metadata: metadata)
+          to: stage.appendingPathComponent("Game"), originalData: originalData, metadata: metadata,
+          plan: plan)
         for name in paths.kind.preservedConfiguration {
           let previous = paths.currentGame.appendingPathComponent(name)
           guard files.fileExists(atPath: previous.path) else { continue }
@@ -167,18 +230,18 @@ package struct GameInstaller {
     let metadata: GameGeneration
     if files.fileExists(atPath: metadataURL.path) {
       metadata = try JSONDecoder().decode(
-        GameGeneration.self, from: BoundedFile.read(metadataURL, limit: 4096))
+        GameGeneration.self, from: BoundedFile.read(metadataURL, limit: 16_384))
     } else {
       metadata = GameGeneration(bundleVersion: name, imported: false)
     }
     return (game, metadata)
   }
 
-  private func copyVerifiedGame(to destination: URL, originalData: URL?, metadata: GameGeneration)
-    throws
-  {
+  private func copyVerifiedGame(
+    to destination: URL, originalData: URL?, metadata: GameGeneration, plan: Plan
+  ) throws {
     try files.createDirectory(at: destination, withIntermediateDirectories: true)
-    for file in manifest.gameFiles {
+    for file in plan.files {
       let root =
         paths.kind.isOriginalData(file.path) ? (originalData ?? paths.template) : paths.template
       try VerifiedGameFile.copy(file, from: root, to: destination.appendingPathComponent(file.path))
@@ -188,8 +251,12 @@ package struct GameInstaller {
         atPath: destination.appendingPathComponent("players").path,
         withDestinationPath: "../../../Saves")
     }
+    let generation = destination.deletingLastPathComponent()
+    if let inventory = plan.inventory {
+      try JSONEncoder().encode(inventory).write(
+        to: generation.appendingPathComponent("inventory.json"), options: .withoutOverwriting)
+    }
     try JSONEncoder().encode(metadata).write(
-      to: destination.deletingLastPathComponent().appendingPathComponent("origin.json"),
-      options: .withoutOverwriting)
+      to: generation.appendingPathComponent("origin.json"), options: .withoutOverwriting)
   }
 }

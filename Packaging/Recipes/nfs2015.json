@@ -47,7 +47,7 @@
     "054C/0CE6"
   ],
   "inputs": {
-    "baseApp": "{home}/Desktop/Game Builds/Most Wanted Bundled.app",
+    "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
