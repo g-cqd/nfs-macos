@@ -61,20 +61,21 @@ The current inputs are retained local artifacts:
 | NFS original assets | `~/Games/NFSMW` |
 | NFS cursor-corrected Wine, compatibility assets, notices and dependency sources | `~/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app` (preserved v5) |
 | CoD4 original assets / working Wine base | `~/Games/CoD4` / `~/Games/CoD4-tools/wine` |
-| Tested latest mtld3d overlay | `~/Games/tools-integrate/renderer-845b6c9/retained-overlay/wine/lib/wine` |
-| Renderer source evidence | `~/Games/tools-integrate/renderer-845b6c9/source-sha256.json` |
-| Latest sidecar / corresponding forks | `~/Games/tools-integrate/sidecar-c396937/x87sidecar`, `~/Games/tools-integrate/src/{mtld3d,x87sidecar}` |
+| Tested latest mtld3d overlay | `~/Games/release-build/renderer-20261002-7d108a4/retained-overlay/wine/lib/wine` |
+| Renderer source evidence | `~/Games/release-build/renderer-20261002-7d108a4/source-sha256.json` |
+| Latest sidecar / corresponding forks | `~/Games/release-build/sidecar-c396937/x87sidecar`, `~/Games/release-build/src/{mtld3d,x87sidecar}` |
+| Need for Speed (2015) game payload | `~/Games/NFS2015-game`, a standalone APFS clone of exactly the 144 pinned files |
 
 The mtld3d inputs apply only to the Direct3D 9 recipes. The renderer was rebuilt at
-`845b6c9` and all four pins moved together, which is the only way they may move. The
+`7d108a4` and all four pins moved together, which is the only way they may move. The
 revision pin, `rendererSourceManifestSHA256` and `rendererFiles` describe one built
 renderer, so bumping the revision alone would claim provenance the staged binaries do not
-have. `~/Games/tools-integrate/renderer-845b6c9` is that build:
+have. `~/Games/release-build/renderer-20261002-7d108a4` is that build:
 `build-command.txt` records the exact recipe, `source-sha256.json` the 631 files tracked at
 the revision, and `artifacts-sha256.json` the seven pinned binaries.
 
 The source inputs are scratch `git clone --local` checkouts under
-`~/Games/tools-integrate/src`, detached at the pinned revisions, not the developer
+`~/Games/release-build/src`, detached at the pinned revisions, not the developer
 checkouts in `~/Developer`. A scratch clone cannot drift under the build while another
 worker commits, and the renderer and the sidecar were compiled inside those clones, so the
 archive a bundle ships and the binary it installs come from the same tree. The build is `PROD=1 PERF=0`, so the perf

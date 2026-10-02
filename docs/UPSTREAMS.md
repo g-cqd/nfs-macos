@@ -2,10 +2,55 @@
 
 | Component | Fork branch | Pinned revision |
 |---|---|---|
-| mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `845b6c914a55633cbe099a076432d2dbe3656d1d` |
+| mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
 | x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `c3969379750531fb124859ae742ab4f727f54f9c` |
 | NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
+
+**Repin of 2026-10-02 (third), the release line.** One integration line, `release-latest`, repins every shipped
+app together. Old -> new:
+
+| Pin | Was | Now |
+|---|---|---|
+| mtld3d revision | `845b6c914a55633cbe099a076432d2dbe3656d1d` | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
+| x87sidecar revision | `c3969379750531fb124859ae742ab4f727f54f9c` | unchanged (`c396937` is still the tip of `development`) |
+| `sidecarSHA256` | `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5` | unchanged; a new scratch clone rebuilt it byte for byte |
+| `rendererSourceManifestSHA256` | `2fa01910...2e23` | `fd47420c1ba3c0c51b9b9c2fcb6c4f5efcf94c9acf6894bc6df3ef1683fd445f` |
+| `d3d9/mtld3d/i386-windows/d3d8.dll` | `24493c04...b27a` | `e2ad9398...4344` |
+| `d3d9/mtld3d/i386-windows/d3d9.dll` | `f3a1551a...463e` | `5f0c974c...0abf` |
+| `d3d9/mtld3d/i386-windows/mtld3d.dll` | `b5066539...ec5f` | `396e7bb2...23f0` |
+| `d3d9/mtld3d/x86_64-unix/mtld3d.so` | `2fb0c4c0...2710` | `2d8e2cc5...6d26` |
+| `i386-windows/d3d8.dll` | `37f18535...303f` | `2ec14095...1afa` |
+| `i386-windows/d3d9.dll` | `22f0d972...e0cb` | `2ae214f2...73d5` |
+| `i386-windows/mtld3d.dll` | `4b6db9df...1c72` | `82280e97...56e1` |
+
+mtld3d `development` is `7d108a4`: `845b6c9` merged with upstream through `b93e752`, with the 1.99 clippy lints
+satisfied. It was built from a scratch `git clone --local` of the developer checkout, detached at exactly that
+commit, `PROD=1 PERF=0 FP=0 CRUMB=0`, non-telemetry, Rust 1.99.0 and nightly-2026-10-02, with the same recipe as
+the `d5fc324` build (`pentium4` for i686, `x86-64-v2` for x86_64, the read-only xwin sysroot and Wine SDK). 631
+source hashes, seven artifact hashes. Measured on that build's tree: 1,849 core and 714 Unix host unit tests (714
+passed, 2 skipped) and, per Windows architecture, 1,004 end-to-end tests passed, 0 failed, 11 ignored (benchmarks).
+Neither the shipped renderer nor its Unix bridge contains `mtld3d_shaders*` or any `perf_tracking` string. These
+tests establish renderer correctness coverage, not game performance or game-level compatibility; no game was
+played on this build.
+
+x87sidecar `c396937` is unchanged. Its matrix at that commit was 1,059 passed, 0 failed and 2 stock divergences
+of 1,061; it was not re-run, because the revision did not move, but the binary was rebuilt in a new scratch clone
+and equals the pinned `sidecarSHA256`.
+
+The recipes' renderer, evidence, sidecar and source inputs now point at `~/Games/release-build`. The Far Cry 2
+Bundled recipe (`farcry2-bundled.json`) was deliberately not touched: it still names the `845b6c9` inputs under
+`tools-integrate` and needs its own repoint before it can be built against these pins.
+
+**Need for Speed (2015) provenance.** That app is a Direct3D 11 title served by dxmt and pins no renderer, so it has
+no mtld3d revision. Its `runtime-provenance.json` used to inherit `2513602...` from the Most Wanted base app, together with an
+`mtld3d` source archive and a renderer test claim that described that other app. The packager now drops a pinned
+source whose input the recipe does not declare, records it under `sourcesNotApplicable` with the reason, deletes the
+inherited archive and patch, and makes the renderer claim only for an app that installs the pinned renderer.
+`check_runtime_inputs.py` pins this. The Wine runtime profile still carries its own, unpinned Direct3D 9/8 files;
+they were not built, verified or selected by this app, so no revision is claimed for them. The `wine`, `wine-build` and
+`XtendedInput` entries inherited from the same base app are unchanged and still describe the Most Wanted base, not
+the Need for Speed (2015) runtime, whose own source is `runtimeSource`; correcting those is a follow-up.
 
 **Repin of 2026-10-02 (second).** mtld3d `development` is now `845b6c9` (`d5fc324` plus the unpublished upstream
 commits through `5287496` and a built-in Far Cry 2 profile that reports an NVIDIA adapter, which makes tree leaves

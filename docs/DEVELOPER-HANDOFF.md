@@ -71,30 +71,30 @@ All local paths below are on the current developer Mac; another developer must c
 
 | Purpose | Location |
 | --- | --- |
-| Native starters, session helpers, tests, bundler, documentation | `/Users/gc/Games/NFSMW-tools/macos-app` |
+| Native starters, session helpers, tests, bundler, documentation | `~/Games/NFSMW-tools/macos-app` |
 | Bundler GitHub repository | `https://github.com/g-cqd/nfs-macos` |
 | Current bundler branch | `refresh-runtimes-cod4-bundle` |
-| mtld3d source | `/Users/gc/Developer/mtld3d` |
+| mtld3d source | `~/Developer/mtld3d` |
 | mtld3d fork / upstream | `https://github.com/g-cqd/mtld3d` / `https://github.com/athei/mtld3d` |
-| x87sidecar source | `/Users/gc/Developer/x87sidecar` |
+| x87sidecar source | `~/Developer/x87sidecar` |
 | x87sidecar fork / upstream | `https://github.com/g-cqd/x87sidecar` / `https://github.com/athei/x87sidecar` |
 | Runtime fork branches | `development` in both forks; `origin` is g-cqd, `upstream` is athei |
 | Cursor-corrected Wine source fork | `https://github.com/g-cqd/wine/tree/nfsmw-macos` |
-| Original NFSMW installation | `/Users/gc/Games/NFSMW` |
-| Original CoD4 installation and original Gigi profile | `/Users/gc/Games/CoD4`; `players/profiles/Gigi` beneath it |
-| Existing CoD4 tools/runtime/evidence | `/Users/gc/Games/CoD4-tools` |
-| New apps and ZIPs | `/Users/gc/Desktop/Game Builds` |
-| Latest machine-readable release status | `/Users/gc/Desktop/Game Builds/Verification/release-status.json` |
-| NFSMW app's writable player data | `/Users/gc/Library/Application Support/NFSMW` |
-| CoD4 app's writable player data | `/Users/gc/Library/Application Support/CoD4Mac` |
-| Shared worker communication | `/Users/gc/Desktop/The_Board` |
-| Current delivery evidence | `/Users/gc/Games/NFSMW-tools/macos-app/Evidence/delivery-20260927-yczkgx7b` |
+| Original NFSMW installation | `~/Games/NFSMW` |
+| Original CoD4 installation and original Gigi profile | `~/Games/CoD4`; `players/profiles/Gigi` beneath it |
+| Existing CoD4 tools/runtime/evidence | `~/Games/CoD4-tools` |
+| New apps and ZIPs | `~/Desktop/Game Builds` |
+| Latest machine-readable release status | `~/Desktop/Game Builds/Verification/release-status.json` |
+| NFSMW app's writable player data | `~/Library/Application Support/NFSMW` |
+| CoD4 app's writable player data | `~/Library/Application Support/CoD4Mac` |
+| Shared worker communication | `~/Desktop/The_Board` |
+| Current delivery evidence | `~/Games/NFSMW-tools/macos-app/Evidence/delivery-20260927-yczkgx7b` |
 
 The old NFSMW v5 app on the Desktop is still a packaging input for retained Wine, compatibility files, notices, and dependency sources. Preserve it until those inputs have been deliberately migrated. `docs/BUNDLING.md` and recipe JSON files enumerate the actual input paths. The obsolete original conversation working directory is not the source repository.
 
 ### Pinned runtime versions in this release
 
-- mtld3d: `845b6c914a55633cbe099a076432d2dbe3656d1d`, built `PROD=1 PERF=0` with Rust 1.99.0.
+- mtld3d: `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f`, built `PROD=1 PERF=0` with Rust 1.99.0.
 - x87sidecar: `c3969379750531fb124859ae742ab4f727f54f9c` (binary `160e06be…bae5`); adds the `fld_gap_fstp` fusion over `12afdc2`; see UPSTREAMS.md.
 - NFSMW cursor-corrected Wine source: `f064add996bbf4819acf49f48bab263735279800`, CX26.3 / Wine 11.0 lineage.
 
@@ -196,14 +196,14 @@ Normal runs disable the Metal HUD and performance instrumentation. Shader compil
 ## 8. First steps for the incoming developer
 
 1. Read this handoff, `README.md`, `docs/BUNDLING.md`, `docs/COD4.md`, and the repository's current instructions.
-2. Inspect `git status`, current branches, and `/Users/gc/Desktop/The_Board`. Coordinate before modifying shared files or runtimes. The board uses compact JSONL messages; append to an owned file and do not overwrite another worker's log.
+2. Inspect `git status`, current branches, and `~/Desktop/The_Board`. Coordinate before modifying shared files or runtimes. The board uses compact JSONL messages; append to an owned file and do not overwrite another worker's log.
 3. Identify any running game before testing. The user prefers to perform menu navigation and gameplay checks. Explain the exact check and wait for the result. Do not take over a live race or campaign.
 4. Preserve original games, original Gigi profiles, their backups, the current released apps, and retained build inputs.
 5. Use a uniquely named temporary support directory/prefix for experiments. Record ownership and cleanup only that directory. Stop only your own prefix's wineserver. Never issue a global Wine kill as routine cleanup.
 6. Build and test the native code before spending time on large archives.
 
 ```sh
-cd /Users/gc/Games/NFSMW-tools/macos-app
+cd ~/Games/NFSMW-tools/macos-app
 xcrun swift test
 xcrun swift build -c release -Xswiftc -warnings-as-errors
 xcrun swift-format lint --strict --recursive Sources Tests
