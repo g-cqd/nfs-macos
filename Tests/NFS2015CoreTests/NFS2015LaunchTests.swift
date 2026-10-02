@@ -29,121 +29,9 @@ struct NFS2015LaunchTests {
     #expect(plan.request.windowsPath.hasSuffix(#"\EA Desktop\EALauncher.exe"#))
     #expect(plan.request.arguments == ["origin2://game/launch/?offerIds=1024486"])
     #expect(plan.workingDirectory.lastPathComponent == "Need for Speed")
-    #expect(plan.readinessEvidence.count == 1)
-    #expect(plan.readinessChildren == 1)
+    #expect(plan.readiness.startMarker == "[STARTUP]")
+    #expect(plan.readiness.readyEvents == ["login", "client.boot.ready"])
     #expect(plan.readinessSeconds == 120)
-  }
-
-  /// The failed first Play of a bundled app: the client had been opened and signed in, but the
-  /// activation folder the plan named is only created when a game is first activated.
-  @Test
-  func `waits for evidence the client has not written yet instead of refusing to play`() throws {
-    let prefix = try SyntheticPrefix.complete()
-    defer { prefix.remove() }
-    let logs = prefix.driveC.appendingPathComponent(
-      "users/crossover/AppData/Local/Electronic Arts/EA Desktop/Logs")
-    try FileManager.default.removeItem(at: logs)
-    let install = try #require(
-      try NFS2015Locator.resolve(prefix: prefix.root, plan: SyntheticPrefix.plan).install)
-    let plan = try NFS2015LaunchPlan.make(install: install, plan: SyntheticPrefix.plan)
-    let evidence = try #require(plan.readinessEvidence.first)
-    #expect(plan.readinessEvidence.count == 1)
-    #expect(
-      evidence.path.hasSuffix("/users/crossover/AppData/Local/Electronic Arts/EA Desktop/Logs"))
-    #expect(ClientReadiness.newestModification(of: evidence) == nil)
-    let started = Date().addingTimeInterval(-1)
-    try prefix.file("users/crossover/AppData/Local/Electronic Arts/EA Desktop/Logs/client.log")
-    let waited = try ClientReadiness(evidence: plan.readinessEvidence, children: 0, deadline: 10)
-      .wait(
-        since: started, modified: ClientReadiness.newestModification, isRunning: { true },
-        helpers: { 0 }, wait: { _ in })
-    #expect(waited == 0)
-  }
-
-  @Test
-  func `observes a machine-wide client log in the Windows drive, not in the user's profile`() throws
-  {
-    let prefix = try SyntheticPrefix.complete()
-    defer { prefix.remove() }
-    let log = try prefix.file("ProgramData/EA Desktop/Logs/cef.log")
-    let plan = StoreClientPlan(
-      name: SyntheticPrefix.plan.name, installRoot: SyntheticPrefix.plan.installRoot,
-      clientExecutable: SyntheticPrefix.plan.clientExecutable, clientArguments: [],
-      launcherExecutable: SyntheticPrefix.plan.launcherExecutable,
-      launchURL: SyntheticPrefix.plan.launchURL, offerID: SyntheticPrefix.plan.offerID,
-      signInEvidence: SyntheticPrefix.plan.signInEvidence,
-      readinessEvidence: ["ProgramData/EA Desktop/Logs/cef.log", "ProgramData/Later/new.log"],
-      readinessChildren: 0, readinessSeconds: 30, gameRoot: SyntheticPrefix.plan.gameRoot)
-    let install = try #require(try NFS2015Locator.resolve(prefix: prefix.root, plan: plan).install)
-    let made = try NFS2015LaunchPlan.make(install: install, plan: plan)
-    #expect(
-      made.readinessEvidence.first?.resolvingSymlinksInPath() == log.resolvingSymlinksInPath())
-    // A location that does not exist yet is still observed, below its nearest existing folder.
-    #expect(made.readinessEvidence.count == 2)
-    let pending = try #require(made.readinessEvidence.last)
-    #expect(pending.path.hasSuffix("/drive_c/ProgramData/Later/new.log"))
-    #expect(ClientReadiness.newestModification(of: pending) == nil)
-  }
-
-  @Test
-  func `rejects readiness evidence that leaves the Windows folder`() throws {
-    let prefix = try SyntheticPrefix.complete()
-    defer { prefix.remove() }
-    let install = try #require(
-      try NFS2015Locator.resolve(prefix: prefix.root, plan: SyntheticPrefix.plan).install)
-    let plan = StoreClientPlan(
-      name: "EA app", installRoot: SyntheticPrefix.plan.installRoot,
-      clientExecutable: SyntheticPrefix.plan.clientExecutable, clientArguments: [],
-      launcherExecutable: SyntheticPrefix.plan.launcherExecutable,
-      launchURL: SyntheticPrefix.plan.launchURL, offerID: "1", signInEvidence: ["a"],
-      readinessEvidence: ["ProgramData/../../escape.log"], readinessChildren: 0,
-      readinessSeconds: 10, gameRoot: "f")
-    #expect(throws: LauncherError.self) { try NFS2015LaunchPlan.make(install: install, plan: plan) }
-  }
-
-  @Test
-  func `returns as soon as the client has helpers and touches its own folder`() throws {
-    let readiness = ClientReadiness(
-      evidence: [URL(fileURLWithPath: "/tmp/logs")], children: 2, deadline: 10)
-    let start = Date()
-    var slept = 0
-    let waited = try readiness.wait(
-      since: start, modified: { _ in slept >= 3 ? start.addingTimeInterval(1) : nil },
-      isRunning: { true }, helpers: { slept >= 2 ? 2 : 0 }, wait: { slept += $0 })
-    #expect(waited == 3)
-  }
-
-  @Test
-  func `refuses to send a request to a client that is still wedged`() throws {
-    let readiness = ClientReadiness(
-      evidence: [URL(fileURLWithPath: "/tmp/logs")], children: 2, deadline: 4)
-    var slept = 0
-    #expect(throws: LauncherError.self) {
-      try readiness.wait(
-        since: Date(), modified: { _ in Date() }, isRunning: { true }, helpers: { 0 },
-        wait: { slept += $0 })
-    }
-    #expect(slept == 5)
-  }
-
-  @Test
-  func `tells the player to open the client when it exits early`() throws {
-    let readiness = ClientReadiness(
-      evidence: [URL(fileURLWithPath: "/tmp/logs")], children: 0, deadline: 10)
-    let error = #expect(throws: LauncherError.self) {
-      try readiness.wait(
-        since: Date(), modified: { _ in nil }, isRunning: { false }, helpers: { 0 },
-        wait: { _ in })
-    }
-    #expect(error?.localizedDescription.contains("stopped before it was ready") == true)
-  }
-
-  @Test
-  func `refuses a plan with no way to tell the client is ready`() throws {
-    #expect(throws: LauncherError.self) {
-      try ClientReadiness(evidence: [], children: 1, deadline: 10).wait(
-        since: Date(), modified: { _ in nil }, isRunning: { true }, helpers: { 4 }, wait: { _ in })
-    }
   }
 
   @Test
@@ -152,9 +40,51 @@ struct NFS2015LaunchTests {
       let plan = StoreClientPlan(
         name: "EA app", installRoot: "a", clientExecutable: "b", clientArguments: [],
         launcherExecutable: "c", launchURL: url, offerID: "1", signInEvidence: ["d"],
-        readinessEvidence: ["e"], readinessChildren: 0, readinessSeconds: 10, gameRoot: "f")
+        readinessLog: "e", startMarker: "[STARTUP]", readyEvents: ["login"], readinessSeconds: 10,
+        gameRoot: "f")
       #expect(throws: LauncherError.self) { try plan.validate() }
     }
+  }
+
+  @Test(arguments: [
+    ("", ["login"]), ("[STARTUP]\n[x]", ["login"]), ("[STARTUP]", []),
+    ("[STARTUP]", ["login; id"]), ("[STARTUP]", ["Login"]),
+    ("[STARTUP]", [String](repeating: "a", count: 9)),
+  ])
+  func `rejects a readiness marker or event that is not plain`(marker: String, events: [String])
+    throws
+  {
+    let plan = StoreClientPlan(
+      name: "EA app", installRoot: "a", clientExecutable: "b", clientArguments: [],
+      launcherExecutable: "c", launchURL: "origin2://game/launch/?offerIds={offer}", offerID: "1",
+      signInEvidence: ["d"], readinessLog: "e", startMarker: marker, readyEvents: events,
+      readinessSeconds: 10, gameRoot: "f")
+    #expect(throws: LauncherError.self) { try plan.validate() }
+  }
+
+  @Test
+  func `rejects a readiness log that leaves the Windows folder`() throws {
+    let plan = StoreClientPlan(
+      name: "EA app", installRoot: "a", clientExecutable: "b", clientArguments: [],
+      launcherExecutable: "c", launchURL: "origin2://game/launch/?offerIds={offer}", offerID: "1",
+      signInEvidence: ["d"], readinessLog: "ProgramData/../../escape.log",
+      startMarker: "[STARTUP]", readyEvents: ["login"], readinessSeconds: 10, gameRoot: "f")
+    #expect(throws: LauncherError.self) { try plan.validate() }
+  }
+
+  @Test
+  func `finds the client log case-insensitively and before it exists`() throws {
+    let prefix = try SyntheticPrefix.complete()
+    defer { prefix.remove() }
+    let existing = try prefix.file("PROGRAMDATA/ea desktop/Logs/EADesktop.log")
+    let found = try NFS2015LaunchPlan.logLocation(
+      "ProgramData/EA Desktop/Logs/EADesktop.log", in: prefix.driveC)
+    #expect(found.resolvingSymlinksInPath() == existing.resolvingSymlinksInPath())
+    let absent = try SyntheticPrefix()
+    defer { absent.remove() }
+    let pending = try NFS2015LaunchPlan.logLocation(
+      "ProgramData/EA Desktop/Logs/EADesktop.log", in: absent.driveC)
+    #expect(pending.path.hasSuffix("/drive_c/ProgramData/EA Desktop/Logs/EADesktop.log"))
   }
 
   @Test
@@ -163,7 +93,8 @@ struct NFS2015LaunchTests {
       name: "EA app", installRoot: "a", clientExecutable: "b",
       clientArguments: ["--in-process-gpu; rm -rf /"], launcherExecutable: "c",
       launchURL: "origin2://game/launch/?offerIds={offer}", offerID: "1", signInEvidence: ["d"],
-      readinessEvidence: ["e"], readinessChildren: 0, readinessSeconds: 10, gameRoot: "f")
+      readinessLog: "e", startMarker: "[STARTUP]", readyEvents: ["login"], readinessSeconds: 10,
+      gameRoot: "f")
     #expect(throws: LauncherError.self) { try plan.validate() }
   }
 

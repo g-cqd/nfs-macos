@@ -36,10 +36,12 @@
     "signInEvidence": [
       "AppData/Local/Electronic Arts/EA Desktop"
     ],
-    "readinessEvidence": [
-      "ProgramData/EA Desktop/Logs/cef.log"
+    "readinessLog": "ProgramData/EA Desktop/Logs/EADesktop.log",
+    "startMarker": "[STARTUP]",
+    "readyEvents": [
+      "login",
+      "client.boot.ready"
     ],
-    "readinessChildren": 0,
     "readinessSeconds": 180,
     "gameRoot": "Program Files/EA Games/Need for Speed"
   },

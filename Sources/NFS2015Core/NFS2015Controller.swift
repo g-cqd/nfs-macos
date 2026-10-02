@@ -55,6 +55,29 @@ package enum ProcessFamily {
     return counted
   }
 
+  /// The command line a process shows, which for a Windows program run by Wine is the Windows
+  /// path of the program; nil when the process is gone.
+  package static func commandLine(of pid: Int32) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-ww", "-o", "command=", "-p", String(pid)]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    process.standardInput = FileHandle.nullDevice
+    do { try process.run() } catch { return nil }
+    let data = (try? pipe.fileHandleForReading.read(upToCount: 65_536)) ?? Data()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+    let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+
+  /// Whether a live process is running the named program, such as `EADesktop.exe`.
+  package static func runs(pid: Int32, program: String) -> Bool {
+    commandLine(of: pid)?.lowercased().contains(program.lowercased()) == true
+  }
+
   private static func children(of pid: Int32) -> [Int32] {
     let capacity = 256
     var buffer = [pid_t](repeating: 0, count: capacity)

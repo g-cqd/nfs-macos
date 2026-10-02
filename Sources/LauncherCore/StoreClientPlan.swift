@@ -23,14 +23,15 @@ package struct StoreClientPlan: Codable, Equatable, Sendable {
   package let offerID: String
   /// Prefix-relative folders, below a Windows user profile, that exist once a player signs in.
   package let signInEvidence: [String]
-  /// Prefix-relative locations, below a Windows user profile, the client touches when it starts.
-  package let readinessEvidence: [String]
-  /// The number of live helper processes the client must have before it is ready.
-  ///
-  /// The EA client renders its interface in separate `EACefSubProcess` children. A client
-  /// without them is wedged and has to be restarted, so their presence is the readiness signal.
-  package let readinessChildren: Int
-  /// How long the session waits for the client to open its own window before giving up.
+  /// The client's own diagnostic log, relative to the Windows drive, that tells when it is ready.
+  package let readinessLog: String
+  /// The text the client writes at the start of every run, so only the latest run is read.
+  package let startMarker: String
+  /// Telemetry event names that, all present after the start marker, mean the client is signed
+  /// in and has finished booting.
+  package let readyEvents: [String]
+  /// How long one Play waits for the client to be ready. The client is never ended when this
+  /// passes; the player is told what is missing and presses Play again.
   package let readinessSeconds: Int
   /// The game's installation root inside the same Windows prefix.
   package let gameRoot: String
@@ -38,7 +39,8 @@ package struct StoreClientPlan: Codable, Equatable, Sendable {
   package init(
     name: String, installRoot: String, clientExecutable: String, clientArguments: [String],
     launcherExecutable: String, launchURL: String, offerID: String, signInEvidence: [String],
-    readinessEvidence: [String], readinessChildren: Int, readinessSeconds: Int, gameRoot: String
+    readinessLog: String, startMarker: String, readyEvents: [String], readinessSeconds: Int,
+    gameRoot: String
   ) {
     self.name = name
     self.installRoot = installRoot
@@ -48,8 +50,9 @@ package struct StoreClientPlan: Codable, Equatable, Sendable {
     self.launchURL = launchURL
     self.offerID = offerID
     self.signInEvidence = signInEvidence
-    self.readinessEvidence = readinessEvidence
-    self.readinessChildren = readinessChildren
+    self.readinessLog = readinessLog
+    self.startMarker = startMarker
+    self.readyEvents = readyEvents
     self.readinessSeconds = readinessSeconds
     self.gameRoot = gameRoot
   }
@@ -61,8 +64,8 @@ package struct StoreClientPlan: Codable, Equatable, Sendable {
 
   /// Rejects an unsafe path, an unbounded wait, or an argument that is not a plain switch.
   package func validate() throws(LauncherError) {
-    for path in [installRoot, clientExecutable, launcherExecutable, gameRoot] + signInEvidence
-      + readinessEvidence
+    for path in [installRoot, clientExecutable, launcherExecutable, gameRoot, readinessLog]
+      + signInEvidence
     {
       try ManifestFile.validate(path: path)
     }
@@ -90,10 +93,19 @@ package struct StoreClientPlan: Codable, Equatable, Sendable {
     else {
       throw .operation("The store offer identifier must be a decimal number.")
     }
-    guard (1...16).contains(signInEvidence.count), (1...16).contains(readinessEvidence.count),
-      (0...64).contains(readinessChildren), (5...600).contains(readinessSeconds)
-    else {
+    guard (1...16).contains(signInEvidence.count), (5...600).contains(readinessSeconds) else {
       throw .operation("The store client needs sign-in evidence and a bounded readiness wait.")
+    }
+    guard (1...128).contains(startMarker.utf8.count), !startMarker.contains("\n"),
+      (1...8).contains(readyEvents.count),
+      readyEvents.allSatisfy({
+        (1...64).contains($0.utf8.count)
+          && $0.utf8.allSatisfy {
+            (97...122).contains($0) || (48...57).contains($0) || $0 == 46 || $0 == 95
+          }
+      })
+    else {
+      throw .operation("The store client needs a start marker and plain ready event names.")
     }
   }
 }

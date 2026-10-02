@@ -17,7 +17,11 @@ enum NFS2015Phase: Equatable {
     switch self {
     case .preparing: "Checking your installation…"
     case .ready: "Ready to play"
-    case .playing: "The EA app is running this session. Quit it to return here."
+    case .playing:
+      """
+      Starting the EA app and the game. If the EA app asks you to sign in, sign in there. \
+      Quitting the EA app returns here.
+      """
     case .needsRosetta: "Rosetta is required to run this Windows game."
     case .needsInstallation: "Choose the Windows folder that holds the EA app and this game."
     case .installing: "Running the EA app installer… finish it, then close its window."
@@ -71,6 +75,7 @@ final class NFS2015Model {
         files. This takes a few minutes.
         """
     }
+    if phase == .ready, let notice = snapshot.notice { return notice }
     guard phase == .needsInstallation, ownsWindowsFolder else { return phase.message }
     return snapshot.setup == .installClient
       ? "Install the EA app, then sign in to it."

@@ -12,8 +12,8 @@ struct SeededFixture {
     launcherExecutable: "EA Desktop/EALauncher.exe",
     launchURL: "origin2://game/launch/?offerIds={offer}", offerID: "1024486",
     signInEvidence: ["AppData/Local/Electronic Arts/EA Desktop"],
-    readinessEvidence: ["AppData/Local/Electronic Arts/EA Desktop/Logs"], readinessChildren: 1,
-    readinessSeconds: 120, gameRoot: gameRoot)
+    readinessLog: "ProgramData/EA Desktop/Logs/EADesktop.log", startMarker: "[STARTUP]",
+    readyEvents: ["login", "client.boot.ready"], readinessSeconds: 120, gameRoot: gameRoot)
   static let renderers = [
     RendererSelection(api: "dxgi", backend: "dxmt", executable: "NFS16.exe", reason: "measured"),
     RendererSelection(

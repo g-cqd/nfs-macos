@@ -17,11 +17,14 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
   package var ownsWindowsFolder: Bool?
   /// The next step in an owned Windows folder; nil once the EA app is installed and signed in.
   package var setup: NFS2015Setup?
+  /// What the last Play ended with when it did not start the game and nothing is wrong: the EA
+  /// app is running and needs the player, or has not finished starting.
+  package var notice: String?
 
   package init(
     blocker: String? = nil, clientVersion: String? = nil, installedAt: String? = nil,
     hasOptionsFile: Bool = false, settings: NFS2015Settings = NFS2015Settings(),
-    ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil
+    ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil, notice: String? = nil
   ) {
     self.blocker = blocker
     self.clientVersion = clientVersion
@@ -30,6 +33,7 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
     self.settings = settings
     self.ownsWindowsFolder = ownsWindowsFolder
     self.setup = setup
+    self.notice = notice
   }
 
   package static func read(from url: URL) throws(LauncherError) -> Self {
