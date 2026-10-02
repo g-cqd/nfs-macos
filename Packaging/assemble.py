@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from bundle_hygiene import problems_in
+import client_layer
+from bundle_hygiene import (CLIENT_LAYER_NOTICE, client_layer_notice, client_layer_provenance,
+                            client_layer_reference, problems_in)
 from payload import inventory, inventory_digest
 from privacy import USAGE_DESCRIPTIONS
 from recipes import load_recipe, resolve_inputs, shipped_recipe, supports_edition
@@ -94,6 +96,9 @@ def stage_game(resources, recipe, inputs, include_game_data):
             declared = recipe['managedRuntime']
             manifest['managedRuntime'] = {'file': declared['path'], 'sha256': declared['sha256'],
                                           'version': declared['version']}
+        if seeded and 'clientLayer' in recipe:
+            # The pre-installed EA client the app applies to its own prefix at first launch.
+            manifest['clientLayer'] = client_layer_reference(recipe['clientLayer'])
         manifest.update(referencesInstallation=not seeded, storeClient=recipe['storeClient'],
                         runtimeTuning=recipe.get('runtimeTuning', {}),
                         controllerDevices=recipe.get('controllerDevices', []),
@@ -138,6 +143,32 @@ def stage_managed_runtime(resources, recipe, inputs):
     (resources / 'Licenses' / 'wine-mono.txt').write_text(notice)
     return {'version': declared['version'], 'sha256': declared['sha256'], 'url': declared['url'],
             'sourceURL': declared['sourceURL']}
+
+
+def verify_client_layer(recipe, inputs):
+    """Refuse a client layer that is not exactly the pinned, policy-clean one; returns its declaration or None."""
+    declared = recipe.get('clientLayer')
+    if declared is None:
+        return None
+    problems = client_layer.verify_layer(inputs[declared['input']], declared['layerSHA256'], declared['client'])
+    if problems:
+        raise ValueError('The client layer does not match its pin or its policy: ' + '; '.join(problems[:5]))
+    return declared
+
+
+def stage_client_layer(resources, recipe, inputs):
+    """Ship the pre-installed EA client as plain data, verified against its pin, with its notice.
+
+    Only the bundled edition applies it, to the prefix it owns. The folder is cloned, not rewritten, so the
+    bytes in the app are the bytes that were verified.
+    """
+    declared = verify_client_layer(recipe, inputs)
+    if declared is None:
+        return None
+    clone(inputs[declared['input']], resources / declared['path'])
+    (resources / 'Licenses').mkdir(exist_ok=True)
+    (resources / CLIENT_LAYER_NOTICE).write_text(client_layer_notice(declared))
+    return client_layer_provenance(declared)
 
 
 def stage_runtime_source(resources, recipe, inputs):
@@ -195,6 +226,8 @@ def assemble(recipe, inputs, destination, include_game_data):
     if destination.suffix != '.app' or destination.exists():
         raise ValueError('Choose a new output .app; existing builds are preserved')
     verify_inputs(recipe, inputs)
+    if include_game_data:
+        verify_client_layer(recipe, inputs)
     binary_dir = Path(subprocess.check_output(
         ['xcrun', 'swift', 'build', '-c', 'release', '--show-bin-path'], cwd=PROJECT, text=True).strip())
     for name in [recipe['launcher'], recipe['session']]:
@@ -222,10 +255,13 @@ def assemble(recipe, inputs, destination, include_game_data):
         revisions = collect_sources(resources, inputs)
         stage_runtime_source(resources, recipe, inputs)
         managed = stage_managed_runtime(resources, recipe, inputs) if include_game_data else None
+        layer = stage_client_layer(resources, recipe, inputs) if include_game_data else None
         stage_cache_key(resources, recipe, inputs, PINS['sources']['mtld3d']['revision'])
         provenance = runtime_provenance(recipe, revisions)
         if managed:
             provenance['managedRuntime'] = managed
+        if layer:
+            provenance['clientLayer'] = layer
         stage_metadata(contents, recipe, provenance, include_game_data)
         if destination.exists():
             raise FileExistsError('Output appeared during assembly; preserving it')

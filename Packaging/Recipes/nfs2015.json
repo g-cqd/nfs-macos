@@ -57,7 +57,8 @@
     "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
     "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src",
     "game": "{games}/NFS2015-game",
-    "wineMono": "{home}/.cache/wine"
+    "wineMono": "{home}/.cache/wine",
+    "clientLayer": "{tools}/inputs/client-layer"
   },
   "runtimeRetention": [
     "lib/wine/dxgi/dxmt"
@@ -166,6 +167,26 @@
     "url": "https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-x86.msi",
     "sourceURL": "https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-src.tar.xz",
     "reason": "Measured: EA's installer package runs a managed custom action; without a .NET runtime Windows Installer fails it with error 1603 and the install ends with status 1"
+  },
+  "clientLayer": {
+    "input": "clientLayer",
+    "path": "ClientLayer",
+    "layerSHA256": "9ed3bf73529b899f2b934743ef86c51d34013dfc5fb092678b0d465a79547f86",
+    "client": {
+      "name": "EA app",
+      "version": "13.796.0.6309",
+      "installer": {
+        "fileName": "EAappInstaller.exe",
+        "sha256": "dcbda653c9776320b283157be70def64db73c2b01bf45d5fa78f35d7e4e29320",
+        "bytes": 2141240,
+        "signer": "Electronic Arts, Inc."
+      },
+      "package": {
+        "fileName": "EAapp-13.796.0.6309-15736974.msi",
+        "sha256": "cb773af8c1400d0139824dc2148c0ceef978ba95654812f8a7eeec46c34dcdc8",
+        "bytes": 246083584
+      }
+    }
   },
   "runtimeSource": {
     "input": "packaging",
