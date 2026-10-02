@@ -21,6 +21,9 @@ package struct BundleManifest: Codable {
   let renderers: [RendererSelection]?
   /// A .NET runtime installed into a seeded prefix before the store client's installer runs.
   let managedRuntime: ManagedRuntime?
+  /// The store client's own files and registry entries, installed at build time and applied to the
+  /// prefix on first launch so the player never runs the client's installer.
+  let clientLayer: ClientLayerReference?
 
   package var kind: GameKind { gameID ?? .nfsmw }
   package var references: Bool { referencesInstallation ?? false }
@@ -32,6 +35,7 @@ package struct BundleManifest: Codable {
   package var registry: [RegistrySetting] { prefixSettings ?? [] }
   package var rendererSelection: [RendererSelection] { renderers ?? [] }
   package var managed: ManagedRuntime? { managedRuntime }
+  package var layer: ClientLayerReference? { clientLayer }
 
   init(
     version: String, gameFiles: [ManifestFile], gameID: GameKind? = nil,
@@ -39,7 +43,7 @@ package struct BundleManifest: Codable {
     referencesInstallation: Bool? = nil, runtimeTuning: RuntimeTuning? = nil,
     storeClient: StoreClientPlan? = nil, controllerDevices: [String]? = nil,
     prefixSettings: [RegistrySetting]? = nil, renderers: [RendererSelection]? = nil,
-    managedRuntime: ManagedRuntime? = nil
+    managedRuntime: ManagedRuntime? = nil, clientLayer: ClientLayerReference? = nil
   ) {
     self.version = version
     self.gameFiles = gameFiles
@@ -52,6 +56,7 @@ package struct BundleManifest: Codable {
     self.prefixSettings = prefixSettings
     self.renderers = renderers
     self.managedRuntime = managedRuntime
+    self.clientLayer = clientLayer
   }
 
   /// Reads at most 8 MiB and rejects duplicate, oversized or unsafe entries.
@@ -85,6 +90,12 @@ package struct BundleManifest: Codable {
         throw .operation("Only a bundled store-client manifest declares a managed runtime.")
       }
       try managedRuntime.validate()
+    }
+    if let clientLayer {
+      guard seedsPrefix else {
+        throw .operation("Only a bundled store-client manifest declares a client layer.")
+      }
+      try clientLayer.validate()
     }
     // Only a store-client game references an installation; it either does, or ships its own files.
     guard !references || kind.requiresStoreClient else {
