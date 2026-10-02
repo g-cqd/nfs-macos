@@ -9,15 +9,17 @@
   "launcher": "FarCry2Launcher",
   "session": "FarCry2Session",
   "runtimeProfile": "cod4-tested",
-  "editions": ["import"],
+  "editions": [
+    "import"
+  ],
   "shaderCache": true,
   "inputs": {
     "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
-    "renderer": "{games}/rebuild-bundles/renderer-20261002-d5fc324/retained-overlay/wine/lib/wine",
-    "rendererEvidence": "{games}/rebuild-bundles/renderer-20261002-d5fc324",
-    "sidecar": "{games}/rebuild-bundles/sidecar-20261002-12afdc2/x87sidecar",
-    "mtld3dSource": "{games}/rebuild-bundles/src/mtld3d",
-    "x87Source": "{games}/rebuild-bundles/src/x87sidecar",
+    "renderer": "{games}/tools-integrate/renderer-845b6c9/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/tools-integrate/renderer-845b6c9",
+    "sidecar": "{games}/tools-integrate/sidecar-c396937/x87sidecar",
+    "mtld3dSource": "{games}/tools-integrate/src/mtld3d",
+    "x87Source": "{games}/tools-integrate/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/CoD4-tools/wine"
   },
@@ -28,33 +30,80 @@
     "executable": "bin/FarCry2.exe",
     "machine": "i386",
     "required": [
-      {"path": "bin/FarCry2.exe", "minimumSize": 1048576},
-      {"path": "bin/Dunia.dll", "minimumSize": 1048576}
+      {
+        "path": "bin/FarCry2.exe",
+        "minimumSize": 1048576
+      },
+      {
+        "path": "bin/Dunia.dll",
+        "minimumSize": 1048576
+      }
     ],
     "directories": [
       {
         "path": "bin",
         "minimumBytes": 0,
-        "excludedNames": ["mtld3d.conf", "mtld3d_shaders.bin", "mtld3d_shaders.bin.lock", "mtld3d_shaders.bin.owner"],
-        "excludedSuffixes": [".log", ".tmp"],
-        "excludedDirectories": ["mtld3d-logs"]
+        "excludedNames": [
+          "mtld3d.conf",
+          "mtld3d_shaders.bin",
+          "mtld3d_shaders.bin.lock",
+          "mtld3d_shaders.bin.owner"
+        ],
+        "excludedSuffixes": [
+          ".log",
+          ".tmp"
+        ],
+        "excludedDirectories": [
+          "mtld3d-logs"
+        ]
       },
       {
         "path": "Data_Win32",
         "minimumBytes": 1073741824,
         "excludedNames": [],
-        "excludedSuffixes": [".log", ".tmp"],
+        "excludedSuffixes": [
+          ".log",
+          ".tmp"
+        ],
         "excludedDirectories": []
       }
     ],
     "pairings": [
-      {"directory": "Data_Win32", "primarySuffix": ".fat", "companionSuffix": ".dat"},
-      {"directory": "Data_Win32", "primarySuffix": ".dat", "companionSuffix": ".fat"}
+      {
+        "directory": "Data_Win32",
+        "primarySuffix": ".fat",
+        "companionSuffix": ".dat"
+      },
+      {
+        "directory": "Data_Win32",
+        "primarySuffix": ".dat",
+        "companionSuffix": ".fat"
+      }
     ],
     "markers": [
-      {"name": "gog", "patterns": ["goggame-*.info", "goglog.ini", "unins000.exe"]},
-      {"name": "steam", "patterns": ["steam_api.dll", "steam_appid.txt"]},
-      {"name": "uplay", "patterns": ["uplay*.dll", "uplay*.exe", "upc.exe"]}
+      {
+        "name": "gog",
+        "patterns": [
+          "goggame-*.info",
+          "goglog.ini",
+          "unins000.exe"
+        ]
+      },
+      {
+        "name": "steam",
+        "patterns": [
+          "steam_api.dll",
+          "steam_appid.txt"
+        ]
+      },
+      {
+        "name": "uplay",
+        "patterns": [
+          "uplay*.dll",
+          "uplay*.exe",
+          "upc.exe"
+        ]
+      }
     ],
     "knownBuilds": [],
     "maximumFiles": 20000,

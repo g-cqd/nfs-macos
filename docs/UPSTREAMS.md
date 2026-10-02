@@ -2,10 +2,22 @@
 
 | Component | Fork branch | Pinned revision |
 |---|---|---|
-| mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `d5fc324ad79bf3c7cb9ecea975b3aea5cc12fe93` |
-| x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `12afdc2880246a92014b67f83df32696ef77d82b` |
+| mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `845b6c914a55633cbe099a076432d2dbe3656d1d` |
+| x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `c3969379750531fb124859ae742ab4f727f54f9c` |
 | NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
+
+**Repin of 2026-10-02 (second).** mtld3d `development` is now `845b6c9` (`d5fc324` plus the unpublished upstream
+commits through `5287496` and a built-in Far Cry 2 profile that reports an NVIDIA adapter, which makes tree leaves
+cut out under anti-aliasing and alpha to coverage) and x87sidecar `development` is `c396937` (`12afdc2` plus the
+`fld_gap_fstp` fusion: a float copy through the x87 stack with up to four independent instructions between the load
+and the store becomes one plain copy; 13x faster than the isolated path in probes, 1059 of 1059 tests passing).
+Both were published to GitHub as plain fast-forwards. The renderer was built `PROD=1 PERF=0` with Rust 1.99.0 from a
+clean checkout (`~/Games/tools-integrate/renderer-845b6c9`, 631 source hashes, seven artifact hashes) and the sidecar
+binary is `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5`
+(`~/Games/tools-integrate/sidecar-c396937/x87sidecar`). Verified: 1837 mtld3d unit tests, the fusion proof script
+and the sidecar suite. **Not verified:** neither change has run in a game; the mtld3d `unix/` tests and end-to-end
+suite were not run.
 
 Both development forks are clean at the revisions above as of 2026-10-02, and each one
 already contains its upstream's tip: mtld3d's `d5fc324` descends from `athei/mtld3d`

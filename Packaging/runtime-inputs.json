@@ -3,26 +3,26 @@
   "sources": {
     "mtld3d": {
       "input": "mtld3dSource",
-      "revision": "d5fc324ad79bf3c7cb9ecea975b3aea5cc12fe93",
+      "revision": "845b6c914a55633cbe099a076432d2dbe3656d1d",
       "url": "https://github.com/g-cqd/mtld3d"
     },
     "x87sidecar": {
       "input": "x87Source",
-      "revision": "12afdc2880246a92014b67f83df32696ef77d82b",
+      "revision": "c3969379750531fb124859ae742ab4f727f54f9c",
       "url": "https://github.com/g-cqd/x87sidecar"
     }
   },
-  "sidecarSHA256": "cbc236c4dfc78fa466a52f1a7cc322f6733d44ceebe02ac493314a8fffdb2291",
+  "sidecarSHA256": "160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5",
   "rendererFiles": {
-    "d3d9/mtld3d/i386-windows/d3d8.dll": "ead17ac48b2f5f70f6d2938b1e7bbed614e1ac1b65901a367d42eb4c93b66a9d",
-    "d3d9/mtld3d/i386-windows/d3d9.dll": "525cf73c016af56fac235687cf513cd700a20db6c0e4b2fa7936710c9efa1705",
-    "d3d9/mtld3d/i386-windows/mtld3d.dll": "0d6cd95864f1ea0f028675cd678a68e6aa1d1b0ef90adece014267714311a590",
-    "d3d9/mtld3d/x86_64-unix/mtld3d.so": "138c740bec44db82b3a799dfdfcd6b1ba1459464b1ea5668e16be982348cbdc6",
-    "i386-windows/d3d8.dll": "f0f501caa18b3fcb0d993ed3926b46eaebb16ed06f670ea722a08cd89f2fafba",
-    "i386-windows/d3d9.dll": "f8e292df0b4bf9e877ed7385947783d40daded7a3e56ddc242fcb2d8c3a81499",
-    "i386-windows/mtld3d.dll": "102778c82b4a04ee547c3678053d59861140ca628c18a67bbb204257b8a7137e"
+    "d3d9/mtld3d/i386-windows/d3d8.dll": "24493c04b1c83a3f1f910bd7f6dbbc02d34a0756a4b956ccd253510da4a5b27a",
+    "d3d9/mtld3d/i386-windows/d3d9.dll": "f3a1551aec85a40afdf67fff0b7625d7501709b4df37f9d0ac237c3c50a4463e",
+    "d3d9/mtld3d/i386-windows/mtld3d.dll": "b5066539e7de1fb7d90e5525bac4c14172ad67ef473ab2845a187edb8324ec5f",
+    "d3d9/mtld3d/x86_64-unix/mtld3d.so": "2fb0c4c05540be546f37e9f664a2c6412e5b1d2d5394b52de7bf1e85d9592710",
+    "i386-windows/d3d8.dll": "37f185356de9564ca14b626793e4118d0d3833dd8cb198ea602a27b7e8d5303f",
+    "i386-windows/d3d9.dll": "22f0d97247d0ca89f81abec3b06d614dd054909d4f0e9ef829d96826a598e0cb",
+    "i386-windows/mtld3d.dll": "4b6db9df4199c964e08f74668049e7c98bcb65854f44fba74602cbfd2fce1c72"
   },
-  "rendererSourceManifestSHA256": "aa85a4a8c129e53bab9b7a37867c3e8939595668b06e4d41c1d67b20933e9bd3",
+  "rendererSourceManifestSHA256": "2fa019104c230422d29df682736ec165d0670f00378d2b453feb63b547772e23",
   "runtimeProfiles": {
     "nfsmw-cursor": {
       "description": "CX26.3 / Wine11.0 with cooperative x87 handshake and NFS cursor recovery",
