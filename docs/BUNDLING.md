@@ -38,7 +38,10 @@ refuse a runtime that lacks what the game needs; `runtimeRetention` names the ru
 game keeps, and `renderers` selects which backend serves each graphics API, optionally per
 executable, so a measured result can change a renderer choice without changing code. A backend
 measured to break a game is recorded against that game and refused in both the recipe and the
-manifest.
+manifest, scoped to that game's own executable so another program in the same prefix may still
+use it. Before staging, the packager measures the runtime rather than trusting the profile:
+every selected backend must exist in it, and a recipe needing the trap-flag gate must find its
+switches in the built ntdll.
 A recipe with `referencesInstallation` packages no game bytes and no inventory at all: it
 declares recognition and launch rules instead, which are copied into `game-manifest.json`.
 See [Need for Speed (2015)](NFS2015-RECIPE.md) for that contract and its open questions. `Packaging/runtime-inputs.json`

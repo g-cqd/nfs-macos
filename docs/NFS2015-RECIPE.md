@@ -63,83 +63,84 @@ No credential, cookie or account file is ever read. If either signal does not ap
 | Setting | Value | Status |
 |---|---|---|
 | `WINEDLLOVERRIDES` | `IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml=` | `IGOProxy32` verified: EA's 32-bit overlay faults in wined3d |
-| `WINE_COMPATDB` | `dxgi=dxvk`, per executable | Chosen after D3DMetal was measured to fault; see below |
+| `WINE_COMPATDB` | `dxgi=dxmt` for the game, `dxgi=gptk` for the client | Measured; see below |
 | `WINE_TF_EMULATION` | `1` | Required; recipe configuration |
 | `WINE_TF_MAX_STEPS` | `0` | Required; recipe configuration |
 | `WINE_TF_MAX_NS` | `0` | Required; recipe configuration |
 
-### Direct3D: DXVK, not mtld3d and not D3DMetal
+### Direct3D: dxmt for the game, D3DMetal for the client
 
 `NFS16.exe` is a 64-bit Direct3D 11 binary. mtld3d implements Direct3D 9 and 8, so it plays no
 part in this game's renderer: the recipe declares no `renderer`, `rendererEvidence` or
 `mtld3dSource` input, the packager neither verifies nor stages mtld3d for it, and the bundle
 carries no mtld3d source archive.
 
-The DXGI backend is **DXVK**, selected per executable:
+The backend is chosen per executable, which is what lets one runtime serve both programs:
 
-```json
-{"api": "dxgi", "backend": "dxvk", "executable": "NFS16.exe"}
-{"api": "dxgi", "backend": "dxvk"}
-```
+| Executable | Backend | Why |
+|---|---|---|
+| `NFS16.exe` | `dxmt` | Measured: reaches menus and compiles shaders, where D3DMetal faults |
+| `EADesktop.exe` | `gptk` (D3DMetal) | Measured: the EA client renders its interface correctly |
 
-**This reverses an earlier decision in this document.** D3DMetal was chosen first, on the
-reasoning that the runtime selects D3DMetal for 64-bit DXGI and that DXVK had been reported as
-fragile. A measured crash overruled it, reported by the startup worker:
+**This is the second reversal on this branch, and both were caused by naming a backend before
+measuring it.** The first choice was D3DMetal, reasoned from the runtime selecting it for 64-bit
+DXGI. The second was DXVK, after D3DMetal was measured to fault. The settled answer is `dxmt`,
+which was present in the runtime the whole time.
 
-- On the patched CX 11.0 runtime with D3DMetal the game clears Denuvo — zero TF emulation stops,
-  no `-6` exit — and then dies at about 2:52 with `c0000005`, a wild-pointer read at `NFS16.exe`
-  RVA `0x341FB95`, immediately after the runtime logs `[D3DMetal] Unsupported: D3D11 timestamp
-  query`. Frostbite uses GPU timestamp queries.
-- The control: the same game and the same TF settings on Wine 11.18 with DXVK reached the full
-  main menu and rendered correctly.
+What was measured, by the startup worker, on the CX 11.0 runtime at `src/wine-cx/runtime/wine`:
 
-**Strong inference, not proof.** That RVA has not been disassembled and sits inside the
-protected image, so the link from the unsupported query to the fault is circumstantial, however
-closely the two coincide. What is settled is the choice: a backend that reaches a menu beats one
-that faults, so DXVK it is.
+- With **D3DMetal**: the game clears Denuvo — zero trap-flag stops, no `-6` exit — then dies at
+  about 2:52 with `c0000005`, a wild-pointer read at `NFS16.exe` RVA `0x341FB95`, immediately
+  after the runtime logs `[D3DMetal] Unsupported: D3D11 timestamp query`. Frostbite uses GPU
+  timestamp queries.
+- With **dxmt** for `NFS16.exe` and `gptk` left to `EADesktop.exe`: the compatibility database
+  logs `dxgi = dxmt` and `dxgi = gptk` respectively, `lsof` confirms
+  `lib/wine/dxgi/dxmt/x86_64-windows/d3d11.dll` is mapped, there is no fault at that RVA, memory
+  grows from 128 MB to 1053 MB, 3.4 MB of Metal shaders compile, and the game reaches the title
+  and controller-layout screens. Full screen came up at 2560×1600 matching
+  `PROFILEOPTIONS_profile`, which confirms the `RetinaMode` fix works rather than merely being
+  set.
 
-Because this is a measured failure rather than a performance difference,
-`GameKind.nfs2015.deniedRendererBackends` records `gptk` with its reason, and
-`RendererSelection.compatibilityDatabase` refuses to build an environment that selects it. The
-same contradiction is refused statically in `recipes.py`, so a recipe naming it cannot even be
-loaded, and a manifest naming it fails validation on the player's machine. The denial is per
-game: `gptk` remains a legitimate choice for a title with no such measurement.
+The mechanism of the D3DMetal fault remains **inferred**: that RVA was not disassembled and sits
+inside the protected image. The choice between the two backends is not inferred — one reaches a
+menu and the other faults.
 
-Selecting per executable means one runtime can serve the EA client and the game, which is
-preferable to shipping a second runtime. Both rules currently name `dxvk`; if the client turns
-out to need a different backend, only the first rule changes.
+Because that is a measured failure rather than a slow path, `gptk` is *denied* rather than merely
+unselected. `GameKind.nfs2015.deniedRendererBackends` records it with the reason;
+`RendererSelection.compatibilityDatabase` refuses it; `recipes.py` refuses to load a recipe
+naming it; manifest validation refuses it on the player's machine. The denial is scoped two
+ways, and both matter:
 
-Retention follows the backend. The packager prunes a fixed list of runtime paths, and
-`runtimeRetention` names what a title keeps; this recipe keeps DXVK's libraries and the Vulkan
-loader:
+- **Per game.** `gptk` stays a legitimate choice for a title with no such measurement.
+- **Per executable.** The denial applies to a rule that would serve the game's own executable,
+  whether it names `NFS16.exe` or is a catch-all. A rule naming another program is a separate
+  process judged on its own evidence — which is exactly how `EADesktop.exe` keeps D3DMetal. A
+  catch-all rule is therefore refused for this recipe, so no future edit can quietly route the
+  game back onto a faulting backend.
 
-```text
-lib/wine/dxgi/dxvk  lib/wine/x86_64-windows/dxvk
-lib/external/libMoltenVK.dylib  lib/external/libvulkan.1.dylib  lib/external/vulkan
-```
+Retention follows the backends. The packager prunes a fixed list, and `runtimeRetention` keeps
+`lib/wine/dxgi/dxmt` and `lib/wine/dxgi/gptk` plus the D3DMetal framework and `libd3dshared`
+that the client's backend needs. `dxmt` itself needs none of those: it carries its own
+`winemetal.so` and links no Apple framework.
 
-Those names are **unconfirmed**: `src/wine-cx/runtime-dxvk` does not exist yet, so the layout
-has not been inspected. What has been inspected is the D3DMetal build beside it, which finished
-at `src/wine-cx/runtime/wine` — note the nested `wine` directory, so a recipe's `runtime` input
-needs that suffix. It reports `wine-11.0`, its `lib/wine/x86_64-unix/ntdll.so` does contain the
-`WINE_TF_EMULATION`, `WINE_TF_MAX_STEPS` and `WINE_TF_MAX_NS` strings, and it offers
-`lib/wine/dxgi/{dxmt,gptk,wined3d}` with **no `dxvk`**. That confirms both that the trap-flag
-gate is real in a built runtime and that a separate Vulkan-preserving build is genuinely
-required rather than a configuration change.
+**The Apple licensing question is therefore back.** Retaining `D3DMetal.framework` for the EA
+client means redistributing an Apple-signed framework under Apple's licence. It is unresolved
+and is a decision for whoever owns distribution, not something settled here. If the client turns
+out to render acceptably on `dxmt` or `wined3d`, the framework leaves the bundle and the question
+goes away — that is one measurement, not a code change, because the backend is recipe
+configuration.
 
-It also means a third backend is sitting unused: `dxmt` is a Metal-backed Direct3D 11
-implementation already present in that runtime. It was tried once and produced no window, but
-that was before the trap-flag work let the game clear Denuvo at all, so the result says nothing
-about the renderer. Measuring it would cost one run and no new runtime, and if it implements
-timestamp queries it would remove the need for DXVK and MoltenVK entirely. That is a question
-for whoever owns the runtime, not a change made here. Retaining a path that does not exist is a no-op, and the pruning list
-does not currently name any DXVK path, so a wrong name here cannot delete the wrong thing — but
-check them against the runtime before trusting the first build.
+### Measuring the runtime instead of trusting it
 
-One consequence is welcome: the recipe no longer retains `D3DMetal.framework`, so the question
-of redistributing an Apple-signed framework under Apple's licence **no longer arises for this
-recipe**. The `vendorRuntimePaths` mechanism that made retaining it safe stays in the packager,
-unused by any recipe, for whenever a vendor-signed artifact does have to be kept.
+Two renderer reversals were both caused by naming a backend the runtime did not contain, so the
+gate no longer takes a profile's word for it. Before staging, `verify_runtime_provides` requires:
+
+- every selected backend to exist as a real directory at `lib/wine/<api>/<backend>` in the
+  runtime being staged, listing what the runtime actually offers when it does not; and
+- a recipe needing the trap-flag gate to find `WINE_TF_EMULATION`, `WINE_TF_MAX_STEPS` and
+  `WINE_TF_MAX_NS` in the built `lib/wine/x86_64-unix/ntdll.so`.
+
+Both pass against the pinned runtime. The first check is what would have caught `dxvk`.
 
 ### Runtime capability gate
 
@@ -149,36 +150,16 @@ error, which is the worst possible failure. The recipe therefore declares
 `capabilities` provides, and `verify_inputs` refuses to assemble a mismatch. A profile marked
 `pending` is refused outright with its `blockedBy` text.
 
-**This is the current blocker.** `nfs2015-tf-cx11` is `pending`: the Vulkan-preserving CX 11.0
-runtime carrying the `WINE_TF_*` gate is still being built, and
-`src/wine-cx/runtime-dxvk` does not exist yet. To finish a build, pin that runtime's
+The pinned runtime is `src/wine-cx/runtime/wine` — note the nested `wine` directory, which is
+how this tree installs. It reports `wine-11.0`, and five artifacts are pinned by digest:
 `bin/wine`, `bin/wineserver`, `lib/wine/x86_64-unix/{ntdll.so,wine}` and
-`lib/wine/i386-windows/ntdll.dll` under that profile and remove `pending`.
+`lib/wine/i386-windows/ntdll.dll`. Three of those digests were reported independently by the
+startup worker and recomputed here; they match.
 
-## Prefix settings the game needs
-
-Some values this game depends on are Wine's, not the game's, so the game's own file cannot
-hold them. A bundle that owns its prefix imports them once through `Defaults/settings.reg`
-during `wineboot`; this recipe owns no prefix and never runs `wineboot`. It therefore declares
-`prefixSettings`, and the session checks each one against the prefix's own `user.reg` or
-`system.reg` and imports only what is missing — a prepared prefix starts no Wine process and is
-left completely untouched.
-
-| Value | Why |
-|---|---|
-| `HKCU\Software\Wine\Mac Driver` `RetinaMode="Y"` | Without it the Mac driver advertises the scaled logical desktop instead of the native panel, so the full-screen mode the game asks for does not exist and Wine substitutes the nearest one |
-
-**Strong but unverified**, reported by the startup worker: on a 2560×1600 Retina display the
-game's own options were already correct (`FullscreenEnabled 1`, `2560×1600`, `60`) yet the
-window came up wrong until windowed mode was toggled to force a re-query, and this key was
-absent from the prefix. The diagnosis matches the key's documented effect and the absent key was
-confirmed in this tree's prefix, where `Mac Driver` holds only `AllowSetGamma`. It is not yet
-confirmed that setting it makes the window correct on the first launch.
-
-Note that the existing bundles disagree about this value, so it is not a blanket default:
-`Packaging/CoD4Defaults/settings.reg` sets `"Y"`, while `Packaging/settings.reg` for Most Wanted
-sets `"N"`. Wine accepts `y`, `Y`, `t`, `T` or `1` as true. Making it per-recipe configuration
-rather than a shared default is deliberate.
+**Recorded caveat:** this runtime's PE builtins were built with Homebrew mingw-w64 GCC 16.1.0
+rather than llvm-mingw clang. That is a known parity gap with CI which was deliberately not
+rebuilt for, and it is carried in the profile's `toolchainNote` so the bundle's provenance states
+it rather than implying a CI-matching build.
 
 ## Settings
 
@@ -238,7 +219,10 @@ recipe cannot have.
 
 ## What is verified and what is not
 
-Verified on this machine: the `170` exit and `ActivationUI`/`EALauncher` spawn without EA
+Verified: the game reaches its title and controller-layout screens on `dxmt`, at 2560×1600 full
+screen matching its own options file, with no fault and no trap-flag stops; the mapped
+`d3d11.dll` comes from the `dxmt` tree; and the runtime carries the trap-flag switches and both
+selected backends. Also verified on this machine: the `170` exit and `ActivationUI`/`EALauncher` spawn without EA
 running; the `--in-process-gpu` requirement and that the stub does not forward it; the
 `IGOProxy32` fault; the offer identifier; the absence of the client junction in this prefix;
 the Windows user profile being named `crossover`; the options file's format and key set; and
@@ -246,7 +230,8 @@ that the game wrote display settings at 2560×1600.
 
 Not verified: that a complete session reaches gameplay. The runtime that delivers execution
 breakpoints is not built yet, and no game or EA app was run while writing this recipe. The
-DXVK-over-D3DMetal choice rests on a measured crash whose exact mechanism is inferred, and the
-readiness child count and the detail-level domain are reasoned from local evidence rather than
-measured. Treat a successful build as a successful build and nothing
+mechanism of the D3DMetal fault is inferred rather than proven, and the readiness child count and
+the detail-level domain are reasoned from local evidence rather than measured. Gameplay beyond
+the controller-layout screen is unverified, as is the EA client's behaviour on any backend other
+than D3DMetal. Treat a successful build as a successful build and nothing
 more.

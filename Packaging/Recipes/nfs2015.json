@@ -11,7 +11,7 @@
   "runtimeProfile": "nfs2015-tf-cx11",
   "requiredRuntimeCapabilities": [
     "trapFlagEmulation",
-    "vulkanDXGI"
+    "dxmtDXGI"
   ],
   "editions": [
     "import"
@@ -51,14 +51,14 @@
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
-    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime-dxvk"
+    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine"
   },
   "runtimeRetention": [
-    "lib/wine/dxgi/dxvk",
-    "lib/wine/x86_64-windows/dxvk",
-    "lib/external/libMoltenVK.dylib",
-    "lib/external/libvulkan.1.dylib",
-    "lib/external/vulkan"
+    "lib/wine/dxgi/dxmt",
+    "lib/wine/dxgi/gptk",
+    "lib/external/D3DMetal.framework",
+    "lib/external/D3DMetal-License.rtf",
+    "lib/external/libd3dshared.dylib"
   ],
   "originalFiles": [],
   "originalDirectories": {},
@@ -80,14 +80,19 @@
   "renderers": [
     {
       "api": "dxgi",
-      "backend": "dxvk",
+      "backend": "dxmt",
       "executable": "NFS16.exe",
-      "reason": "Frostbite uses D3D11 timestamp queries, which only the Vulkan backend implements"
+      "reason": "Measured: reaches menus and compiles shaders where D3DMetal faults on a timestamp query"
     },
     {
       "api": "dxgi",
-      "backend": "dxvk",
-      "reason": "The EA client renders through the same backend, so one runtime serves both"
+      "backend": "gptk",
+      "executable": "EADesktop.exe",
+      "reason": "Measured: the EA client renders its interface correctly on D3DMetal"
     }
+  ],
+  "vendorRuntimePaths": [
+    "lib/external/D3DMetal.framework",
+    "lib/external/libd3dshared.dylib"
   ]
 }

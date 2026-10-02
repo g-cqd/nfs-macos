@@ -54,6 +54,7 @@ def verify_inputs(recipe, inputs):
         raise ValueError('Runtime profile ' + recipe['runtimeProfile']
                          + ' does not provide: ' + ', '.join(sorted(missing)))
     verify_hashes(inputs['runtime'], profile['files'])
+    verify_runtime_provides(recipe, inputs['runtime'])
     verify_hashes(inputs['sidecar'].parent, {inputs['sidecar'].name: PINS['sidecarSHA256']})
     if 'renderer' in inputs:
         # Only a Direct3D 9 title replaces the renderer; a D3D11 title never loads mtld3d.
@@ -72,6 +73,32 @@ def verify_inputs(recipe, inputs):
     for directory in ['Sources', 'Licenses']:
         if not (inputs['baseApp'] / 'Contents/Resources' / directory).is_dir():
             raise ValueError('Missing retained corresponding sources or notices')
+
+
+def verify_runtime_provides(recipe, runtime):
+    """Measure what the runtime actually carries, rather than trusting the profile's claims.
+
+    A declared capability or backend name is only a claim. Two renderer reversals on this
+    branch were both caused by naming a backend the runtime did not contain, which is exactly
+    what this catches: every selected backend must exist as a directory in the staged runtime,
+    and a recipe needing the trap-flag gate must find its switches in the built ntdll.
+    """
+    for selection in recipe.get('renderers', []):
+        backend = runtime / 'lib/wine' / selection['api'] / selection['backend']
+        if not backend.is_dir() or backend.is_symlink():
+            raise ValueError('The runtime has no ' + selection['api'] + ' backend named '
+                             + selection['backend'] + '; it offers: '
+                             + ', '.join(sorted(p.name for p in (runtime / 'lib/wine'
+                                                                 / selection['api']).iterdir()
+                                                if p.is_dir())))
+    if 'trapFlagEmulation' in recipe.get('requiredRuntimeCapabilities', []):
+        loader = runtime / 'lib/wine/x86_64-unix/ntdll.so'
+        switches = [b'WINE_TF_EMULATION', b'WINE_TF_MAX_STEPS', b'WINE_TF_MAX_NS']
+        image = loader.read_bytes()
+        missing = [name.decode() for name in switches if name not in image]
+        if missing:
+            raise ValueError('This runtime does not carry the execution-breakpoint gate: '
+                             + ', '.join(missing) + ' absent from lib/wine/x86_64-unix/ntdll.so')
 
 
 def stage_runtime(contents, recipe, inputs):
