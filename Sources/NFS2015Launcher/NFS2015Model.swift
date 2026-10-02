@@ -66,6 +66,9 @@ final class NFS2015Model {
   /// Whether this app created its own Windows folder and carries the game in it.
   var ownsWindowsFolder: Bool { snapshot.ownsWindowsFolder == true }
   var needsClientInstall: Bool { snapshot.setup == .installClient }
+  /// The checklist for a player who has not signed in to the EA app yet, on a bundled app.
+  let firstRunGuide = NFS2015FirstRunGuide()
+  var needsFirstRunGuide: Bool { ownsWindowsFolder && snapshot.setup != nil }
   var canOpenClient: Bool { ownsWindowsFolder && snapshot.setup != .installClient && !isBusy }
   var canInstallClient: Bool { ownsWindowsFolder && !isBusy }
 
@@ -79,8 +82,8 @@ final class NFS2015Model {
           """
       }
       return """
-        Preparing the game for first use: creating its Windows folder and copying the game \
-        files. This takes a few minutes.
+        Preparing the game for first use: creating its Windows folder, setting up the EA app \
+        that comes with it and copying the game files. This takes a few minutes.
         """
     }
     if phase == .ready, let notice = snapshot.notice { return notice }
