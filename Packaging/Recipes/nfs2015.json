@@ -37,9 +37,9 @@
       "AppData/Local/Electronic Arts/EA Desktop"
     ],
     "readinessEvidence": [
-      "AppData/Local/Electronic Arts/EA Desktop/Logs"
+      "ProgramData/EA Desktop/Logs/cef.log"
     ],
-    "readinessChildren": 1,
+    "readinessChildren": 0,
     "readinessSeconds": 180,
     "gameRoot": "Program Files/EA Games/Need for Speed"
   },
