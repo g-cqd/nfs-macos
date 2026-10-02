@@ -11,11 +11,11 @@
   "runtimeProfile": "cod4-tested",
   "inputs": {
     "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
-    "renderer": "{games}/renderer-pins-20261002/retained-overlay/wine/lib/wine",
-    "rendererEvidence": "{games}/renderer-pins-20261002",
-    "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
-    "mtld3dSource": "{home}/Developer/mtld3d",
-    "x87Source": "{home}/Developer/x87sidecar",
+    "renderer": "{games}/rebuild-bundles/renderer-20261002-d5fc324/retained-overlay/wine/lib/wine",
+    "rendererEvidence": "{games}/rebuild-bundles/renderer-20261002-d5fc324",
+    "sidecar": "{games}/rebuild-bundles/sidecar-20261002-12afdc2/x87sidecar",
+    "mtld3dSource": "{games}/rebuild-bundles/src/mtld3d",
+    "x87Source": "{games}/rebuild-bundles/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "game": "{games}/CoD4",
     "runtime": "{games}/CoD4-tools/wine"

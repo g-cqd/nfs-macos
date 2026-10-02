@@ -214,7 +214,7 @@ available to check them, so they are not evidence for any claim below; they only
 magnitude worth measuring. Two parts of the brief were corrected by reading the source: the cache switch
 is `shaderCache.enable` (not `shader.cache`), and the cache is not keyed to GPU, driver or macOS.
 
-### What mtld3d does (source read at b22073b; the pinned 5f5331a has the same container format 20 and shader schema 79)
+### What mtld3d does (source read at d5fc324, the pinned revision: container format 20, shader schema 79, both unchanged since 5f5331a)
 
 | Question | Answer | Where |
 | --- | --- | --- |
