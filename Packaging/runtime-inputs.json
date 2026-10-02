@@ -51,11 +51,10 @@
       ]
     },
     "nfs2015-tf-cx11": {
-      "description": "CX26.3 / Wine11.0 with x86 hardware execution-breakpoint delivery, the dxmt Metal Direct3D 11 backend and the D3DMetal DXGI stack",
+      "description": "CX26.3 / Wine11.0 with x86 hardware execution-breakpoint delivery and the dxmt Metal Direct3D 11 backend",
       "capabilities": [
         "trapFlagEmulation",
         "dxmtDXGI",
-        "d3dmetalDXGI",
         "x87Sidecar"
       ],
       "toolchainNote": "PE builtins were built with Homebrew mingw-w64 GCC 16.1.0 rather than llvm-mingw clang; a known parity gap with CI that was not rebuilt for",

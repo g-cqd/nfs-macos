@@ -55,11 +55,7 @@
     "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src"
   },
   "runtimeRetention": [
-    "lib/wine/dxgi/dxmt",
-    "lib/wine/dxgi/gptk",
-    "lib/external/D3DMetal.framework",
-    "lib/external/D3DMetal-License.rtf",
-    "lib/external/libd3dshared.dylib"
+    "lib/wine/dxgi/dxmt"
   ],
   "originalFiles": [],
   "originalDirectories": {},
@@ -87,14 +83,10 @@
     },
     {
       "api": "dxgi",
-      "backend": "gptk",
+      "backend": "dxmt",
       "executable": "EADesktop.exe",
-      "reason": "Measured: the EA client renders its interface correctly on D3DMetal"
+      "reason": "Measured: renders the full client UI with none of the shared-handle failures D3DMetal logs"
     }
-  ],
-  "vendorRuntimePaths": [
-    "lib/external/D3DMetal.framework",
-    "lib/external/libd3dshared.dylib"
   ],
   "runtimeSource": {
     "input": "packaging",

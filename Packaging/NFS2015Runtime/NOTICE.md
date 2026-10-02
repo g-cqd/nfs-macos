@@ -29,31 +29,16 @@ from `3Shain/dxmt`, pinned by SHA-256. Its own licence and notices travel with i
 this project modifies it. It implements Direct3D 11 on Metal and needs no Apple framework and
 no Vulkan.
 
-## Apple D3DMetal — an open question, not a decision made here
+## Apple D3DMetal — not shipped
 
-**This needs a decision from the user before the app is given to anyone else.**
+Earlier revisions of this bundle retained Apple's `D3DMetal.framework` and `libd3dshared.dylib`
+from the Game Porting Toolkit evaluation environment, because the `gptk` backend was what the EA
+client had been measured on. **They are no longer retained.** The client was then measured on
+`dxmt`, where it renders its full interface and logs none of the shared-handle failures D3DMetal
+produced, so nothing in this recipe selects `gptk` and no Apple-signed artifact is included.
 
-The bundle currently retains Apple's `D3DMetal.framework` and `libd3dshared.dylib`, from the
-Game Porting Toolkit 4.0 beta 2 evaluation environment, because the `gptk` backend is what the
-EA client's interface was measured to render correctly on. Apple distributes that framework
-under its own licence terms for an evaluation environment, and those terms govern whether it
-may be redistributed inside a third-party application. This project has not obtained or
-interpreted those terms.
-
-The packager treats it as a vendor artifact: it is never re-signed and its search paths are
-never rewritten, so it keeps Apple's own signature, and the audit proves that signature is
-still present and not ad-hoc. That addresses provenance; it does not address redistribution
-rights.
-
-Two ways out, if the answer is that it may not be redistributed:
-
-1. **Measure the EA client on `dxmt`.** The game already runs on it. If the client's interface
-   also renders acceptably, the framework leaves the bundle entirely. This is a configuration
-   change, not a code change: one line in the recipe's `renderers` list.
-2. **Measure the EA client on `wined3d`.** Slower, but it ships with Wine and raises no
-   third-party question.
-
-Neither has been measured. Until one is, the framework is required for the client.
+The redistribution question those terms would have raised therefore does not arise for this
+package. It was closed by measurement, not by interpreting Apple's licence.
 
 ## Everything else
 
