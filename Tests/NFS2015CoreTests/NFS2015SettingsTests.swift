@@ -277,4 +277,10 @@ struct NFS2015GameActivityTests {
   func `does not mistake other programs for the game`(list: String) {
     #expect(!NFS2015GameActivity.containsGame(inProcessList: list))
   }
+
+  /// Whether the game runs is the user's business, so only that the question can be answered.
+  @Test
+  func `can read the process list on this Mac`() {
+    #expect(NFS2015GameActivity.system.isRunning() != nil)
+  }
 }
