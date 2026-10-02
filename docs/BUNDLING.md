@@ -42,8 +42,14 @@ manifest, scoped to that game's own executable so another program in the same pr
 use it. Before staging, the packager measures the runtime rather than trusting the profile:
 every selected backend must exist in it, and a recipe needing the trap-flag gate must find its
 switches in the built ntdll.
-A recipe with `referencesInstallation` packages no game bytes and no inventory at all: it
-declares recognition and launch rules instead, which are copied into `game-manifest.json`.
+A recipe with `referencesInstallation` packages no game bytes and no inventory in its import
+edition: it declares recognition and launch rules instead, which are copied into
+`game-manifest.json`. If it also lists `bundled`, the bundled edition ships a verified copy for a
+prefix the app creates, and the recipe must then pin the game executable, every listed file's
+payload through `inventorySHA256`, and name the `game` input; `bundledPrefixSettings` are written
+only into that app's prefix. `Packaging/bundle_hygiene.py` refuses account state, archives and
+unlisted files before staging and again in `audit.py`, which also checks the staged runtime
+against its pins.
 See [Need for Speed (2015)](NFS2015-RECIPE.md) for that contract and its open questions. `Packaging/runtime-inputs.json`
 pins the source revisions and tested runtime artifacts. A recipe selects resources;
 it does not claim that an arbitrary game works with Wine.
@@ -189,7 +195,7 @@ python3 Packaging/build.py --game nfsmw --game-data import --output "Build/Most 
 | `bundled` | Whole game, Wine, mtld3d, x87sidecar, launcher, compatibility files, notices and sources | Prepare the player folder and play |
 | `import` | Same runtime, launcher and fixes; no original game assets | Select **Import game data…** and choose the supported PC installation |
 
-Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe, `--game farcry2 --game-data import` for Far Cry 2, and `--game nfs2015` for Need for Speed (2015); the last two accept `--game-data import` only. Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
+Each command creates the `.app`, adjacent `.zip`, and `.zip.sha256`. Add `--no-archive` to retain only the audited app when disk space is limited. Use `--game cod4` for the CoD4 recipe, `--game farcry2 --game-data import` for Far Cry 2, and `--game nfs2015` for Need for Speed (2015). Far Cry 2 accepts `--game-data import` only; Need for Speed (2015) accepts both, and its bundled edition needs the pinned installation described in [NFS2015.md](NFS2015.md#13-the-bundled-edition). Choose an unused output name; previous builds are preserved. The low-level `package.py` accepts the same `--game`, `--recipe` and `--input` selection plus `--with-game-data` and `--without-game-data`, followed by `sign.py` and `audit.py` if running phases individually.
 
 Both modes currently need the pinned local assembly inputs above, including the source game installation used to generate the complete import inventory. The import variant retains that inventory but omits the original payload. Builds do not include personal careers or an existing Wine prefix.
 
