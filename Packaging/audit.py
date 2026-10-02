@@ -6,10 +6,14 @@ from pathlib import Path
 import subprocess
 import sys
 import struct
+from bundle_hygiene import audit_app_tree, audit_game_payload, audit_runtime_pins
 from game_data import bundled_entries
 from recipes import validate_recipe
+from runtime_inputs import PINS
 
 app = Path(sys.argv[1]).resolve()
+# The pinned input runtime, when the caller names it, lets the audit compare staged Windows modules with it.
+pinned_runtime = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 and sys.argv[2] == '--runtime' else None
 assert app.is_dir() and app.suffix == ".app"
 probe = app/'Contents/Helpers/Rosetta Request.app/Contents/MacOS/RosettaRequest'
 with probe.open('rb') as stream:
@@ -87,5 +91,16 @@ expected_game_paths = {entry['path'] for entry in entries}
 actual_game_paths = {path.relative_to(app / 'Contents/Resources/Game').as_posix()
                      for path in (app / 'Contents/Resources/Game').rglob('*') if path.is_file()}
 assert actual_game_paths == expected_game_paths, 'Unexpected or missing game payload files'
+# No archive or checksum file may ride along inside any app. A recipe's own pins then decide the
+# rest: the staged runtime must be the pinned one, and a store-client bundled edition must hold
+# exactly its pinned game list with no account, session or machine state in it.
+hazards = audit_app_tree(app)
+if recipe_path.exists():
+    hazards += audit_runtime_pins(app, PINS, embedded, pinned_runtime)
+    if manifest.get('gameDataIncluded', True) and manifest.get('storeClient'):
+        hazards += audit_game_payload(app, manifest, embedded)
+        report['pinnedExecutables'] = len(embedded.get('executableHashes', {}))
+        report['pinnedInventory'] = embedded.get('inventorySHA256')
+assert not hazards, hazards
 subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)], check=True)
 print(json.dumps(report, indent=2))

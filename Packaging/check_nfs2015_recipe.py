@@ -1,9 +1,8 @@
-"""The Need for Speed (2015) recipe references a player's install and packages no game bytes."""
+"""The Need for Speed (2015) recipe: an import edition that packages no game bytes, and a bundled edition pinned file by file."""
 from copy import deepcopy
 import json
 from pathlib import Path
-import subprocess
-import sys
+import re
 from tempfile import TemporaryDirectory
 
 from assemble import stage_game
@@ -14,11 +13,30 @@ PROJECT = Path(__file__).resolve().parents[1]
 recipe = load_recipe('nfs2015')
 assert recipe['gameID'] == 'nfs2015'
 assert recipe['referencesInstallation'] is True
-assert recipe['editions'] == ['import']
-assert not supports_edition(recipe, 'bundled')
-assert recipe['originalFiles'] == [] and recipe['originalDirectories'] == {}
-assert recipe['executableHashes'] == {} and recipe['compatibility'] == []
-assert 'game' not in recipe['inputs'], 'A referencing recipe must take no game input'
+assert recipe['editions'] == ['import', 'bundled']
+assert supports_edition(recipe, 'bundled') and supports_edition(recipe, 'import')
+assert recipe['compatibility'] == []
+# The bundled edition lists the installation's files explicitly and pins the executables and key
+# libraries, and the whole payload inventory, so the packager refuses any other build of the game.
+assert set(recipe['originalDirectories']) == {'Core', 'Data', 'Support', 'Update', '__Installer'}
+assert all(suffixes == [] for suffixes in recipe['originalDirectories'].values())
+assert 'NFS16.exe' in recipe['originalFiles'] and 'NFS16_trial.exe' in recipe['originalFiles']
+for name in ['NFS16.exe', 'NFS16_trial.exe', 'Core/Activation64.dll', 'Core/ActivationUI.exe',
+             'Core/Activation.dll', '__Installer/Touchup.exe', '__Installer/installerdata.xml']:
+    assert name in recipe['executableHashes'], 'Not pinned: ' + name
+assert re.fullmatch('[0-9a-f]{64}', recipe['inventorySHA256'])
+assert 'game' in recipe['inputs'], 'The bundled edition needs the verified installation as an input'
+for item in recipe['originalFiles'] + list(recipe['originalDirectories']):
+    # Generated or personal files that sit beside the game in a used installation are never listed.
+    assert not any(marker in item.casefold() for marker in
+                   ['dxvk', 'cache', 'log', '.ini', 'profile', 'cookie', 'token']), item
+registration = {item['name']: item for item in recipe['bundledPrefixSettings']}
+assert registration['Install Dir']['value'] == 'C:\\Program Files\\EA Games\\Need for Speed\\'
+assert registration['Install Dir']['kind'] == 'windowsPath' and registration['Install Dir']['hive'] == 'HKEY_LOCAL_MACHINE'
+assert registration['Install Dir']['value'] == 'C:\\' + recipe['storeClient']['gameRoot'].replace('/', '\\') + '\\', \
+    'The registered install folder is where the app seeds the game'
+assert not any(item['name'] == 'Install Dir' for item in recipe['prefixSettings']), \
+    'The registration belongs to the bundled edition only; the import edition never writes it'
 
 # The verified launch sequence, as configuration rather than code.
 client = recipe['storeClient']
@@ -99,9 +117,27 @@ for name, profile in PINS['runtimeProfiles'].items():
             raise AssertionError('A runtime without the capability was accepted: ' + name)
 
 for change in [
-    lambda r: r.update(editions=['bundled', 'import']),
+    lambda r: r.update(editions=['bundled']),
+    lambda r: r.update(editions=['import', 'bundled', 'import']),
     lambda r: r['originalFiles'].append('NFS16.exe'),
-    lambda r: r['inputs'].update(game='{games}/NFSMW'),
+    lambda r: r['originalFiles'].append('Core/duplicate.dll'),
+    lambda r: r['originalDirectories'].update({'Core/codecs': []}),
+    lambda r: r['originalDirectories'].update({'Data': ['.CAS']}),
+    lambda r: r['originalDirectories'].update({'../outside': []}),
+    lambda r: r['executableHashes'].pop('NFS16.exe'),
+    lambda r: r['executableHashes'].update({'NFS16.exe': 'not-a-digest'}),
+    lambda r: r['executableHashes'].update({'Other/elsewhere.exe': '0' * 64}),
+    lambda r: r['executableHashes'].update({'../NFS16.exe': '0' * 64}),
+    lambda r: r.pop('inventorySHA256'),
+    lambda r: r.update(inventorySHA256='abc'),
+    lambda r: r['inputs'].pop('game'),
+    lambda r: r['bundledPrefixSettings'][0].update(hive='HKEY_CLASSES_ROOT'),
+    lambda r: r['bundledPrefixSettings'][0].update(value='C:\\..\\Windows\\'),
+    lambda r: r['bundledPrefixSettings'][0].update(value='C:\\Games\\a"b'),
+    lambda r: r['bundledPrefixSettings'][0].update(value='\\\\server\\share'),
+    lambda r: r['bundledPrefixSettings'][0].update(path='Software\\\\EA'),
+    lambda r: r['bundledPrefixSettings'][1].update(value='en_US"\n[HKEY_LOCAL_MACHINE\\X]'),
+    lambda r: r.update(bundledPrefixSettings='nothing'),
     lambda r: r['storeClient'].update(launchURL='https://example.invalid/{offer}'),
     lambda r: r['storeClient'].update(clientArguments=['--in-process-gpu; id']),
     lambda r: r['storeClient'].update(offerID='not-a-number'),
@@ -171,20 +207,18 @@ with TemporaryDirectory() as temporary:
     with TemporaryDirectory() as other:
         assert stage_game(Path(other), sensitive, {}, False)['version'] != first, \
             'The version must change when the launch contract changes'
+    # The bundled edition refuses to stage without the verified installation behind its pins.
+    empty = Path(temporary) / 'empty'
+    empty.mkdir()
+    staged = Path(temporary) / 'bundled'
+    staged.mkdir()
     try:
-        stage_game(Path(temporary + '/bundled'), recipe, {}, True)
-    except ValueError:
-        pass
+        stage_game(staged, recipe, {'game': empty}, True)
+    except ValueError as error:
+        assert 'pinned artifact' in str(error), error
     else:
-        raise AssertionError('A bundled edition was staged for an import-only recipe')
-
-# build.py refuses the bundled edition before it stages anything.
-result = subprocess.run(
-    [sys.executable, 'Packaging/build.py', '--game', 'nfs2015', '--game-data', 'bundled',
-     '--output', str(PROJECT / 'Build/unused.app')],
-    cwd=PROJECT, capture_output=True, text=True)
-assert result.returncode != 0 and 'supports only' in result.stderr, result.stderr
-assert not (PROJECT / 'Build/unused.app').exists()
+        raise AssertionError('A bundled edition was staged without the pinned game files')
+    assert not any((staged / 'Game').rglob('*')), 'No game file may be staged before the pins match'
 
 # Nothing in this tree may contain a Need for Speed (2015) game file.
 for name in ['NFS16.exe', 'NFS16_trial.exe', 'EADesktop.exe', 'EALauncher.exe']:

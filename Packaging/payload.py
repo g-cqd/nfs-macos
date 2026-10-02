@@ -1,5 +1,6 @@
 """Select recipe-declared original assets without following links or exceeding payload limits."""
 import hashlib
+import json
 
 
 def inventory(root, files, directories):
@@ -36,3 +37,15 @@ def inventory(root, files, directories):
             checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
         entries.append({'path': relative, 'size': size, 'sha256': checksum})
     return entries
+
+
+def inventory_digest(entries):
+    """One digest over the complete payload list: every path, size and content hash, in path order.
+
+    Pinning this value makes the whole payload, and not only its executables, immutable: a
+    changed, added or removed file changes it.
+    """
+    canonical = sorted(({'path': entry['path'], 'size': entry['size'], 'sha256': entry['sha256']}
+                        for entry in entries), key=lambda entry: entry['path'])
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(',', ':'))
+                          .encode()).hexdigest()

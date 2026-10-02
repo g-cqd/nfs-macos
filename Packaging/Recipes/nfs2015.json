@@ -14,7 +14,8 @@
     "dxmtDXGI"
   ],
   "editions": [
-    "import"
+    "import",
+    "bundled"
   ],
   "referencesInstallation": true,
   "runtimeTuning": {
@@ -52,14 +53,47 @@
     "x87Source": "{games}/rebuild-bundles/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
-    "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src"
+    "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src",
+    "game": "{games}/NFS2015-debug/opus/Prefix/drive_c/Program Files/EA Games/Need for Speed"
   },
   "runtimeRetention": [
     "lib/wine/dxgi/dxmt"
   ],
-  "originalFiles": [],
-  "originalDirectories": {},
-  "executableHashes": {},
+  "originalFiles": [
+    "dbdata.dll",
+    "dbdataEA.dll",
+    "dbxLive64.dll",
+    "dbxMotionPanel.exe",
+    "EAWebKit64.dll",
+    "Engine.BuildInfo_Win64_retail.dll",
+    "NFS16.exe",
+    "NFS16_trial.exe"
+  ],
+  "originalDirectories": {
+    "Core": [],
+    "Data": [],
+    "Support": [],
+    "Update": [],
+    "__Installer": []
+  },
+  "executableHashes": {
+    "Core/Activation.dll": "32a33704c362b1d383b96dbef5e4ee0c730bb860b8ff2d666f585d68f9b6ec0a",
+    "Core/Activation64.dll": "1cb971cd747e3cae98f1f34adc689c8807c677e269cccd82996a4f6dd7cd8f66",
+    "Core/ActivationUI.exe": "5901b0ad269e12deecc2bcd2eaa56f8964538a8d6b1a265651d56dbd636daefd",
+    "EAWebKit64.dll": "96ab1cc49d337762cff24c69f54b8e8ded3f87c6d5230b64c3b0c1a24614e48a",
+    "Engine.BuildInfo_Win64_retail.dll": "dfce839ccf8b09c4de76a031c7f2fdbf32c5d89dea57fb331fcb561537e130f1",
+    "NFS16.exe": "92aa6ff4b5f8d0f033ca7e88cb86cc64b42b1d2412c4294905eb22950616e4df",
+    "NFS16_trial.exe": "155def37e0bf3eac7d7c6df048a8f9acf2e67ea87118ef1cc2330f8c406ab25b",
+    "Support/mnfst.txt": "38132d3b6e482d8162215b54342e6e9609ea9867403441523792751ffacdafb3",
+    "__Installer/Cleanup.exe": "2b666273666bd6187a3ad7399691bf3c3379b424c79dc0d832f9887d83f2ecd5",
+    "__Installer/Touchup.exe": "9cfcf77c97f105dbe92d1c2efd412ba19c123ae506a3b5c191e8badb26712a65",
+    "__Installer/installerdata.xml": "6e0d7b5fef4c2cc458cd87be52b2eb4eb2e3eda0657feb004758776f4ed289ed",
+    "dbdata.dll": "f69c889acce1db9b2154a081ca7078bfaae1c3897fd6562c8b21707c48689154",
+    "dbdataEA.dll": "6b5d147f5a5188cd28e955146fc8f36ddea73e312c32ebe83c2fd1f2e3d520c1",
+    "dbxLive64.dll": "93dd78efdc3ae69f738c90260e9c7233af0657aa96d50bd9def2a976f742d7c6",
+    "dbxMotionPanel.exe": "c7d27d1082626dd83231501669f747f2831890695661faebabc7f2f2a16215b9"
+  },
+  "inventorySHA256": "353caa50bf68c44db872e3512090a86bcc238d97693f20b09fefab4a4fc72a95",
   "compatibility": [],
   "defaults": [],
   "supportsSP": true,
@@ -72,6 +106,32 @@
       "value": "Y",
       "kind": "string",
       "reason": "Wine advertises the native panel, so the full-screen mode the game asks for exists"
+    }
+  ],
+  "bundledPrefixSettings": [
+    {
+      "hive": "HKEY_LOCAL_MACHINE",
+      "path": "Software\\Wow6432Node\\EA Games\\Need for Speed",
+      "name": "Install Dir",
+      "value": "C:\\Program Files\\EA Games\\Need for Speed\\",
+      "kind": "windowsPath",
+      "reason": "The registration EA's installer writes, so the EA app finds the game that was packaged in this prefix"
+    },
+    {
+      "hive": "HKEY_LOCAL_MACHINE",
+      "path": "Software\\Wow6432Node\\EA Games\\Need for Speed",
+      "name": "Locale",
+      "value": "en_US",
+      "kind": "string",
+      "reason": "The language the packaged installation was made with"
+    },
+    {
+      "hive": "HKEY_LOCAL_MACHINE",
+      "path": "Software\\Wow6432Node\\EA Games\\Need for Speed",
+      "name": "Product GUID",
+      "value": "{F8643E83-A868-4EE8-A0B9-389386830453}",
+      "kind": "string",
+      "reason": "The product identifier in the installation's own installerdata.xml registration"
     }
   ],
   "renderers": [
