@@ -60,12 +60,15 @@ struct NFS2015Session {
         }
       }
       var store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
-      var settings = try store.load()
+      var settingsOutcome: NFS2015SettingsOutcome?
       if options.action == "--configure", let request = options.request {
         let requested = try JSONDecoder().decode(
-          NFS2015Settings.self, from: BoundedFile.read(request, limit: 65_536))
-        // The game's own file is the record, so the snapshot reports what it now holds.
-        settings = try store.apply(requested)
+          NFS2015SettingsRequest.self, from: BoundedFile.read(request, limit: 65_536))
+        // A refusal is an answer, not a failure: the starter shows the reason beside the
+        // settings, and the snapshot below reports what the game's file holds.
+        do { settingsOutcome = try store.apply(requested) } catch {
+          settingsOutcome = .refused(error.localizedDescription)
+        }
       }
       let prefix = owned ? paths.prefix : readiness.install?.prefix
       if options.action != "--configure", adopted == nil, let prefix {
@@ -86,7 +89,7 @@ struct NFS2015Session {
         store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       }
       try snapshot(
-        readiness: readiness, store: store, settings: settings, plan: plan, owned: owned)
+        readiness: readiness, store: store, plan: plan, owned: owned, outcome: settingsOutcome)
       guard options.action == "--play" else { return 0 }
       guard let install = readiness.install else {
         throw LauncherError.operation(
@@ -100,14 +103,12 @@ struct NFS2015Session {
         runtime: runtime, prefix: install.prefix, lease: lease, adopted: adopted)
       switch outcome {
       case .finished(let status):
-        try snapshot(
-          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned)
+        try snapshot(readiness: readiness, store: store, plan: plan, owned: owned)
         return status
       case .notReady(let notice):
         print(notice)
         try snapshot(
-          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned,
-          notice: notice)
+          readiness: readiness, store: store, plan: plan, owned: owned, notice: notice)
         return 0
       }
     }
@@ -384,19 +385,22 @@ struct NFS2015Session {
   }
 
   private func snapshot(
-    readiness: NFS2015Readiness, store: NFS2015SettingsStore, settings: NFS2015Settings,
-    plan: StoreClientPlan, owned: Bool, notice: String? = nil
+    readiness: NFS2015Readiness, store: NFS2015SettingsStore, plan: StoreClientPlan, owned: Bool,
+    outcome: NFS2015SettingsOutcome? = nil, notice: String? = nil
   ) throws {
     let installed = readiness.install
     var version = installed?.clientVersion
     if version == nil, owned {
       version = try NFS2015Locator.client(prefix: paths.prefix, plan: plan)?.version
     }
+    let options = try store.inspect()
     try NFS2015Snapshot(
       blocker: owned ? readiness.ownedMessage : readiness.message, clientVersion: version,
       installedAt: owned ? paths.prefix.path : installed?.prefix.path,
-      hasOptionsFile: try store.optionsFile() != nil, settings: settings,
-      ownsWindowsFolder: owned ? true : nil, setup: owned ? readiness.setup : nil, notice: notice
+      hasOptionsFile: try store.optionsFile() != nil, settings: options.settings,
+      optionsDigest: options.digest, optionsProblem: options.problem, backups: options.backups,
+      outcome: outcome, ownsWindowsFolder: owned ? true : nil,
+      setup: owned ? readiness.setup : nil, notice: notice
     ).write(to: paths.support.appendingPathComponent("launcher-state.json"))
   }
 }
