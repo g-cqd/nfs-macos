@@ -302,6 +302,21 @@ struct NFS2015OptionsStoreTests {
   // MARK: The game changing the file behind the app's back
 
   @Test
+  func `refuses when the game starts between the first check and the write`() throws {
+    let harness = try StoreHarness()
+    defer { harness.remove() }
+    let store = try harness.store()
+    let flag = harness.flag
+    flag.hook.withLock {
+      $0 = { count in
+        if count == 2 { flag.running.withLock { $0 = true } }
+      }
+    }
+    #expect(throws: LauncherError.self) { try harness.save(["render.vsync": "1"], with: store) }
+    #expect(try harness.bytes == OptionsFixture.data())
+  }
+
+  @Test
   func `refuses a save when the game changed the file after it was loaded`() throws {
     let harness = try StoreHarness()
     defer { harness.remove() }
@@ -478,6 +493,22 @@ struct NFS2015OptionsStoreTests {
       try harness.save(
         ["render.vsync": "1", "quality.mesh": "0"], with: try harness.store(write: wrong))
     }
+    #expect(try harness.bytes == OptionsFixture.data())
+  }
+
+  @Test
+  func `puts the earlier bytes back when a line that was not chosen was altered`() throws {
+    let harness = try StoreHarness()
+    defer { harness.remove() }
+    let meddling: PlayerFileEdit.Writer = { bytes, url in
+      let text = String(decoding: bytes, as: UTF8.self)
+      try Data(OptionsFixture.replacing("GstAudio.DynamicsEnum", with: "3", in: text).utf8)
+        .write(to: url, options: .atomic)
+    }
+    let error = #expect(throws: LauncherError.self) {
+      try harness.save(["render.vsync": "1"], with: try harness.store(write: meddling))
+    }
+    #expect(error?.localizedDescription.contains("put back") == true)
     #expect(try harness.bytes == OptionsFixture.data())
   }
 
