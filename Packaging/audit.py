@@ -25,6 +25,8 @@ pins = json.loads((app / "Contents/Resources/runtime-files.json").read_text())
 for relative, expected in pins.items():
     assert hashlib.sha256((app / relative).read_bytes()).hexdigest() == expected, relative
 assert not any(p.name in {"Gigi", "user.reg", "system.reg"} for p in app.rglob("*"))
+# A shader cache embeds the game's own shader bytecode; it is generated on the player's Mac and never shipped.
+assert not any(p.name.startswith('mtld3d_shaders') for p in app.rglob('*')), 'A shader cache was packaged'
 report = dict(externalDependencies=[], externalLinks=[], developmentRpaths=[], vendorRpaths=[],
               vendorCode=[], machoCount=0, verifiedRuntimeHashes=len(pins))
 magic_values = {bytes.fromhex(h) for h in ["cffaedfe", "cefaedfe", "cafebabe", "bebafeca"]}
@@ -66,6 +68,8 @@ if recipe_path.exists():
     assert manifest.get('gameID', 'nfsmw') == recipe['gameID']
     for item in recipe['defaults']:
         assert (app / 'Contents/Resources/Defaults' / item['path']).is_file(), item['path']
+    key_file = app / 'Contents/Resources/renderer-cache-key.json'
+    assert key_file.is_file() == bool(recipe.get('shaderCache')), 'Cache key must exist exactly when the recipe opts in'
     for name in [recipe['launcher'], recipe['session']]:
         assert any((app / 'Contents' / folder / name).is_file() for folder in ['MacOS', 'Helpers'])
 entries = bundled_entries(manifest)

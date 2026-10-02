@@ -210,3 +210,13 @@ The optimized bundled candidate audit passed 1,423 game files, 49 runtime/helper
 ## Performance builds
 
 Use a separate renderer/runtime copy for `PERF=1 PROD=1 FP=1`. Keep its logs and counter settings out of normal launchers. Compare the same parked scene and save, recording render/output resolution, MSAA, cap, focus and elapsed windows. Report interval distributions and GPU/CPU scope. Do not infer racing performance from a main-menu cap or a single HUD sample.
+
+## Shader cache key
+
+A recipe with `"shaderCache": true` (Far Cry 2) makes `assemble.py` write
+`Contents/Resources/renderer-cache-key.json` from the clean pinned `mtld3dSource` checkout: the pinned
+revision, the container format and shader schema from `windows/core/src/shader_cache.rs`, and a SHA-256
+over the files mtld3d's `build.rs` fingerprints (`Packaging/shader_cache_key.py`). The starter stores
+the player's cache under that key. `audit.py` fails an app that contains any `mtld3d_shaders*` file or whose
+key file does not match the recipe; a cache holds the game's shader bytecode and is never packaged. After a
+pin bump the key changes by itself and players start a new cache; see [Far Cry 2](FARCRY2.md).
