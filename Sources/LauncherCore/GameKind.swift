@@ -45,10 +45,12 @@ package enum GameKind: String, Codable, Sendable {
     self == .farcry2 ? "bin/mtld3d.conf" : "mtld3d.conf"
   }
 
-  /// Indicates that the app publishes verified copies of the original assets it was given.
+  /// Indicates that the app publishes versioned, verified generations of the original assets.
   ///
-  /// Need for Speed (2015) is the exception: its store client activates the executable in
-  /// place, so the app references the player's own installation instead of copying it.
+  /// Need for Speed (2015) is the exception: its store client activates and updates the
+  /// executable in place, so a generation scheme does not fit. Its import edition references the
+  /// player's own installation, and its bundled edition seeds a private prefix once through
+  /// `PrefixSeed` and then leaves the installation to the store client.
   package var copiesGameData: Bool { self != .nfs2015 }
 
   /// Indicates that the game is started by a store client the player installs and signs into.
@@ -80,7 +82,8 @@ package enum GameKind: String, Codable, Sendable {
     case .nfsmw: 6_000_000_000
     case .cod4: 20_000_000_000
     case .farcry2: 16_000_000_000
-    case .nfs2015: 0
+    // Only a bundled edition carries files, and its payload is about 14.6 GB.
+    case .nfs2015: 20_000_000_000
     }
   }
 

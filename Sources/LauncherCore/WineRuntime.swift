@@ -26,12 +26,26 @@ package struct WineRuntime {
 
   /// Initializes an unpublished prefix and always stops its server before returning.
   package func initialize(_ prefix: URL) throws {
-    try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false)
-    do {
-      for arguments in [
+    try performInitialization(
+      prefix,
+      steps: [
         ["wineboot", "--init"],
         ["reg", "import", paths.resources.appendingPathComponent("Defaults/settings.reg").path],
-      ] {
+      ])
+  }
+
+  /// Initializes an unpublished prefix with Wine's own defaults only.
+  ///
+  /// For a recipe that declares its registry values itself, so the caller records exactly those
+  /// and the bundle carries no `Defaults/settings.reg`. The server is stopped before returning.
+  package func initializeBare(_ prefix: URL) throws {
+    try performInitialization(prefix, steps: [["wineboot", "--init"]])
+  }
+
+  private func performInitialization(_ prefix: URL, steps: [[String]]) throws {
+    try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false)
+    do {
+      for arguments in steps {
         guard
           try ProcessCommand(
             executable: paths.wine, arguments: arguments, directory: prefix,

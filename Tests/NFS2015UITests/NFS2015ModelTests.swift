@@ -123,4 +123,104 @@ struct NFS2015ModelTests {
     model.discard()
     #expect(!model.hasPendingChanges)
   }
+  // MARK: The bundled edition, which owns its Windows folder
+
+  private func bundled(
+    setup: NFS2015Setup?, blocker: String? = nil, rosetta: Bool = true, carriesGame: Bool = true
+  ) -> (NFS2015Model, FakeService) {
+    let service = FakeService(
+      snapshot: NFS2015Snapshot(
+        blocker: blocker, clientVersion: setup == .installClient ? nil : "13.796.0.6309",
+        installedAt: "/Player/Data/Prefix", hasOptionsFile: false, ownsWindowsFolder: true,
+        setup: setup))
+    return (
+      NFS2015Model(
+        service: service, rosetta: RosettaSetup(service: FakeRosetta(available: rosetta)),
+        carriesGame: carriesGame), service
+    )
+  }
+
+  @Test
+  func `offers the EA app installer until the client is installed`() async {
+    let (model, _) = bundled(setup: .installClient, blocker: "Install EA App first.")
+    await model.run()
+    #expect(model.phase == .needsInstallation)
+    #expect(model.ownsWindowsFolder && model.needsClientInstall)
+    #expect(model.canInstallClient && !model.canOpenClient && !model.canPlay)
+    #expect(model.statusMessage.contains("Install the EA app"))
+    #expect(!model.statusMessage.contains("Choose the Windows folder"))
+  }
+
+  @Test
+  func `asks the player to sign in once the client is installed`() async {
+    let (model, service) = bundled(setup: .signIn, blocker: "Press Open EA App.")
+    await model.run()
+    #expect(model.canOpenClient && model.canInstallClient && !model.canPlay)
+    #expect(model.statusMessage.contains("sign in"))
+    model.openClient()
+    await model.run()
+    #expect(service.performed == [.prepare, .openClient])
+  }
+
+  @Test
+  func `sends the chosen installer to the helper`() async {
+    let (model, service) = bundled(setup: .installClient, blocker: "Install EA App first.")
+    await model.run()
+    let installer = URL(fileURLWithPath: "/Users/player/Downloads/EAappInstaller.exe")
+    model.installClient(installer)
+    await model.run()
+    #expect(service.performed == [.prepare, .installClient(installer)])
+  }
+
+  @Test
+  func `can play once the client is installed and signed in`() async {
+    let (model, _) = bundled(setup: nil)
+    await model.run()
+    #expect(model.phase == .ready && model.canPlay)
+    #expect(model.statusMessage == "Ready to play")
+  }
+
+  @Test
+  func `will not start a Windows program before Rosetta is installed`() async {
+    let (model, service) = bundled(setup: .installClient, blocker: "Install", rosetta: false)
+    await model.run()
+    model.installClient(URL(fileURLWithPath: "/tmp/EAappInstaller.exe"))
+    await model.run()
+    #expect(model.phase == .needsRosetta)
+    model.openClient()
+    await model.run()
+    #expect(model.phase == .needsRosetta)
+    #expect(service.performed == [.prepare])
+  }
+
+  @Test
+  func `runs only the last request queued before the helper starts`() async {
+    let (model, service) = bundled(setup: .signIn, blocker: "Press Open EA App.")
+    await model.run()
+    model.openClient()
+    model.installClient(URL(fileURLWithPath: "/tmp/EAappInstaller.exe"))
+    await model.run()
+    #expect(
+      service.performed == [
+        .prepare, .installClient(URL(fileURLWithPath: "/tmp/EAappInstaller.exe")),
+      ])
+  }
+
+  @Test
+  func `explains the long first start of an app that carries the game`() async {
+    let (carrying, _) = bundled(setup: nil, carriesGame: true)
+    #expect(carrying.statusMessage.contains("first use"))
+    let (importing, _) = bundled(setup: nil, carriesGame: false)
+    #expect(importing.statusMessage == "Checking your installation…")
+    await carrying.run()
+    #expect(!carrying.statusMessage.contains("first use"))
+  }
+
+  @Test
+  func `an import app keeps asking for a Windows folder and never offers the installer`() async {
+    let (model, _) = model(blocker: "Choose the Windows folder.")
+    await model.run()
+    #expect(!model.ownsWindowsFolder && !model.canInstallClient && !model.canOpenClient)
+    #expect(model.statusMessage == "Choose the Windows folder that holds the EA app and this game.")
+  }
 }
