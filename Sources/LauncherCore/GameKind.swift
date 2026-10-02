@@ -44,6 +44,24 @@ package enum GameKind: String, Codable, Sendable {
   /// Indicates that the game is started by a store client the player installs and signs into.
   package var requiresStoreClient: Bool { self == .nfs2015 }
 
+  /// Renderer backends measured to break this game, with the reason, so a recipe cannot pick one.
+  ///
+  /// Need for Speed (2015) clears its protection under D3DMetal and then faults reading a wild
+  /// pointer immediately after the runtime reports an unsupported Direct3D 11 timestamp query.
+  /// Frostbite uses GPU timestamp queries, so this is a missing feature rather than slow paths,
+  /// and the same build reached its menu on a Vulkan-backed DXGI implementation.
+  package var deniedRendererBackends: [String: String] {
+    switch self {
+    case .nfs2015:
+      [
+        "gptk": """
+        D3DMetal does not implement Direct3D 11 timestamp queries, which this engine uses;           the game faults with c0000005 shortly after the unsupported-query report
+        """
+      ]
+    default: [:]
+    }
+  }
+
   var byteLimit: Int {
     switch self {
     case .nfsmw: 6_000_000_000

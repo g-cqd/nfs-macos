@@ -35,7 +35,10 @@ launcher/session products, runtime profile, input roots, original file/directory
 executable hashes, compatibility resources and clean defaults. `editions` states which
 editions a recipe can produce; `requiredRuntimeCapabilities` and a profile's `capabilities`
 refuse a runtime that lacks what the game needs; `runtimeRetention` names the runtime paths a
-game keeps, so a Direct3D 11 title keeps the D3DMetal DXGI stack the Direct3D 9 titles drop.
+game keeps, and `renderers` selects which backend serves each graphics API, optionally per
+executable, so a measured result can change a renderer choice without changing code. A backend
+measured to break a game is recorded against that game and refused in both the recipe and the
+manifest.
 A recipe with `referencesInstallation` packages no game bytes and no inventory at all: it
 declares recognition and launch rules instead, which are copied into `game-manifest.json`.
 See [Need for Speed (2015)](NFS2015-RECIPE.md) for that contract and its open questions. `Packaging/runtime-inputs.json`

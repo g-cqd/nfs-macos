@@ -51,14 +51,14 @@
       ]
     },
     "nfs2015-tf-cx11": {
-      "description": "CX26.3 / Wine11.0 with x86 hardware execution-breakpoint delivery and the D3DMetal DXGI stack",
+      "description": "CX26.3 / Wine11.0 with x86 hardware execution-breakpoint delivery and a Vulkan-backed DXGI stack",
       "capabilities": [
         "trapFlagEmulation",
-        "d3dmetalDXGI",
+        "vulkanDXGI",
         "x87Sidecar"
       ],
       "pending": true,
-      "blockedBy": "Build the CX 11.0 runtime carrying the WINE_TF_* gate at ~/Games/NFS2015-debug/src/wine-cx, then pin bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here",
+      "blockedBy": "Build the Vulkan-preserving CX 11.0 runtime carrying the WINE_TF_* gate at ~/Games/NFS2015-debug/src/wine-cx/runtime-dxvk, then pin bin/wine, bin/wineserver, lib/wine/x86_64-unix/{ntdll.so,wine} and lib/wine/i386-windows/ntdll.dll here",
       "files": {}
     }
   }

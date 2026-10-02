@@ -42,11 +42,11 @@ struct NFS2015Session {
         settings = try store.apply(requested)
       }
       if let install = readiness.install, options.action != "--configure" {
-        try recordPrefixSettings(manifest.registry, install: install, tuning: manifest.tuning)
+        try recordPrefixSettings(manifest.registry, install: install, manifest: manifest)
       }
       if options.action == "--enable-controller" {
         try enableController(
-          devices: manifest.controllers, readiness: readiness, tuning: manifest.tuning)
+          devices: manifest.controllers, readiness: readiness, manifest: manifest)
       }
       try snapshot(readiness: readiness, store: store, settings: settings)
       guard options.action == "--play" else { return 0 }
@@ -54,7 +54,9 @@ struct NFS2015Session {
         throw LauncherError.operation(
           readiness.message ?? "Choose your Windows folder before playing.")
       }
-      let runtime = WineRuntime(paths: paths, output: output, tuning: manifest.tuning)
+      let runtime = WineRuntime(
+        paths: paths, output: output, tuning: manifest.tuning,
+        renderers: manifest.rendererSelection)
       let environment = try runtime.environment(prefix: install.prefix)
       guard
         try ProcessCommand(
@@ -81,9 +83,11 @@ struct NFS2015Session {
   /// substitutes the nearest one. Each value is imported only when the prefix lacks it, so a
   /// prepared prefix is left completely untouched.
   private func recordPrefixSettings(
-    _ settings: [RegistrySetting], install: NFS2015Install, tuning: RuntimeTuning
+    _ settings: [RegistrySetting], install: NFS2015Install, manifest: BundleManifest
   ) throws {
-    let runtime = WineRuntime(paths: paths, output: output, tuning: tuning)
+    let runtime = WineRuntime(
+      paths: paths, output: output, tuning: manifest.tuning,
+      renderers: manifest.rendererSelection)
     let applied = try PrefixPreparation(support: paths.support).apply(
       settings, in: install.prefix
     ) { script in
@@ -108,7 +112,7 @@ struct NFS2015Session {
   /// This is the one registry change the app makes to a prefix it does not own, so it never
   /// happens as part of a launch.
   private func enableController(
-    devices: [String], readiness: NFS2015Readiness, tuning: RuntimeTuning
+    devices: [String], readiness: NFS2015Readiness, manifest: BundleManifest
   ) throws {
     guard let install = readiness.install else {
       throw LauncherError.operation(
@@ -122,7 +126,9 @@ struct NFS2015Session {
         print("Could not remove the controller script: \(error)")
       }
     }
-    let runtime = WineRuntime(paths: paths, output: output, tuning: tuning)
+    let runtime = WineRuntime(
+      paths: paths, output: output, tuning: manifest.tuning,
+      renderers: manifest.rendererSelection)
     guard
       try ProcessCommand(
         executable: paths.wine, arguments: ["reg", "import", script.path],

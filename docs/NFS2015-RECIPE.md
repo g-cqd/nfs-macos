@@ -63,54 +63,70 @@ No credential, cookie or account file is ever read. If either signal does not ap
 | Setting | Value | Status |
 |---|---|---|
 | `WINEDLLOVERRIDES` | `IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml=` | `IGOProxy32` verified: EA's 32-bit overlay faults in wined3d |
-| `WINE_COMPATDB` | `dxgi=gptk` | Inferred from the runtime's `lib/wine/dxgi/{gptk,dxmt,wined3d}` layout and the existing `dxgi=wined3d` rule |
+| `WINE_COMPATDB` | `dxgi=dxvk`, per executable | Chosen after D3DMetal was measured to fault; see below |
 | `WINE_TF_EMULATION` | `1` | Required; recipe configuration |
 | `WINE_TF_MAX_STEPS` | `0` | Required; recipe configuration |
 | `WINE_TF_MAX_NS` | `0` | Required; recipe configuration |
 
-### Direct3D: this title does not use mtld3d
+### Direct3D: DXVK, not mtld3d and not D3DMetal
 
-`NFS16.exe` is a 64-bit Direct3D 11 binary. mtld3d implements Direct3D 9 and 8, so it plays
-no part in this game's renderer. The shared packager previously deleted the entire D3D11 path
-from every bundle to save space:
+`NFS16.exe` is a 64-bit Direct3D 11 binary. mtld3d implements Direct3D 9 and 8, so it plays no
+part in this game's renderer: the recipe declares no `renderer`, `rendererEvidence` or
+`mtld3dSource` input, the packager neither verifies nor stages mtld3d for it, and the bundle
+carries no mtld3d source archive.
 
-```text
-lib/wine/dxgi/gptk  lib/wine/dxgi/dxmt
-lib/external/D3DMetal.framework  lib/external/libd3dshared.dylib
+The DXGI backend is **DXVK**, selected per executable:
+
+```json
+{"api": "dxgi", "backend": "dxvk", "executable": "NFS16.exe"}
+{"api": "dxgi", "backend": "dxvk"}
 ```
 
-Deleting those for this game would leave it with no renderer. `runtimeRetention` in the recipe
-now names what a title keeps, and the Need for Speed recipe keeps the D3DMetal DXGI stack and
-its licence file while still dropping `dxmt`. The recipe declares no `renderer`,
-`rendererEvidence` or `mtld3dSource` input at all, so the packager neither verifies nor stages
-mtld3d for it, and the bundle carries no mtld3d source archive.
+**This reverses an earlier decision in this document.** D3DMetal was chosen first, on the
+reasoning that the runtime selects D3DMetal for 64-bit DXGI and that DXVK had been reported as
+fragile. A measured crash overruled it, reported by the startup worker:
 
-Retaining an Apple-signed framework needed two changes to the shared signing and audit
-stages, both found by actually running them:
+- On the patched CX 11.0 runtime with D3DMetal the game clears Denuvo — zero TF emulation stops,
+  no `-6` exit — and then dies at about 2:52 with `c0000005`, a wild-pointer read at `NFS16.exe`
+  RVA `0x341FB95`, immediately after the runtime logs `[D3DMetal] Unsupported: D3D11 timestamp
+  query`. Frostbite uses GPU timestamp queries.
+- The control: the same game and the same TF settings on Wine 11.18 with DXVK reached the full
+  main menu and rendered correctly.
 
-- `sign.py` re-signed every Mach-O with `--force`, which would have replaced Apple's
-  Apple-Software-Signing signature on `D3DMetal` with ours. It now leaves anything under a
-  recipe's `vendorRuntimePaths` untouched — no search-path deletion, no re-signing — and only
-  hash-pins it. `codesign --verify --deep --strict` still passes, because Apple's own
-  signature is valid.
-- `audit.py` failed the build on `D3DMetal`'s own `LC_RPATH` entries into Apple's internal
-  build roots (`/AppleInternal/…`, `/Library/Caches/com.apple.xbs/…`). Those cannot be stripped
-  without breaking Apple's signature, so they are now reported under `vendorRpaths` instead of
-  `developmentRpaths`, and the audit additionally asserts each retained vendor binary still
-  carries a real, non-ad-hoc signing authority. The gate stays strict for every file this
-  project builds or stages itself: the `/AppleInternal/` and `/Library/Caches/` prefixes were
-  added to the fatal list for non-vendor files at the same time.
+**Strong inference, not proof.** That RVA has not been disassembled and sits inside the
+protected image, so the link from the unsupported query to the fault is circumstantial, however
+closely the two coincide. What is settled is the choice: a backend that reaches a menu beats one
+that faults, so DXVK it is.
 
-Measured on a probe build against the CoD4-tested Wine base: 51 files signed by this project,
-6 Apple files preserved, audit clean.
+Because this is a measured failure rather than a performance difference,
+`GameKind.nfs2015.deniedRendererBackends` records `gptk` with its reason, and
+`RendererSelection.compatibilityDatabase` refuses to build an environment that selects it. The
+same contradiction is refused statically in `recipes.py`, so a recipe naming it cannot even be
+loaded, and a manifest naming it fails validation on the player's machine. The denial is per
+game: `gptk` remains a legitimate choice for a title with no such measurement.
 
-**Open licensing question, not resolved here:** retaining `D3DMetal.framework` means the app
-would redistribute an Apple-signed framework under Apple's own licence. `BUNDLING.md` already
-notes that "Apple runtime licenses/signatures require separate handling in the EA track".
-Settle that before distributing a build of this recipe to anyone else; a local build for the
-machine's own owner is a different question from redistribution. Note also that the bundle
-inherits `mtld3d-source.tar.gz` from the retained base app's notices even though it ships no
-mtld3d; that is extra corresponding source, not a missing one.
+Selecting per executable means one runtime can serve the EA client and the game, which is
+preferable to shipping a second runtime. Both rules currently name `dxvk`; if the client turns
+out to need a different backend, only the first rule changes.
+
+Retention follows the backend. The packager prunes a fixed list of runtime paths, and
+`runtimeRetention` names what a title keeps; this recipe keeps DXVK's libraries and the Vulkan
+loader:
+
+```text
+lib/wine/dxgi/dxvk  lib/wine/x86_64-windows/dxvk
+lib/external/libMoltenVK.dylib  lib/external/libvulkan.1.dylib  lib/external/vulkan
+```
+
+Those names are **unconfirmed**: `src/wine-cx/runtime-dxvk` does not exist yet, so the layout
+has not been inspected. Retaining a path that does not exist is a no-op, and the pruning list
+does not currently name any DXVK path, so a wrong name here cannot delete the wrong thing — but
+check them against the runtime before trusting the first build.
+
+One consequence is welcome: the recipe no longer retains `D3DMetal.framework`, so the question
+of redistributing an Apple-signed framework under Apple's licence **no longer arises for this
+recipe**. The `vendorRuntimePaths` mechanism that made retaining it safe stays in the packager,
+unused by any recipe, for whenever a vendor-signed artifact does have to be kept.
 
 ### Runtime capability gate
 
@@ -120,9 +136,9 @@ error, which is the worst possible failure. The recipe therefore declares
 `capabilities` provides, and `verify_inputs` refuses to assemble a mismatch. A profile marked
 `pending` is refused outright with its `blockedBy` text.
 
-**This is the current blocker.** `nfs2015-tf-cx11` is `pending`: the CX 11.0 runtime carrying
-the `WINE_TF_*` gate is still being built at `~/Games/NFS2015-debug/src/wine-cx`, and
-`src/wine-cx/runtime` does not exist yet. To finish a build, pin that runtime's
+**This is the current blocker.** `nfs2015-tf-cx11` is `pending`: the Vulkan-preserving CX 11.0
+runtime carrying the `WINE_TF_*` gate is still being built, and
+`src/wine-cx/runtime-dxvk` does not exist yet. To finish a build, pin that runtime's
 `bin/wine`, `bin/wineserver`, `lib/wine/x86_64-unix/{ntdll.so,wine}` and
 `lib/wine/i386-windows/ntdll.dll` under that profile and remove `pending`.
 
@@ -179,7 +195,8 @@ linked folder keeps its file, and an interrupted edit is replayed before anythin
 
 ### What does not apply
 
-- **mtld3d renderer options.** Direct3D 9 only; see above.
+- **mtld3d renderer options.** Direct3D 9 only; see above. The `mtld3d.conf` panel the other
+  two starters offer has no counterpart here, because no mtld3d is loaded.
 - **Most Wanted's widescreen and simulation-rate patches.** Those patch a 2005 Direct3D 9
   executable. Nothing is patched here: the game executable is Denuvo-protected and is the
   player's own file.
@@ -216,6 +233,7 @@ that the game wrote display settings at 2560×1600.
 
 Not verified: that a complete session reaches gameplay. The runtime that delivers execution
 breakpoints is not built yet, and no game or EA app was run while writing this recipe. The
-`dxgi=gptk` selection, the readiness child count, and the detail-level domain are reasoned
-from local evidence, not measured. Treat a successful build as a successful build and nothing
+DXVK-over-D3DMetal choice rests on a measured crash whose exact mechanism is inferred, and the
+readiness child count and the detail-level domain are reasoned from local evidence rather than
+measured. Treat a successful build as a successful build and nothing
 more.
