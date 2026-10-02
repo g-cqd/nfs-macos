@@ -47,8 +47,11 @@ no mtld3d revision. Its `runtime-provenance.json` used to inherit `2513602...` f
 `mtld3d` source archive and a renderer test claim that described that other app. The packager now drops a pinned
 source whose input the recipe does not declare, records it under `sourcesNotApplicable` with the reason, deletes the
 inherited archive and patch, and makes the renderer claim only for an app that installs the pinned renderer.
-`check_runtime_inputs.py` pins this. The Wine runtime profile still carries its own, unpinned Direct3D 9/8 files;
-they were not built, verified or selected by this app, so no revision is claimed for them. The `wine`, `wine-build` and
+`check_runtime_inputs.py` pins this. The Wine runtime profile still carries mtld3d files from its own build: in
+the built app they are `lib/wine/d3d9/mtld3d`, and the runtime's `compatdb` log names them as the default Direct3D 9
+backend for a process with no renderer rule. They were not built, verified or pinned here, so no revision is claimed for
+them. `NFS16.exe` and the EA client are served by dxmt through renderer rules and are Direct3D 11 programs; no
+Direct3D 9 use by either was observed, and none was looked for on this build. The `wine`, `wine-build` and
 `XtendedInput` entries inherited from the same base app are unchanged and still describe the Most Wanted base, not
 the Need for Speed (2015) runtime, whose own source is `runtimeSource`; correcting those is a follow-up.
 

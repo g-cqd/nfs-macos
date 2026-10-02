@@ -10,8 +10,9 @@ import shutil
 from tempfile import TemporaryDirectory
 
 from assemble import stage_game, stage_managed_runtime
-from bundle_hygiene import (audit_app_tree, audit_game_payload, audit_managed_runtime, audit_runtime_pins,
-                            problems_in)
+import tarfile
+from bundle_hygiene import (audit_app_tree, audit_build_paths, audit_game_payload, audit_managed_runtime,
+                            audit_runtime_pins, problems_in)
 from payload import inventory, inventory_digest
 from recipes import load_recipe, validate_recipe
 
@@ -308,5 +309,28 @@ with TemporaryDirectory() as temporary:
     write(addons, 'mono.msi', b'a different installer')
     expect_refused(lambda: stage_managed_runtime(base / 'refused', recipe, inputs), 'does not match its pin')
     assert not (base / 'refused').exists()
+
+# 6. The files this project writes must not name the Mac that built them.
+with TemporaryDirectory() as temporary:
+    base = Path(temporary)
+    home = '/Users/builder'
+    app = base / 'portable.app'
+    write(app, 'Contents/Info.plist', b'<plist>clean</plist>')
+    write(app, 'Contents/Resources/Game/NFS16.exe', home.encode())  # the publisher's payload, pinned by digest
+    write(app, 'Contents/SharedSupport/Wine/bin/wine', home.encode() + b'/src/wine.c')  # third-party build paths
+    assert audit_build_paths(app, home) == []
+    write(app, 'Contents/Resources/runtime-provenance.json', b'{"path": "' + home.encode() + b'/Games"}')
+    assert audit_build_paths(app, home) == ['Build Mac path in Contents/Resources/runtime-provenance.json']
+    (app / 'Contents/Resources/runtime-provenance.json').unlink()
+    write(app, 'Contents/MacOS/Starter', (home + '/macos-app/Sources/Starter.swift').encode('utf-16-le'))
+    assert audit_build_paths(app, home) == ['Build Mac path in Contents/MacOS/Starter']
+    (app / 'Contents/MacOS/Starter').unlink()
+    inner = base / 'note.txt'
+    inner.write_text('built in ' + home + '/Games')
+    (app / 'Contents/Resources/Sources').mkdir(parents=True)
+    with tarfile.open(app / 'Contents/Resources/Sources/source.tar.gz', 'w:gz') as archive:
+        archive.add(inner, arcname='docs/note.txt')
+    assert audit_build_paths(app, home) == [
+        'Build Mac path in Contents/Resources/Sources/source.tar.gz (docs/note.txt)']
 
 print('Bundle hygiene and pinned payload regressions passed')

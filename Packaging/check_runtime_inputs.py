@@ -3,7 +3,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import hashlib
 import json
+from pathlib import Path as _Path
 import subprocess
+import tarfile
 import runtime_inputs
 from runtime_inputs import PINS, collect_sources, runtime_provenance, verify_hashes
 
@@ -72,4 +74,23 @@ with TemporaryDirectory() as temporary:
     renderer = runtime_provenance(recipe, {**revisions, 'mtld3d': PINS['sources']['mtld3d']['revision']})
     assert renderer['sourcesNotApplicable'] == {} and renderer['rendererVerification'] == PINS['rendererVerification']
     assert renderer['inputRendererHashes'] == PINS['rendererFiles']
+# The launcher source an app carries is the tracked source only: no bytecode caches, which record the
+# absolute path of each source file, and recipes whose input roots were this Mac's paths.
+with TemporaryDirectory() as temporary:
+    resources = Path(temporary)
+    (resources / 'Sources').mkdir()
+    runtime_inputs.archive_launcher(resources)
+    home = str(_Path.home()).encode()
+    with tarfile.open(resources / 'Sources/launcher-source.tar.gz') as archive:
+        members = [member for member in archive if member.isfile()]
+        names = {member.name for member in members}
+        assert 'Packaging/runtime_inputs.py' in names and 'Packaging/Recipes/nfs2015.json' in names
+        assert not [name for name in names if '__pycache__' in name or name.endswith(('.pyc', '.DS_Store'))
+                    or '/._' in name or name.startswith('._')], 'Build leftovers or AppleDouble files were archived'
+        for member in members:
+            data = archive.extractfile(member).read()
+            assert home not in data or not data.strip(), member.name + ' carries the build Mac home folder'
+            if member.name.startswith('Packaging/Recipes/'):
+                inputs = json.loads(data)['inputs']
+                assert inputs and set(inputs.values()) == {'build input, not shipped'}, member.name
 print('Pinned runtime input regressions passed')

@@ -6,7 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import struct
-from bundle_hygiene import audit_app_tree, audit_game_payload, audit_managed_runtime, audit_runtime_pins
+from bundle_hygiene import (audit_app_tree, audit_build_paths, audit_game_payload, audit_managed_runtime,
+                            audit_runtime_pins)
 from game_data import bundled_entries
 from privacy import audit_privacy
 from recipes import validate_recipe
@@ -97,6 +98,7 @@ assert actual_game_paths == expected_game_paths, 'Unexpected or missing game pay
 # exactly its pinned game list with no account, session or machine state in it.
 hazards = audit_app_tree(app)
 hazards += audit_privacy(app)
+hazards += audit_build_paths(app, Path.home())
 if recipe_path.exists():
     hazards += audit_runtime_pins(app, PINS, embedded, pinned_runtime)
     hazards += audit_managed_runtime(app, manifest, embedded)

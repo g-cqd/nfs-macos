@@ -413,6 +413,13 @@ def validate_recipe(recipe):
     return recipe
 
 
+def shipped_recipe(recipe):
+    """A recipe as it ships, in an app or in the source archive: its input roots are paths on the
+    build Mac, so they stay behind. Everything else is kept, and the shipped copy still validates:
+    resource lists name their inputs, only without saying where those inputs were."""
+    return {**recipe, 'inputs': {name: 'build input, not shipped' for name in recipe['inputs']}}
+
+
 def supports_edition(recipe, edition):
     return edition in recipe.get('editions', ['bundled', 'import'])
 

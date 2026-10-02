@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 from optimize_runtime import optimize
+from recipes import shipped_recipe
 
 PROJECT = Path(__file__).resolve().parents[1]
 PINS = json.loads(Path(__file__).with_name('runtime-inputs.json').read_text())
@@ -141,11 +143,41 @@ def stage_runtime(contents, recipe, inputs):
     return optimize(wine)
 
 
+LAUNCHER_SOURCE = ['Package.swift', 'Sources', 'Tests', 'Packaging', 'README.md', 'docs', 'tools',
+                   'PLAN.md', 'SETTINGS-PLAN.md']
+
+
+def launcher_source_files():
+    """The launcher's own source: the tracked files of the listed paths, never build leftovers.
+
+    A plain archive of the folders also took `__pycache__`, whose bytecode records the absolute path
+    of each source file on the build Mac, and any other ignored file lying there.
+    """
+    if (PROJECT / '.git').exists():
+        listed = subprocess.check_output(['git', '-C', str(PROJECT), 'ls-files', '-z', '--'] + LAUNCHER_SOURCE,
+                                         text=True).split('\0')
+        return sorted(name for name in listed if name and (PROJECT / name).is_file())
+    return sorted(path.relative_to(PROJECT).as_posix() for item in LAUNCHER_SOURCE
+                  for path in ([PROJECT / item] if (PROJECT / item).is_file() else (PROJECT / item).rglob('*'))
+                  if path.is_file() and '__pycache__' not in path.parts and path.name != '.DS_Store')
+
+
 def archive_launcher(resources):
+    """Archive the launcher source into the app, with the recipes' build-Mac input paths removed."""
     destination = resources / 'Sources/launcher-source.tar.gz'
-    subprocess.run(['/usr/bin/tar', '-czf', str(destination), '-C', str(PROJECT),
-                    'Package.swift', 'Sources', 'Tests', 'Packaging', 'README.md', 'docs',
-                    'tools', 'PLAN.md', 'SETTINGS-PLAN.md'], check=True)
+    with tempfile.TemporaryDirectory() as temporary:
+        stage = Path(temporary)
+        names = launcher_source_files()
+        for name in names:
+            target = stage / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(PROJECT / name, target)
+            target.chmod((PROJECT / name).stat().st_mode & 0o777)
+            if target.parent.name == 'Recipes' and target.suffix == '.json':
+                target.write_text(json.dumps(shipped_recipe(json.loads(target.read_text())), indent=2) + '\n')
+        # No extended attributes and no AppleDouble `._` entries: they hold provenance records of this Mac.
+        subprocess.run(['/usr/bin/tar', '--no-xattrs', '--no-mac-metadata', '-czf', str(destination),
+                        '-C', str(stage)] + names, check=True)
 
 
 def collect_sources(resources, inputs):
@@ -175,9 +207,10 @@ def collect_sources(resources, inputs):
 
 def not_applicable_sources(revisions):
     """The pinned sources this app does not carry, each with the reason it has no revision here."""
-    return {name: 'Not applicable to this app: its recipe pins, verifies and stages no ' + name
-                  + ' build, so no revision of it is recorded. A revision inherited from the retained '
-                    'base app would describe a different build.'
+    return {name: 'Not pinned by this app: its recipe builds, verifies and stages no ' + name
+                  + ', so no revision of it is recorded. A revision inherited from the retained base app '
+                    'would describe a different build, and the Wine runtime profile may carry files of this '
+                    'component from its own build, whose revision this app does not know.'
             for name in PINS['sources'] if name not in revisions}
 
 
