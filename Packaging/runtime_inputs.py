@@ -176,6 +176,8 @@ def runtime_provenance(recipe, revisions):
             'inputSidecarSHA256': PINS['sidecarSHA256'],
             'retainedRuntimePaths': recipe.get('runtimeRetention', []),
             'rendererSelection': recipe.get('renderers', []),
+            'runtimeSource': recipe.get('runtimeSource', {}),
+            'runtimeToolchainNote': profile.get('toolchainNote', ''),
             'runtimeTuning': recipe.get('runtimeTuning', {}),
             'referencesInstallation': bool(recipe.get('referencesInstallation')),
             'renderer': 'Production PROD=1 PERF=0; perf telemetry is compiled out, not merely silenced',

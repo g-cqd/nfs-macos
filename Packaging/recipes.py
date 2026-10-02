@@ -198,6 +198,25 @@ def validate_renderers(recipe, renderers):
     return renderers
 
 
+def validate_runtime_source(source):
+    """The modified runtime's corresponding source, which the LGPL requires us to ship."""
+    if not isinstance(source, dict):
+        raise ValueError('The runtime source declaration must be an object')
+    for key in ['source', 'path', 'archive']:
+        safe_relative(source.get(key))
+    if not isinstance(source.get('input'), str):
+        raise ValueError('The runtime source needs a declared input')
+    if not re.fullmatch('[0-9a-f]{7,40}', str(source.get('baseRevision'))):
+        raise ValueError('The runtime source needs its exact upstream base revision')
+    if not str(source.get('repository', '')).startswith('https://'):
+        raise ValueError('The runtime source needs an upstream repository URL')
+    if not isinstance(source.get('patchCount'), int) or not 0 <= source['patchCount'] <= 256:
+        raise ValueError('Invalid runtime patch count')
+    if not source.get('archive').endswith('.tar.gz'):
+        raise ValueError('The runtime source archive must be a tar.gz')
+    return source
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -301,6 +320,10 @@ def validate_recipe(recipe):
         validate_store_client(recipe.get('storeClient'))
         validate_prefix_settings(recipe.get('prefixSettings', []))
         validate_renderers(recipe, recipe.get('renderers', []))
+        if 'runtimeSource' in recipe:
+            declared = validate_runtime_source(recipe['runtimeSource'])
+            if declared['input'] not in recipe['inputs']:
+                raise ValueError('Undeclared runtime source input')
         devices = recipe.get('controllerDevices', [])
         if not isinstance(devices, list) or len(devices) > 32 or not all(
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
