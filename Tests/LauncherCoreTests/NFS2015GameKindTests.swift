@@ -10,8 +10,9 @@ struct NFS2015GameKindTests {
     launcherExecutable: "EA Desktop/EALauncher.exe",
     launchURL: "origin2://game/launch/?offerIds={offer}", offerID: "1024486",
     signInEvidence: ["AppData/Local/Electronic Arts/EA Desktop"],
-    readinessEvidence: ["AppData/Local/Electronic Arts/EA Desktop/Logs"], readinessChildren: 1,
-    readinessSeconds: 120, gameRoot: "Program Files/EA Games/Need for Speed")
+    readinessLog: "ProgramData/EA Desktop/Logs/EADesktop.log", startMarker: "[STARTUP]",
+    readyEvents: ["login", "client.boot.ready"], readinessSeconds: 120,
+    gameRoot: "Program Files/EA Games/Need for Speed")
 
   @Test
   func `names the game's own executable, folder and helper`() {

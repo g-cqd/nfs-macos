@@ -50,19 +50,30 @@ client.
 
 ### Readiness
 
-Step 2 is bounded host observation, declared in the recipe:
+Step 2 reads the client's own diagnostic log, `ProgramData/EA Desktop/Logs/EADesktop.log`, which
+the recipe names as `readinessLog`. The client writes a `[STARTUP]` line (`startMarker`) at the
+start of every run, and a signed-in client then prints the telemetry events `login` and
+`client.boot.ready` (`readyEvents`). The client is **ready** when both appear after the latest start
+line; for a client the session just started, that start line must also be stamped no earlier than
+the moment the session started it, so an earlier signed-in run in the same file never counts.
+**Signed out** is a start line without both events; **not started** is no start line of this run.
+Measured in the logs of two prefixes: every signed-in start shows the sequence `app.strt.ready`,
+`user.lgin.ckld`, `login`, `client.boot.ready`, and the first run of a fresh prefix shows no `login`
+until the player typed their credentials. The `authenticated` flag EA stamps on every event is not
+used: it flips between true and false within one signed-in run.
 
-- the client process is alive, and
-- a timestamp under `readinessEvidence` has advanced past the moment the client was started. The
-  recipe watches `ProgramData/EA Desktop/Logs/cef.log`, which the client's browser helpers write as
-  soon as they start. A location under `ProgramData/` is resolved in the Windows drive; any other
-  one in the player's profile. A location that does not exist yet is observed below its nearest
-  existing folder and counts only once it exists and is newer than the start.
-- `readinessChildren` may demand that many live descendant processes, but the recipe sets it to 0:
-  Wine starts every Windows child detached, so macOS reparents the helpers to launchd and none ever
-  appears below the client (measured: `pgrep -P` on `EADesktop.exe` is empty while five helpers run).
-  The earlier recipe asked for one, and for `AppData/Local/Electronic Arts/EA Desktop/Logs`, a
-  folder created only by the first game activation; neither could be met on a fresh prefix.
+Three things that were tried first, and cannot work: a child process count (Wine starts every
+Windows child detached, so macOS reparents the helpers to launchd and `pgrep -P` on the client is
+empty while five helpers run), the existence of the activation log folder (created only by the
+first game activation), and the modification time of a client log (the client stops writing
+`cef.log` a minute after it starts, and a `URL` that is polled returns the date it cached on its
+first read).
+
+A client that is alive when `readinessSeconds` passes is **never ended**. The session leaves it
+running, records what is missing (not signed in, or has not reported its start) in the starter's
+state, and returns; the starter shows it and keeps Play enabled. The next Play finds the recorded
+EA process still running and reuses it, without starting a second one and without restarting Wine.
+Only a client that has already exited is cleaned up.
 
 No credential, cookie or account file is ever read. If either signal does not appear within
 `readinessSeconds`, the session stops and tells the player to open the EA app themselves.

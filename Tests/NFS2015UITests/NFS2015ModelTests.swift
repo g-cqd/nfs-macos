@@ -56,6 +56,31 @@ struct NFS2015ModelTests {
     #expect(service.performed == [.prepare])
   }
 
+  /// A Play that left the EA app running tells the player what to do and keeps Play usable, so
+  /// the next press reuses the running client.
+  @Test
+  func `keeps Play enabled and shows what to do when the EA app is running but not ready`() async {
+    let (model, service) = model()
+    service.snapshot.notice =
+      "The EA app is open but not signed in. Sign in, then press Play again."
+    await model.run()
+    #expect(model.phase == .ready)
+    #expect(model.canPlay)
+    #expect(model.statusMessage.contains("not signed in"))
+    #expect(model.errorMessage == nil)
+    model.play()
+    await model.run()
+    #expect(service.performed == [.prepare, .play])
+    #expect(model.canPlay)
+  }
+
+  @Test
+  func `says Ready to play when there is nothing to add`() async {
+    let (model, _) = model()
+    await model.run()
+    #expect(model.statusMessage == "Ready to play")
+  }
+
   @Test
   func `shows the dependency message and refuses to play without it`() async {
     let (model, _) = model(blocker: "Open the EA app and sign in to your EA account.")

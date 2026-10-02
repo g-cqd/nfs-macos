@@ -101,9 +101,16 @@ def validate_store_client(client):
     """Mirror of the native StoreClientPlan validation; the Swift tests pin the same shape."""
     if not isinstance(client, dict):
         raise ValueError('The store client must be an object')
-    for key in ['installRoot', 'clientExecutable', 'launcherExecutable', 'gameRoot']:
+    for key in ['installRoot', 'clientExecutable', 'launcherExecutable', 'gameRoot', 'readinessLog']:
         safe_relative(client.get(key))
-    for key in ['signInEvidence', 'readinessEvidence']:
+    marker = client.get('startMarker')
+    if not isinstance(marker, str) or not 1 <= len(marker) <= 128 or '\n' in marker:
+        raise ValueError('The store client needs a start marker')
+    events = client.get('readyEvents')
+    if not isinstance(events, list) or not 1 <= len(events) <= 8 or not all(
+            isinstance(e, str) and re.fullmatch(r'[a-z0-9._]{1,64}', e) for e in events):
+        raise ValueError('The store client needs plain ready event names')
+    for key in ['signInEvidence']:
         paths = client.get(key)
         if not isinstance(paths, list) or not 1 <= len(paths) <= 16:
             raise ValueError('The store client needs 1-16 ' + key + ' paths')
@@ -123,9 +130,6 @@ def validate_store_client(client):
         raise ValueError('The store launch request must be a bounded store URL with an offer slot')
     if not re.fullmatch(r'[0-9]{1,20}', str(client.get('offerID'))):
         raise ValueError('The store offer identifier must be a decimal number')
-    if not isinstance(client.get('readinessChildren'), int) \
-            or not 0 <= client['readinessChildren'] <= 64:
-        raise ValueError('Invalid store client readiness child count')
     if not isinstance(client.get('readinessSeconds'), int) \
             or not 5 <= client['readinessSeconds'] <= 600:
         raise ValueError('Invalid store client readiness wait')

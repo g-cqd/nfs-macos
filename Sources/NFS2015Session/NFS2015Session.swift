@@ -18,7 +18,10 @@ struct NFS2015Session {
     try files.createDirectory(at: paths.support, withIntermediateDirectories: true)
     return try SessionLock.withLock(at: paths.support.appendingPathComponent("session.lock")) {
       let lease = GameLease(url: paths.support.appendingPathComponent("game-session.json"))
-      try lease.check()
+      // An EA app this app started earlier and left running is reused, never refused, restarted
+      // or stopped: it may be signed in, or waiting for the player to sign in.
+      let adopted = runningClient(lease: lease, action: options.action)
+      if adopted == nil { try lease.check() }
       try FileTransaction(root: paths.support).recover()
       try PlayerFileEdit(support: paths.support).recover()
       for folder in ["RuntimeHome/Player", "Temporary"] {
@@ -65,7 +68,7 @@ struct NFS2015Session {
         settings = try store.apply(requested)
       }
       let prefix = owned ? paths.prefix : readiness.install?.prefix
-      if options.action != "--configure", let prefix {
+      if options.action != "--configure", adopted == nil, let prefix {
         try recordPrefixSettings(manifest.registry, prefix: prefix, runtime: runtime)
       }
       if options.action == "--enable-controller" {
@@ -78,7 +81,7 @@ struct NFS2015Session {
         store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       }
       if options.action == "--open-client" {
-        try openClient(plan: plan, runtime: runtime, lease: lease)
+        try openClient(plan: plan, runtime: runtime, lease: lease, adopted: adopted)
         readiness = try NFS2015Locator.resolve(prefix: paths.prefix, plan: plan)
         store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       }
@@ -92,13 +95,41 @@ struct NFS2015Session {
       }
       let environment = try runtime.environment(prefix: install.prefix)
       try requireRosetta(environment)
-      let status = try play(
+      let outcome = try play(
         plan: try NFS2015LaunchPlan.make(install: install, plan: plan), environment: environment,
-        runtime: runtime, prefix: install.prefix, lease: lease)
-      try snapshot(
-        readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned)
-      return status
+        runtime: runtime, prefix: install.prefix, lease: lease, adopted: adopted)
+      switch outcome {
+      case .finished(let status):
+        try snapshot(
+          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned)
+        return status
+      case .notReady(let notice):
+        print(notice)
+        try snapshot(
+          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned,
+          notice: notice)
+        return 0
+      }
     }
+  }
+
+  /// The EA app this app recorded earlier, when it is still running and the operation can use it.
+  ///
+  /// Only the EA client is reused. A recorded installer or game still running keeps being
+  /// refused, and an operation that would stop Wine never adopts a running client.
+  private func runningClient(lease: GameLease, action: String) -> Int32? {
+    guard ["--play", "--open-client", "--prepare"].contains(action),
+      let pid = lease.activeProcess(), ProcessFamily.runs(pid: pid, program: "EADesktop.exe")
+    else { return nil }
+    return pid
+  }
+
+  /// How a Play ended.
+  private enum PlayOutcome {
+    /// The client ended after the game was requested.
+    case finished(Int32)
+    /// The client is running and not ready; it was left running, with this to tell the player.
+    case notReady(String)
   }
 
   /// Builds the unpublished prefix of a bundled app: Wine's defaults, then exactly the registry
@@ -242,10 +273,22 @@ struct NFS2015Session {
   }
 
   /// Starts the EA app by itself so the player can sign in, and waits until it is quit.
-  private func openClient(plan: StoreClientPlan, runtime: WineRuntime, lease: GameLease) throws {
+  ///
+  /// An EA app already running from an earlier Play is the one the player signs in to; it is
+  /// waited for, not started twice.
+  private func openClient(
+    plan: StoreClientPlan, runtime: WineRuntime, lease: GameLease, adopted: Int32?
+  ) throws {
     guard let client = try NFS2015Locator.client(prefix: paths.prefix, plan: plan) else {
       throw LauncherError.operation(
         "The \(plan.name) is not installed yet. Press Install EA App first.")
+    }
+    if let adopted {
+      print("The \(plan.name) is already running; sign in to it, then quit it.")
+      while lease.activeProcess() == adopted { Thread.sleep(forTimeInterval: 1) }
+      try lease.clear()
+      try runtime.stop(paths.prefix)
+      return
     }
     let environment = try runtime.environment(prefix: paths.prefix)
     try requireRosetta(environment)
@@ -274,29 +317,41 @@ struct NFS2015Session {
     try runtime.stop(paths.prefix)
   }
 
-  /// Starts the client, waits for it to come up, then hands it the launch request.
+  /// Starts the client, or reuses the one already running, waits until it reports that it is
+  /// signed in and booted, then hands it the launch request.
   ///
   /// The session owns the client process for the whole play session: the client keeps running
-  /// while the game it started runs, so quitting the client ends the session.
+  /// while the game it started runs, so quitting the client ends the session. A client that is
+  /// alive is never ended here, not when the wait runs out and not when the request fails: it
+  /// is left running for the player to sign in to and for the next Play to reuse. Only a client
+  /// that has already exited is cleaned up.
   private func play(
     plan: NFS2015LaunchPlan, environment: [String: String], runtime: WineRuntime, prefix: URL,
-    lease: GameLease
-  ) throws -> Int32 {
+    lease: GameLease, adopted: Int32?
+  ) throws -> PlayOutcome {
     let started = Date()
-    let client = try ProcessCommand(
-      executable: paths.wine, arguments: plan.client.wineArguments,
-      directory: plan.workingDirectory, environment: environment
-    ).start(output: output)
+    var owned: Process?
+    let pid: Int32
+    if let adopted {
+      pid = adopted
+      print("Reusing the EA app that is already running.")
+    } else {
+      let client = try ProcessCommand(
+        executable: paths.wine, arguments: plan.client.wineArguments,
+        directory: plan.workingDirectory, environment: environment
+      ).start(output: output)
+      owned = client
+      pid = client.processIdentifier
+    }
+    let isRunning: () -> Bool = { owned?.isRunning ?? (lease.activeProcess() == pid) }
     do {
-      try lease.record(process: client.processIdentifier)
-      let waited = try ClientReadiness(
-        evidence: plan.readinessEvidence, children: plan.readinessChildren,
-        deadline: plan.readinessSeconds
-      ).wait(
-        since: started, modified: ClientReadiness.newestModification,
-        isRunning: { client.isRunning },
-        helpers: { ProcessFamily.descendants(of: client.processIdentifier) },
-        wait: { seconds in Thread.sleep(forTimeInterval: Double(seconds)) })
+      if adopted == nil { try lease.record(process: pid) }
+      let result = try ClientWait(deadline: plan.readinessSeconds).run(
+        phase: { plan.readiness.phase(since: adopted == nil ? started : nil) },
+        isRunning: isRunning, wait: { seconds in Thread.sleep(forTimeInterval: Double(seconds)) })
+      guard case .ready(let waited) = result else {
+        return .notReady(result.notice ?? "The EA app is running; press Play again.")
+      }
       print("The EA app was ready after \(waited) seconds.")
       let request = try ProcessCommand(
         executable: paths.wine, arguments: plan.request.wineArguments,
@@ -305,28 +360,32 @@ struct NFS2015Session {
       guard request == 0 else {
         throw LauncherError.operation(
           """
-          The EA app refused the launch request (\(request)). Open the EA app, make sure Need \
-          for Speed is installed and your account is signed in, then play again.
+          The EA app refused the launch request (\(request)). It is still running: make sure Need \
+          for Speed is installed in it and your account is signed in, then press Play again.
           """)
       }
-      client.waitUntilExit()
+      if let owned {
+        owned.waitUntilExit()
+      } else {
+        while isRunning() { Thread.sleep(forTimeInterval: 1) }
+      }
     } catch {
-      if client.isRunning { client.terminate() }
-      client.waitUntilExit()
-      do {
-        try lease.clear()
-        try runtime.stop(prefix)
-      } catch { print("Need for Speed session cleanup failed: \(error)") }
+      if !isRunning() {
+        do {
+          try lease.clear()
+          try runtime.stop(prefix)
+        } catch { print("Need for Speed session cleanup failed: \(error)") }
+      }
       throw error
     }
     try lease.clear()
     try runtime.stop(prefix)
-    return client.terminationStatus
+    return .finished(owned?.terminationStatus ?? 0)
   }
 
   private func snapshot(
     readiness: NFS2015Readiness, store: NFS2015SettingsStore, settings: NFS2015Settings,
-    plan: StoreClientPlan, owned: Bool
+    plan: StoreClientPlan, owned: Bool, notice: String? = nil
   ) throws {
     let installed = readiness.install
     var version = installed?.clientVersion
@@ -337,7 +396,7 @@ struct NFS2015Session {
       blocker: owned ? readiness.ownedMessage : readiness.message, clientVersion: version,
       installedAt: owned ? paths.prefix.path : installed?.prefix.path,
       hasOptionsFile: try store.optionsFile() != nil, settings: settings,
-      ownsWindowsFolder: owned ? true : nil, setup: owned ? readiness.setup : nil
+      ownsWindowsFolder: owned ? true : nil, setup: owned ? readiness.setup : nil, notice: notice
     ).write(to: paths.support.appendingPathComponent("launcher-state.json"))
   }
 }

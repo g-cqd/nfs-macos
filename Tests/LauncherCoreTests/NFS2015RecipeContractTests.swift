@@ -54,14 +54,16 @@ struct NFS2015RecipeContractTests {
       renderers: recipe.renderers, managedRuntime: recipe.managedRuntime.declared)
   }
 
-  /// Wine starts every Windows child process detached, so macOS reparents it to launchd and the
-  /// client's helpers never show up below it; a recipe that required a counted child could never
-  /// become ready. The recipe therefore watches the client's own log, which every start writes.
+  /// The first real run failed because readiness was guessed from file times and a child process
+  /// count. The recipe now names the client's own start line and the events that mean it is
+  /// signed in and booted, which are the evidence measured in the client's logs.
   @Test
-  func `the readiness wait does not depend on counting the client's child processes`() throws {
+  func `readiness is the client's own start line and its sign-in events`() throws {
     let client = try Self.recipe().storeClient
-    #expect(client.readinessChildren == 0)
-    #expect(client.readinessEvidence == ["ProgramData/EA Desktop/Logs/cef.log"])
+    #expect(client.readinessLog == "ProgramData/EA Desktop/Logs/EADesktop.log")
+    #expect(client.startMarker == "[STARTUP]")
+    #expect(client.readyEvents == ["login", "client.boot.ready"])
+    #expect(client.readinessSeconds >= 60)
   }
 
   @Test

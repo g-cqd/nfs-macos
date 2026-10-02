@@ -40,11 +40,14 @@ assert not any(item['name'] == 'Install Dir' for item in recipe['prefixSettings'
 
 # The verified launch sequence, as configuration rather than code.
 client = recipe['storeClient']
-# Wine starts every Windows child detached, so the client's helpers are reparented to launchd and a
-# counted child can never be seen; and the activation log folder under the profile only exists after
-# a game is first activated. The wait therefore watches the client's own machine-wide log.
-assert client['readinessChildren'] == 0, 'A counted child process can never be observed under Wine'
-assert client['readinessEvidence'] == ['ProgramData/EA Desktop/Logs/cef.log'], client['readinessEvidence']
+# Readiness is the client's own start line and sign-in events, measured in the logs of its runs:
+# after the start line a signed-in client prints the telemetry events `login` and `client.boot.ready`.
+# File times and child process counts were tried and cannot work (Wine reparents every child to
+# launchd, and a reused URL reports a cached time), and the `authenticated` flag flips within a run.
+assert client['readinessLog'] == 'ProgramData/EA Desktop/Logs/EADesktop.log', client['readinessLog']
+assert client['startMarker'] == '[STARTUP]'
+assert client['readyEvents'] == ['login', 'client.boot.ready'], client['readyEvents']
+assert 'readinessEvidence' not in client and 'readinessChildren' not in client
 assert client['clientArguments'] == ['--in-process-gpu'], 'The EA interface renders blank without it'
 assert client['clientExecutable'].endswith('EADesktop.exe'), 'The client is started directly'
 assert client['launcherExecutable'].endswith('EALauncher.exe')
@@ -158,7 +161,13 @@ for change in [
     lambda r: r['storeClient'].update(offerID='not-a-number'),
     lambda r: r['storeClient'].update(installRoot='../outside'),
     lambda r: r['storeClient'].update(readinessSeconds=0),
-    lambda r: r['storeClient'].pop('readinessEvidence'),
+    lambda r: r['storeClient'].pop('readinessLog'),
+    lambda r: r['storeClient'].pop('startMarker'),
+    lambda r: r['storeClient'].update(startMarker='[STARTUP]\n[x]'),
+    lambda r: r['storeClient'].pop('readyEvents'),
+    lambda r: r['storeClient'].update(readyEvents=[]),
+    lambda r: r['storeClient'].update(readyEvents=['login; id']),
+    lambda r: r['storeClient'].update(readinessLog='../outside.log'),
     lambda r: r.update(runtimeTuning={'DYLD_INSERT_LIBRARIES': '/tmp/x'}),
     lambda r: r.update(runtimeTuning={'WINE_TF_EMULATION': 'yes'}),
     lambda r: r.update(controllerDevices=['054C']),
