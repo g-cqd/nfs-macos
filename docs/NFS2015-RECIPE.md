@@ -1,8 +1,9 @@
 # Need for Speed (2015) recipe
 
-This app does not contain the game, and it does not replace any part of EA's software. It
-supplies a Wine runtime, a starter and a session helper, and it runs the player's own
-installation where that installation already is.
+The Import edition does not contain the game, and neither edition replaces any part of EA's
+software. The Import edition supplies a Wine runtime, a starter and a session helper, and runs
+the player's own installation where that installation already is. The Bundled edition adds the
+user's own game files and a prefix of its own (see [NFS2015.md §13](NFS2015.md#13-the-bundled-edition)).
 
 ## Why this recipe is different
 
@@ -206,12 +207,17 @@ linked folder keeps its file, and an interrupted edit is replayed before anythin
 
 ```sh
 python3 Packaging/build.py --game nfs2015 --game-data import \
-  --output "/Users/gc/Desktop/Game Builds/Need for Speed Import.app" --no-archive
+  --output "/Users/gc/Games/nfs2015-bundled/out/Need for Speed Import.app" --no-archive
+python3 Packaging/build.py --game nfs2015 --game-data bundled \
+  --output "/Users/gc/Games/nfs2015-bundled/out/Need for Speed Bundled.app" --no-archive
 ```
 
-`--game-data bundled` is refused before anything is staged, because the recipe's `editions`
-list is `["import"]` and a bundled edition would need pinned executable hashes a referencing
-recipe cannot have.
+`--game-data bundled` packages the user's own verified installation (the recipe's `game` input,
+pinned file by file) for a prefix the app creates itself; see
+[NFS2015.md §13](NFS2015.md#13-the-bundled-edition). It is refused before anything is staged unless
+every pinned file matches and the whole payload inventory equals `inventorySHA256`. `--no-archive`
+is the supported way to build: the packager would otherwise write a `.zip` and a `.sha256`, and the
+audit refuses either inside the app.
 
 ## What is verified and what is not
 
