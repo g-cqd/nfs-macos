@@ -11,6 +11,7 @@ import tempfile
 import uuid
 from bundle_hygiene import problems_in
 from payload import inventory, inventory_digest
+from privacy import USAGE_DESCRIPTIONS
 from recipes import load_recipe, resolve_inputs, supports_edition
 from rosetta_request import build_rosetta_request
 from runtime_inputs import (PINS, PROJECT, clone, collect_sources, digest, runtime_provenance,
@@ -174,6 +175,7 @@ def stage_metadata(contents, recipe, provenance, include_game_data):
             'LSArchitecturePriority': ['arm64'], 'NSHighResolutionCapable': True, 'LSSupportsGameMode': True,
             'LSApplicationCategoryType': recipe['category'],
             'NSHumanReadableCopyright': 'Unofficial local macOS package. Component notices are included.'}
+    info.update(USAGE_DESCRIPTIONS)
     (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
     (resources / 'bundle-recipe.json').write_text(json.dumps(recipe, indent=2) + '\n')
 

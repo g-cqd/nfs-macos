@@ -48,6 +48,7 @@ def main():
         [sys.executable, 'Packaging/check_assembly.py'],
         [sys.executable, 'Packaging/check_runtime_optimization.py'],
         [sys.executable, 'Packaging/check_signing_policy.py'],
+        [sys.executable, 'Packaging/check_privacy.py'],
         [sys.executable, 'Packaging/check_widescreen_compat.py'],
         assembly,
         [sys.executable, 'Packaging/sign.py', str(output), '--identity', options.identity],

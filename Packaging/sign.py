@@ -8,7 +8,7 @@ import subprocess
 import argparse
 import plistlib
 import tempfile
-from signing_policy import resolve_identity, executable_entitlements
+from signing_policy import resolve_identity, signing_entitlements
 from runtime_inputs import archive_launcher
 
 PROJECT = Path(__file__).resolve().parent.parent
@@ -71,8 +71,11 @@ def main(identity='-'):
     def sign(path):
         command = ['/usr/bin/codesign', '--force', '--sign', identity]
         command += ['--timestamp=none'] if identity == '-' else ['--options', 'runtime', '--timestamp']
-        entitlements = executable_entitlements(path.relative_to(APP).as_posix()) if path != APP else {}
-        if identity != '-' and entitlements:
+        # The app itself is signed through its main executable, which is the responsible program
+        # for the permission prompts of every program it starts.
+        program = APP / 'Contents/MacOS' / plistlib.loads((APP / 'Contents/Info.plist').read_bytes())['CFBundleExecutable'] if path == APP else path
+        entitlements = signing_entitlements(program.relative_to(APP).as_posix(), identity)
+        if entitlements:
             with tempfile.NamedTemporaryFile(suffix='.plist') as temporary:
                 temporary.write(plistlib.dumps(entitlements)); temporary.flush()
                 subprocess.run(command + ['--entitlements', temporary.name, str(path)], check=True)
