@@ -8,12 +8,14 @@ actor CoD4SessionClient: CoD4Serving {
   private let support: URL
   private var logURL: URL?
 
+  static var defaultSupport: URL {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Application Support/CoD4Mac")
+  }
+
   init(bundle: URL = Bundle.main.bundleURL, support: URL? = nil) {
     self.bundle = bundle
-    self.support =
-      support
-      ?? FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent("Library/Application Support/CoD4Mac")
+    self.support = support ?? Self.defaultSupport
   }
 
   func hasGameData() throws -> Bool { try paths().hasGameData }

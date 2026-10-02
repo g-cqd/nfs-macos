@@ -31,6 +31,12 @@ final class FarCry2Model {
   var shaderResetConfirmation = false
   let rosetta: RosettaSetup
   let service: any FarCry2Serving
+  /// Where the Game view's placeholder is on screen, in AppKit coordinates; nil when it is not shown.
+  @ObservationIgnored var dockFrame: CGRect?
+  /// Shows macOS's Accessibility prompt; replaced in tests so they never raise a system dialog.
+  @ObservationIgnored var requestAccessibility: @MainActor () -> Void = {
+    GameDock.requestTrust()
+  }
   private var appliedSettings = FarCry2Settings()
   private var action = Action.helper(.prepare)
   private var deferredAction: Action?
@@ -86,6 +92,8 @@ final class FarCry2Model {
   func run() async {
     let currentAction = action
     phase = isPlay(currentAction) ? .playing : .preparing
+    let follower = isPlay(currentAction) && dockEnabled ? Task { await followGame() } : nil
+    defer { follower?.cancel() }
     if case .openLog = currentAction {
       phase = hasGameData ? .ready : .needsGameData
       await openLog()
@@ -158,6 +166,7 @@ final class FarCry2Model {
   }
 
   func showLog() { enqueue(.openLog) }
+  func returnToGame() { GameWindow.bringToFront(support: FarCry2SessionClient.defaultSupport) }
   func play() { enqueue(.helper(.play(launchRequest()))) }
   func apply() { enqueue(.helper(.configure(launchRequest()))) }
   func reload() { enqueueDiscarding(.helper(.prepare)) }

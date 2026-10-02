@@ -40,6 +40,10 @@ struct CoD4View: View {
           if model.hasPendingChanges {
             Text("Unsaved changes").font(.caption).foregroundStyle(.secondary)
           }
+          if model.phase == .playing {
+            Button(
+              "Return to Game", systemImage: "arrow.uturn.backward", action: model.returnToGame)
+          }
           Button("Save Settings", action: model.apply).disabled(
             !model.canPlay || !model.hasPendingChanges)
           Button("Play", action: model.play).buttonStyle(.borderedProminent).disabled(

@@ -2,7 +2,7 @@ import Foundation
 
 /// Protects a game that outlives an unexpectedly terminated session helper.
 package struct GameLease {
-  private let url: URL
+  let url: URL
 
   package init(url: URL) { self.url = url }
 

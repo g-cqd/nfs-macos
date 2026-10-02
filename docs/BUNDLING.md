@@ -136,7 +136,8 @@ A recipe may declare `"editions": ["import"]` and an `importRules` block instead
 inventory and executable hashes (`Packaging/Recipes/farcry2.json`). The packager then needs no game
 input: the manifest carries the rules and the compatibility files, and the session recognises and
 hashes the player's installation at import time. `build.py` and `assemble.py` refuse a bundled edition
-for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. See
+for such a recipe, and a recipe may offer a bundled edition only if it pins executable hashes. The whole-game Far Cry 2 app is therefore a separate recipe,
+`farcry2-bundled.json` (`--game farcry2-bundled --game-data bundled`). See
 [Far Cry 2](FARCRY2.md) for the rules, the player-data layout and what is still unverified.
 
 ## Rosetta setup

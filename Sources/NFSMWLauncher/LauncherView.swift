@@ -47,6 +47,10 @@ struct LauncherView: View {
             Spacer()
             Text(model.hasPendingChanges ? "Changes apply before Play" : "Settings saved")
               .font(.caption).foregroundStyle(.secondary)
+            if model.phase == .playing {
+              Button(
+                "Return to Game", systemImage: "arrow.uturn.backward", action: model.returnToGame)
+            }
             Button("Save Settings", action: model.applySettings)
               .disabled(!model.canLaunch || !model.hasPendingChanges)
             Button("Play", action: model.playAgain).buttonStyle(.borderedProminent)
