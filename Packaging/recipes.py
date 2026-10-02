@@ -30,7 +30,10 @@ DENIED_BACKENDS = {
         },
     },
 }
+# The executable whose pinned digest proves which game build a bundled edition contains.
+GAME_EXECUTABLES = {'nfs2015': 'NFS16.exe'}
 GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
+WINDOWS_PATH = re.compile(r'[A-Za-z]:(?:\\[A-Za-z0-9 ._()-]+)+\\?')
 
 
 def _simple_name(value):
@@ -161,6 +164,11 @@ def validate_prefix_settings(settings):
             if not isinstance(value, str) or not 0 < len(value) <= 256 \
                     or any(ord(c) < 32 or ord(c) > 126 or c in '"[]\\' for c in value):
                 raise ValueError('Unusable registry string value')
+        elif item.get('kind') == 'windowsPath':
+            # A guest path with single backslashes; the importer doubles them, as a .reg file needs.
+            if not isinstance(value, str) or len(value) > 256 or not WINDOWS_PATH.fullmatch(value) \
+                    or any(part in {'.', '..'} for part in value[3:].split('\\')):
+                raise ValueError('Unusable registry path value')
         elif item.get('kind') == 'dword':
             if not re.fullmatch('[0-9a-f]{1,8}', str(value)):
                 raise ValueError('A registry number must be lowercase hexadecimal')
@@ -277,8 +285,13 @@ def validate_recipe(recipe):
         if item['path'].casefold() in originals:
             raise ValueError('Original and compatibility destinations overlap')
     for path, checksum in recipe['executableHashes'].items():
-        if safe_relative(path) not in recipe['originalFiles'] or not re.fullmatch('[0-9a-f]{64}', checksum):
+        # A pin names one original file, either listed on its own or inside a selected directory.
+        selected = safe_relative(path) in recipe['originalFiles'] or any(
+            path.casefold().startswith(directory) for directory in directories)
+        if not selected or not re.fullmatch('[0-9a-f]{64}', checksum):
             raise ValueError('Invalid executable pin')
+    if 'inventorySHA256' in recipe and not SHA256.fullmatch(str(recipe['inventorySHA256'])):
+        raise ValueError('Invalid payload inventory pin')
     editions = recipe.get('editions', ['bundled', 'import'])
     if not isinstance(editions, list) or not editions or not set(editions) <= EDITIONS \
             or len(set(editions)) != len(editions):
@@ -314,14 +327,32 @@ def validate_recipe(recipe):
             raise ValueError('A vendor runtime path must also be retained: ' + name)
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
     if recipe.get('referencesInstallation'):
-        # A referencing app ships no game bytes at all, so it can carry no inventory.
-        if editions != ['import']:
-            raise ValueError('A referencing recipe produces the import edition only')
-        if recipe['originalFiles'] or recipe['originalDirectories'] or recipe['executableHashes'] \
-                or recipe['compatibility']:
-            raise ValueError('A referencing recipe must not list original or compatibility files')
-        if 'game' in recipe['inputs']:
-            raise ValueError('A referencing recipe takes no game input')
+        # The import edition of a store-client recipe ships no game bytes at all, so it carries no
+        # inventory. Its bundled edition, when the recipe declares one, ships the user's verified
+        # copy for a prefix the app creates itself, and then the recipe must pin every file.
+        if 'import' not in editions:
+            raise ValueError('A referencing recipe produces the import edition')
+        if recipe['compatibility']:
+            raise ValueError('A referencing recipe must not list compatibility files')
+        if 'bundled' in editions:
+            if not recipe['originalFiles'] and not recipe['originalDirectories']:
+                raise ValueError('A bundled store-client edition must list its original files')
+            if 'game' not in recipe['inputs']:
+                raise ValueError('A bundled store-client edition needs a game input')
+            if 'inventorySHA256' not in recipe:
+                raise ValueError('A bundled store-client edition must pin its whole payload inventory')
+            if not any(path.casefold() == GAME_EXECUTABLES.get(recipe['gameID'], '').casefold()
+                       for path in recipe['executableHashes']):
+                raise ValueError('A bundled store-client edition must pin the game executable')
+            validate_prefix_settings(recipe.get('bundledPrefixSettings', []))
+        else:
+            if editions != ['import']:
+                raise ValueError('Unsupported referencing recipe editions')
+            if recipe['originalFiles'] or recipe['originalDirectories'] or recipe['executableHashes'] \
+                    or 'inventorySHA256' in recipe or 'bundledPrefixSettings' in recipe:
+                raise ValueError('An import-only referencing recipe must not list original files or pins')
+            if 'game' in recipe['inputs']:
+                raise ValueError('An import-only referencing recipe takes no game input')
         validate_store_client(recipe.get('storeClient'))
         validate_prefix_settings(recipe.get('prefixSettings', []))
         validate_renderers(recipe, recipe.get('renderers', []))
@@ -334,7 +365,8 @@ def validate_recipe(recipe):
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
             raise ValueError('Invalid controller device')
     else:
-        for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers']:
+        for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
+                    'bundledPrefixSettings']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

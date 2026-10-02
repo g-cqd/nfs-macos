@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import zipfile
-from recipes import load_recipe, supports_edition
+from recipes import load_recipe, resolve_inputs, supports_edition
 
 
 def main():
@@ -42,6 +42,7 @@ def main():
         [sys.executable, 'Packaging/check_recipes.py'],
         [sys.executable, 'Packaging/check_farcry2_recipe.py'],
         [sys.executable, 'Packaging/check_nfs2015_recipe.py'],
+        [sys.executable, 'Packaging/check_bundle_hygiene.py'],
         [sys.executable, 'Packaging/check_shader_cache.py'],
         [sys.executable, 'Packaging/check_runtime_inputs.py'],
         [sys.executable, 'Packaging/check_assembly.py'],
@@ -50,7 +51,8 @@ def main():
         [sys.executable, 'Packaging/check_widescreen_compat.py'],
         assembly,
         [sys.executable, 'Packaging/sign.py', str(output), '--identity', options.identity],
-        [sys.executable, 'Packaging/audit.py', str(output)],
+        [sys.executable, 'Packaging/audit.py', str(output), '--runtime',
+         str(resolve_inputs(recipe, options.input)['runtime'])],
     ]
     for command in commands:
         subprocess.run(command, cwd=project, check=True)

@@ -9,7 +9,8 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from payload import inventory
+from bundle_hygiene import problems_in
+from payload import inventory, inventory_digest
 from recipes import load_recipe, resolve_inputs, supports_edition
 from rosetta_request import build_rosetta_request
 from runtime_inputs import (PINS, PROJECT, clone, collect_sources, digest, runtime_provenance,
@@ -33,13 +34,22 @@ def stage_game(resources, recipe, inputs, include_game_data):
         raise ValueError('This recipe supports the import edition only; no game files are packaged')
     rules = recipe.get('importRules')
     references = bool(recipe.get('referencesInstallation'))
-    if rules is not None or references:
+    seeded = references and include_game_data
+    if rules is not None or (references and not include_game_data):
         # The player's own installation is recognised on their Mac, either by the import
         # rules at import time or by reference; nothing is inventoried here either way.
         entries = []
     else:
         verify_hashes(inputs['game'], recipe['executableHashes'])
         entries = inventory(inputs['game'], recipe['originalFiles'], recipe['originalDirectories'])
+        if 'inventorySHA256' in recipe and inventory_digest(entries) != recipe['inventorySHA256']:
+            # A file was changed, added or removed since the verified installation was pinned.
+            raise ValueError('The game files do not match the pinned payload inventory')
+        if seeded:
+            hazards = problems_in(inputs['game'], [entry['path'] for entry in entries])
+            if hazards:
+                raise ValueError('The game files carry account state or an archive: '
+                                 + '; '.join(hazards[:5]))
     game = resources / 'Game'
     game.mkdir()
     if include_game_data:
@@ -62,10 +72,16 @@ def stage_game(resources, recipe, inputs, include_game_data):
         manifest['importRules'] = rules
     if references:
         # Without an inventory, the recognition and launch contract is what the version covers.
-        manifest.update(referencesInstallation=True, storeClient=recipe['storeClient'],
+        # A bundled edition has an inventory, but it still runs through the store client, in a
+        # prefix the app creates and seeds itself, so it also records the registration the game's
+        # own installer would have written there.
+        settings = list(recipe.get('prefixSettings', []))
+        if seeded:
+            settings += recipe.get('bundledPrefixSettings', [])
+        manifest.update(referencesInstallation=not seeded, storeClient=recipe['storeClient'],
                         runtimeTuning=recipe.get('runtimeTuning', {}),
                         controllerDevices=recipe.get('controllerDevices', []),
-                        prefixSettings=recipe.get('prefixSettings', []),
+                        prefixSettings=settings,
                         renderers=recipe.get('renderers', []))
     # The version identifies the contract, not the edition: both editions of one recipe share it.
     fingerprint = {key: value for key, value in manifest.items()
