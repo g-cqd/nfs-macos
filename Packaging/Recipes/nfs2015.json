@@ -51,7 +51,8 @@
     "sidecar": "{home}/Developer/x87sidecar/build/bin/x87sidecar",
     "x87Source": "{home}/Developer/x87sidecar",
     "packaging": "{project}/Packaging",
-    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine"
+    "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
+    "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src"
   },
   "runtimeRetention": [
     "lib/wine/dxgi/dxmt",
@@ -94,5 +95,15 @@
   "vendorRuntimePaths": [
     "lib/external/D3DMetal.framework",
     "lib/external/libd3dshared.dylib"
-  ]
+  ],
+  "runtimeSource": {
+    "input": "packaging",
+    "source": "NFS2015Runtime",
+    "path": "wine-nfs2015",
+    "repository": "https://github.com/athei/wine",
+    "branch": "cx-26-patched",
+    "baseRevision": "1a7b0c76",
+    "patchCount": 4,
+    "archive": "wine-nfs2015-source.tar.gz"
+  }
 }

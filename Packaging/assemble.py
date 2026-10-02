@@ -75,6 +75,40 @@ def stage_game(resources, recipe, inputs, include_game_data):
     return manifest
 
 
+def stage_runtime_source(resources, recipe, inputs):
+    """Ship the modified runtime's corresponding source, as the LGPL requires.
+
+    The patches and build description are copied verbatim, and the complete source tree is
+    archived at the exact revision that was built, so the package carries the source itself
+    and not only a reference to it.
+    """
+    declared = recipe.get('runtimeSource')
+    if declared is None:
+        return
+    root = inputs[declared['input']] / declared['source']
+    patches = sorted((root / 'patches').glob('*.patch'))
+    if len(patches) != declared['patchCount']:
+        raise ValueError('The runtime source ships %d patches but declares %d'
+                         % (len(patches), declared['patchCount']))
+    for name in ['BUILD.md', 'NOTICE.md']:
+        if not (root / name).is_file():
+            raise ValueError('The runtime source is missing ' + name)
+    clone(root, resources / 'Sources' / declared['path'])
+    tree = inputs['runtimeSourceTree']
+    actual = subprocess.check_output(
+        ['git', '-C', str(tree), 'rev-parse', 'HEAD'], text=True).strip()
+    base = subprocess.check_output(
+        ['git', '-C', str(tree), 'rev-parse', declared['baseRevision']], text=True).strip()
+    if subprocess.check_output(['git', '-C', str(tree), 'status', '--porcelain'], text=True):
+        raise ValueError('The runtime source tree must be clean to archive it')
+    if int(subprocess.check_output(
+            ['git', '-C', str(tree), 'rev-list', '--count', base + '..' + actual],
+            text=True).strip()) != declared['patchCount']:
+        raise ValueError('The runtime source tree is not the declared base plus its patches')
+    subprocess.run(['git', '-C', str(tree), 'archive', '--format=tar.gz', actual,
+                    '-o', str(resources / 'Sources' / declared['archive'])], check=True)
+
+
 def stage_metadata(contents, recipe, provenance, include_game_data):
     resources = contents / 'Resources'
     provenance.update(gameID=recipe['gameID'], gameDataIncluded=include_game_data)
@@ -118,6 +152,7 @@ def assemble(recipe, inputs, destination, include_game_data):
         manifest = stage_game(resources, recipe, inputs, include_game_data)
         stage_resources(recipe['defaults'], inputs, resources / 'Defaults')
         revisions = collect_sources(resources, inputs)
+        stage_runtime_source(resources, recipe, inputs)
         stage_metadata(contents, recipe, runtime_provenance(recipe, revisions), include_game_data)
         if destination.exists():
             raise FileExistsError('Output appeared during assembly; preserving it')
