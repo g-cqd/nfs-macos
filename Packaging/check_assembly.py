@@ -2,7 +2,9 @@
 import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from assemble import stage_game, stage_resources
+import json
+from assemble import embedded_recipe, stage_game, stage_resources
+from recipes import load_recipe, validate_recipe
 from game_data import bundled_entries
 
 
@@ -34,4 +36,15 @@ with TemporaryDirectory() as temporary:
                          {'defaults': source}, root / 'output')
     except ValueError: pass
     else: raise AssertionError('Linked default resource was accepted')
+# The recipe an app ships names its inputs but never where they sit on the build Mac, and still
+# validates under the same rules the audit applies to it.
+for name in ['nfsmw', 'cod4', 'farcry2', 'nfs2015']:
+    recipe = load_recipe(name)
+    shipped = embedded_recipe(recipe)
+    assert set(shipped['inputs']) == set(recipe['inputs']) and validate_recipe(json.loads(json.dumps(shipped)))
+    text = json.dumps(shipped)
+    for leak in ['/Users', '{home}', '{games}', '{tools}', '{project}', 'Mobile Documents',
+                 'NFS2015-debug', 'drive_c']:
+        assert leak not in text, name + ' ships a build location: ' + leak
+    assert recipe['inputs'] != shipped['inputs'], 'The build recipe itself must keep its inputs'
 print('Shared bundled/import assembly regressions passed')

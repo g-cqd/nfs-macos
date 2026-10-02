@@ -51,12 +51,12 @@
   ],
   "inputs": {
     "baseApp": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app",
-    "sidecar": "{games}/tools-integrate/sidecar-c396937/x87sidecar",
-    "x87Source": "{games}/tools-integrate/src/x87sidecar",
+    "sidecar": "{games}/release-build/sidecar-c396937/x87sidecar",
+    "x87Source": "{games}/release-build/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/NFS2015-debug/src/wine-cx/runtime/wine",
     "runtimeSourceTree": "{games}/NFS2015-debug/src/wine-cx/src",
-    "game": "{games}/NFS2015-debug/opus/Prefix/drive_c/Program Files/EA Games/Need for Speed",
+    "game": "{games}/NFS2015-game",
     "wineMono": "{home}/.cache/wine"
   },
   "runtimeRetention": [

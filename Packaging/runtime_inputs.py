@@ -158,6 +158,12 @@ def collect_sources(resources, inputs):
     revisions = json.loads((retained / 'runtime-provenance.json').read_text())['sources']
     for name, pin in PINS['sources'].items():
         if pin['input'] not in inputs:
+            # The retained base app describes its own game. A source this recipe does not build,
+            # verify or stage has no revision that belongs to this app, so the base app's entry
+            # and its archive are dropped rather than inherited under a revision nobody pinned.
+            revisions.pop(name, None)
+            for inherited in (name + '-source.tar.gz', name + '.patch'):
+                (resources / 'Sources' / inherited).unlink(missing_ok=True)
             continue
         repo = inputs[pin['input']]
         archive_source(repo, name, pin['revision'], resources / 'Sources')
@@ -167,10 +173,24 @@ def collect_sources(resources, inputs):
     return revisions
 
 
+def not_applicable_sources(revisions):
+    """The pinned sources this app does not carry, each with the reason it has no revision here."""
+    return {name: 'Not applicable to this app: its recipe pins, verifies and stages no ' + name
+                  + ' build, so no revision of it is recorded. A revision inherited from the retained '
+                    'base app would describe a different build.'
+            for name in PINS['sources'] if name not in revisions}
+
+
 def runtime_provenance(recipe, revisions):
     profile = PINS['runtimeProfiles'][recipe['runtimeProfile']]
-    renderer = {'inputRendererHashes': PINS['rendererFiles']} if 'mtld3d' in revisions else {}
+    renderer = {}
+    if 'mtld3d' in revisions:
+        # Only an app that installs the pinned renderer may claim anything about it.
+        renderer = {'inputRendererHashes': PINS['rendererFiles'],
+                    'renderer': 'Production PROD=1 PERF=0; perf telemetry is compiled out, not merely silenced',
+                    'rendererVerification': PINS['rendererVerification']}
     return {**renderer, 'sources': revisions,
+            'sourcesNotApplicable': not_applicable_sources(revisions),
             'sourceURLs': {name: pin['url'] for name, pin in PINS['sources'].items()
                            if name in revisions},
             'wine': PINS['runtimeProfiles'][recipe['runtimeProfile']]['description'],
@@ -184,9 +204,6 @@ def runtime_provenance(recipe, revisions):
             'runtimeToolchainNote': profile.get('toolchainNote', ''),
             'runtimeTuning': recipe.get('runtimeTuning', {}),
             'referencesInstallation': bool(recipe.get('referencesInstallation')),
-            'renderer': 'Production PROD=1 PERF=0; perf telemetry is compiled out, not merely silenced',
-            'rendererVerification': '966 passed, 0 failed, 11 ignored per Windows architecture, '
-                                    'plus 2549 host unit tests; all 631 source hashes match pinned commit',
             'x87': 'Flat cooperative sidecar; artifact rebuilt at the pinned fork revision',
             'minimumMacOS': recipe['minimumMacOS'], 'architecture': 'Apple Silicon with Rosetta',
             'gameModeOptIn': True, 'appSandboxEnabled': False, 'hostDriveMappings': False,
