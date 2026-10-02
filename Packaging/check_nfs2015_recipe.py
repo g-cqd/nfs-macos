@@ -5,7 +5,8 @@ from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 
-from assemble import stage_game
+from assemble import stage_client_layer, stage_game, verify_client_layer
+import client_layer
 from recipes import load_recipe, resolve_inputs, supports_edition, validate_recipe
 from runtime_inputs import PINS, verify_inputs, verify_runtime_provides
 
@@ -90,6 +91,26 @@ assert managed['input'] in recipe['inputs'] and re.fullmatch('[0-9a-f]{64}', man
 assert managed['path'].startswith('Addons/') and managed['path'].endswith('.msi')
 assert managed['url'].startswith('https://dl.winehq.org/') and managed['sourceURL'].startswith('https://dl.winehq.org/')
 assert managed['version'] in managed['source'] and managed['version'] in managed['url']
+
+# The pre-installed EA client is a build input pinned by the digest of its manifest, and by the client facts.
+layer = recipe['clientLayer']
+assert layer['input'] == 'clientLayer' and layer['path'] == 'ClientLayer'
+assert recipe['inputs']['clientLayer'] == '{tools}/inputs/client-layer'
+assert layer['layerSHA256'] == '9ed3bf73529b899f2b934743ef86c51d34013dfc5fb092678b0d465a79547f86'
+assert layer['client'] == {
+    'name': 'EA app', 'version': '13.796.0.6309',
+    'installer': {'fileName': 'EAappInstaller.exe', 'bytes': 2141240, 'signer': 'Electronic Arts, Inc.',
+                  'sha256': 'dcbda653c9776320b283157be70def64db73c2b01bf45d5fa78f35d7e4e29320'},
+    'package': {'fileName': 'EAapp-13.796.0.6309-15736974.msi', 'bytes': 246083584,
+                'sha256': 'cb773af8c1400d0139824dc2148c0ceef978ba95654812f8a7eeec46c34dcdc8'}}
+assert layer['client']['version'] in layer['client']['package']['fileName']
+real_layer = resolve_inputs(recipe)['clientLayer']
+if real_layer.is_dir():
+    assert verify_client_layer(recipe, {'clientLayer': real_layer}) == layer
+    assert client_layer.verify_layer(real_layer, layer['layerSHA256'], layer['client']) == []
+    print('PASS the real client layer matches its pins and policy')
+else:
+    print('SKIP the real client layer is not on this machine: ' + str(real_layer))
 
 # The runtime must actually carry what the recipe selects; a claim alone is not enough.
 verify_runtime_provides(recipe, resolve_inputs(recipe)['runtime'])
@@ -195,6 +216,25 @@ for change in [
     lambda r: r['managedRuntime'].update(url='http://dl.winehq.org/mono.msi'),
     lambda r: r['managedRuntime'].update(input='undeclared'),
     lambda r: r['managedRuntime'].pop('sourceURL'),
+    lambda r: r['clientLayer'].update(layerSHA256='abc'),
+    lambda r: r['clientLayer'].update(layerSHA256='A' * 64),
+    lambda r: r['clientLayer'].update(path='../ClientLayer'),
+    lambda r: r['clientLayer'].update(path='Game'),
+    lambda r: r['clientLayer'].update(path='Layer/Deep'),
+    lambda r: r['clientLayer'].update(input='undeclared'),
+    lambda r: r['clientLayer'].update(extra=True),
+    lambda r: r['clientLayer'].pop('client'),
+    lambda r: r['clientLayer']['client'].update(version='13.796; id'),
+    lambda r: r['clientLayer']['client'].pop('package'),
+    lambda r: r['clientLayer']['client']['installer'].update(sha256='abc'),
+    lambda r: r['clientLayer']['client']['installer'].update(fileName='../EAappInstaller.exe'),
+    lambda r: r['clientLayer']['client']['installer'].update(fileName='installer.msi'),
+    lambda r: r['clientLayer']['client']['installer'].pop('signer'),
+    lambda r: r['clientLayer']['client']['installer'].update(bytes=0),
+    lambda r: r['clientLayer']['client']['installer'].update(bytes=True),
+    lambda r: r['clientLayer']['client']['package'].update(signer='EA'),
+    lambda r: r['clientLayer']['client']['package'].update(fileName='package.exe'),
+    lambda r: r.update(clientLayer='layer'),
     lambda r: r.update(managedRuntime='mono'),
     lambda r: r.update(requiredRuntimeCapabilities=['teleportation']),
     lambda r: r['runtimeRetention'].append('../escape'),
@@ -213,7 +253,7 @@ for change in [
 # edition owns a prefix to install it into.
 importing = deepcopy(recipe)
 importing.update(editions=['import'], originalFiles=[], originalDirectories={}, executableHashes={})
-for key in ['inventorySHA256', 'managedRuntime', 'bundledPrefixSettings']:
+for key in ['inventorySHA256', 'managedRuntime', 'bundledPrefixSettings', 'clientLayer']:
     importing.pop(key)
 importing['inputs'].pop('game')
 validate_recipe(deepcopy(importing))
@@ -224,6 +264,14 @@ except ValueError as error:
     assert 'Only a bundled edition' in str(error), error
 else:
     raise AssertionError('An import-only recipe was allowed to install a managed runtime')
+importing.pop('managedRuntime')
+importing['clientLayer'] = recipe['clientLayer']
+try:
+    validate_recipe(importing)
+except ValueError as error:
+    assert 'Only a bundled edition' in str(error), error
+else:
+    raise AssertionError('An import-only recipe was allowed to install a client layer')
 
 # A recipe that packages original data may not claim a store client.
 nfsmw = load_recipe('nfsmw')
@@ -235,6 +283,14 @@ except ValueError:
     pass
 else:
     raise AssertionError('A copying recipe was allowed to declare prefix settings')
+altered = deepcopy(nfsmw)
+altered['clientLayer'] = recipe['clientLayer']
+try:
+    validate_recipe(altered)
+except ValueError as error:
+    assert 'Only a referencing recipe' in str(error), error
+else:
+    raise AssertionError('A copying recipe was allowed to declare a client layer')
 altered = deepcopy(nfsmw)
 altered['storeClient'] = client
 try:
@@ -256,6 +312,10 @@ with TemporaryDirectory() as temporary:
     assert manifest['prefixSettings'] == recipe['prefixSettings']
     assert manifest['renderers'] == recipe['renderers']
     assert 'managedRuntime' not in manifest, 'An import app runs in the player prefix and never installs it'
+    assert 'clientLayer' not in manifest, 'An import app runs in the player prefix and never carries the client'
+    # No layer is staged for an import app, and staging without a declaration stages nothing.
+    assert stage_client_layer(resources, {k: v for k, v in recipe.items() if k != 'clientLayer'}, {}) is None
+    assert not (resources / 'ClientLayer').exists() and not (resources / 'Licenses').exists()
     assert len(manifest['version']) == 24
     assert not any((resources / 'Game').rglob('*')), 'No game file may be staged'
     first = manifest['version']

@@ -253,6 +253,47 @@ def validate_managed_runtime(declared):
     return declared
 
 
+def validate_client_layer(declared):
+    """The pre-installed EA client a bundled app carries: a build input pinned by the digest of its manifest.
+
+    The layer folder is made by tools/capture-client-layer.py; Packaging/client_layer.py is the one
+    check of its contents. This only validates what the recipe says about it.
+    """
+    if not isinstance(declared, dict) or set(declared) != {'input', 'path', 'layerSHA256', 'client'}:
+        raise ValueError('The client layer must declare exactly its input, path, digest and client')
+    if not isinstance(declared['input'], str):
+        raise ValueError('The client layer needs a declared input')
+    path = safe_relative(declared['path'])
+    if '/' in path or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', path) \
+            or path.casefold() in {'game', 'defaults', 'addons', 'licenses', 'sources'}:
+        raise ValueError('The client layer needs its own plain resource folder name')
+    if not SHA256.fullmatch(str(declared['layerSHA256'])):
+        raise ValueError('The client layer needs its SHA-256 pin')
+    client = declared['client']
+    if not isinstance(client, dict) or set(client) != {'name', 'version', 'installer', 'package'}:
+        raise ValueError('The client layer must describe its client, installer and package')
+    if not isinstance(client['name'], str) or not 0 < len(client['name']) <= 64 \
+            or any(ord(c) < 32 for c in client['name']):
+        raise ValueError('The client layer needs a plain client name')
+    if not re.fullmatch(r'[0-9]{1,6}(?:\.[0-9]{1,6}){1,3}', str(client['version'])):
+        raise ValueError('The client layer needs the client version')
+    for key, suffix, extra in [('installer', '.exe', {'signer'}), ('package', '.msi', set())]:
+        item = client[key]
+        if not isinstance(item, dict) or set(item) != {'fileName', 'sha256', 'bytes'} | extra:
+            raise ValueError('The client layer ' + key + ' record has the wrong fields')
+        if not _simple_name(item['fileName']) or not item['fileName'].lower().endswith(suffix):
+            raise ValueError('The client layer ' + key + ' needs a plain file name')
+        if not SHA256.fullmatch(str(item['sha256'])):
+            raise ValueError('The client layer ' + key + ' needs its SHA-256 pin')
+        if isinstance(item['bytes'], bool) or not isinstance(item['bytes'], int) \
+                or not 0 < item['bytes'] <= 2_000_000_000:
+            raise ValueError('The client layer ' + key + ' needs its size')
+    signer = client['installer']['signer']
+    if not isinstance(signer, str) or not 0 < len(signer) <= 128 or any(ord(c) < 32 for c in signer):
+        raise ValueError('The client layer needs the installer\'s signer')
+    return declared
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -390,6 +431,12 @@ def validate_recipe(recipe):
                 raise ValueError('Undeclared managed runtime input')
             if 'bundled' not in editions:
                 raise ValueError('Only a bundled edition installs a managed runtime into its prefix')
+        if 'clientLayer' in recipe:
+            declared = validate_client_layer(recipe['clientLayer'])
+            if declared['input'] not in recipe['inputs']:
+                raise ValueError('Undeclared client layer input')
+            if 'bundled' not in editions:
+                raise ValueError('Only a bundled edition installs a client layer into its prefix')
         if 'runtimeSource' in recipe:
             declared = validate_runtime_source(recipe['runtimeSource'])
             if declared['input'] not in recipe['inputs']:
@@ -400,7 +447,7 @@ def validate_recipe(recipe):
             raise ValueError('Invalid controller device')
     else:
         for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
-                    'bundledPrefixSettings', 'managedRuntime']:
+                    'bundledPrefixSettings', 'managedRuntime', 'clientLayer']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

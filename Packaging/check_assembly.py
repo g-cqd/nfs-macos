@@ -4,7 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
 import subprocess
-from assemble import stage_game, stage_resources, strip_debug_map
+from assemble import stage_client_layer, stage_game, stage_resources, strip_debug_map
+import client_layer
 from recipes import load_recipe, shipped_recipe, validate_recipe
 from game_data import bundled_entries
 
@@ -48,6 +49,34 @@ for name in ['nfsmw', 'cod4', 'farcry2', 'nfs2015']:
                  'NFS2015-debug', 'drive_c']:
         assert leak not in text, name + ' ships a build location: ' + leak
     assert recipe['inputs'] != shipped['inputs'], 'The build recipe itself must keep its inputs'
+# The pre-installed EA client layer is staged only for a recipe that declares it, by cloning the verified
+# input, and the app records exactly what was pinned. A recipe without it stages nothing.
+fixture = Path(__file__).resolve().parents[1] / 'Tests/LauncherCoreTests/Fixtures/client-layer'
+if fixture.is_dir():
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        layered = load_recipe('nfs2015')
+        layered['clientLayer'].update(
+            layerSHA256=client_layer.sha256_file(fixture / client_layer.MANIFEST_NAME),
+            client=client_layer.load_manifest(fixture)['client'])
+        layered = validate_recipe(layered)
+        resources = root / 'Resources'
+        resources.mkdir()
+        provenance = stage_client_layer(resources, layered, {'clientLayer': fixture})
+        assert provenance == {'version': layered['clientLayer']['client']['version'],
+                              'layerSHA256': layered['clientLayer']['layerSHA256'],
+                              'installerSHA256': layered['clientLayer']['client']['installer']['sha256'],
+                              'packageSHA256': layered['clientLayer']['client']['package']['sha256'],
+                              'installerSigner': layered['clientLayer']['client']['installer']['signer']}
+        assert client_layer.verify_layer(resources / 'ClientLayer', layered['clientLayer']['layerSHA256'],
+                                         layered['clientLayer']['client']) == []
+        assert (resources / 'Licenses/ea-client.txt').read_text().count('/Users') == 0
+        bare = root / 'bare'
+        bare.mkdir()
+        assert stage_client_layer(bare, load_recipe('nfsmw'), {}) is None and not any(bare.iterdir())
+    print('PASS client layer staging: cloned, recorded and noticed; nothing staged without a declaration')
+else:
+    print('SKIP client layer staging: the fixture is not in this tree yet')
 # A binary this project builds names every object file's absolute path on the build Mac in its debug
 # map. Stripping it removes those paths and leaves a working program.
 with TemporaryDirectory() as temporary:
