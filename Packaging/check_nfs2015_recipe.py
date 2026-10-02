@@ -26,6 +26,11 @@ for name in ['NFS16.exe', 'NFS16_trial.exe', 'Core/Activation64.dll', 'Core/Acti
     assert name in recipe['executableHashes'], 'Not pinned: ' + name
 assert re.fullmatch('[0-9a-f]{64}', recipe['inventorySHA256'])
 assert 'game' in recipe['inputs'], 'The bundled edition needs the verified installation as an input'
+# The payload comes from a standalone copy of exactly the pinned files, never from a working
+# prefix: a prefix is the player's own state, and a rebuild must not depend on it surviving.
+game_input = recipe['inputs']['game'].casefold()
+assert not any(marker in game_input for marker in ['drive_c', 'prefix', 'debug', 'program files']), \
+    'The game input must be a standalone payload copy, not a Windows prefix: ' + recipe['inputs']['game']
 for item in recipe['originalFiles'] + list(recipe['originalDirectories']):
     # Generated or personal files that sit beside the game in a used installation are never listed.
     assert not any(marker in item.casefold() for marker in

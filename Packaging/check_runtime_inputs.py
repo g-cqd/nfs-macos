@@ -2,7 +2,10 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import hashlib
-from runtime_inputs import verify_hashes
+import json
+import subprocess
+import runtime_inputs
+from runtime_inputs import PINS, collect_sources, runtime_provenance, verify_hashes
 
 
 with TemporaryDirectory() as temporary:
@@ -26,4 +29,47 @@ with TemporaryDirectory() as temporary:
     (root / 'target').write_bytes(b'known artifact')
     (root / 'module').symlink_to('target')
     verify_hashes(root, pins, allow_internal_links=True)
+# A source an app does not build must not inherit the retained base app's revision for it, and an app
+# that installs no renderer must not claim a renderer verification: the Need for Speed (2015) app
+# carried an mtld3d revision, an archive and a test claim that described the Most Wanted base app.
+with TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    base = root / 'base/Contents/Resources'
+    (base / 'Sources').mkdir(parents=True)
+    (base / 'Licenses').mkdir()
+    for name in ['mtld3d-source.tar.gz', 'mtld3d.patch', 'x87sidecar-source.tar.gz', 'x87sidecar.patch',
+                 'wine-source.tar.gz']:
+        (base / 'Sources' / name).write_bytes(b'inherited')
+    (base / 'Licenses/mtld3d.txt').write_text('licence')
+    (base / 'runtime-provenance.json').write_text(json.dumps({'sources': {
+        'mtld3d': '2513602' + '0' * 33, 'x87sidecar': 'old', 'wine': 'f064add'}}))
+    repo = root / 'x87'
+    repo.mkdir()
+    (repo / 'LICENSE').write_text('licence')
+    for command in [['init', '-q'], ['add', 'LICENSE'],
+                    ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'x']]:
+        subprocess.run(['git', '-C', str(repo)] + command, check=True)
+    head = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+    saved = (runtime_inputs.archive_launcher, PINS['sources']['x87sidecar']['revision'])
+    runtime_inputs.archive_launcher = lambda resources: None
+    PINS['sources']['x87sidecar']['revision'] = head
+    try:
+        resources = root / 'out'
+        resources.mkdir()
+        revisions = collect_sources(resources, {'baseApp': root / 'base', 'x87Source': repo})
+    finally:
+        runtime_inputs.archive_launcher, PINS['sources']['x87sidecar']['revision'] = saved
+    assert 'mtld3d' not in revisions, 'A revision the app does not build was inherited'
+    assert revisions['x87sidecar'] == head and revisions['wine'] == 'f064add'
+    assert not (resources / 'Sources/mtld3d-source.tar.gz').exists()
+    assert not (resources / 'Sources/mtld3d.patch').exists()
+    assert (resources / 'Sources/x87sidecar-source.tar.gz').read_bytes() != b'inherited'
+    recipe = {'runtimeProfile': 'nfs2015-tf-cx11', 'minimumMacOS': '15.0', 'executableHashes': {}}
+    provenance = runtime_provenance(recipe, revisions)
+    assert 'mtld3d' not in provenance['sources'] and 'mtld3d' not in provenance['sourceURLs']
+    assert set(provenance['sourcesNotApplicable']) == {'mtld3d'}
+    assert not {'renderer', 'rendererVerification', 'inputRendererHashes'} & set(provenance)
+    renderer = runtime_provenance(recipe, {**revisions, 'mtld3d': PINS['sources']['mtld3d']['revision']})
+    assert renderer['sourcesNotApplicable'] == {} and renderer['rendererVerification'] == PINS['rendererVerification']
+    assert renderer['inputRendererHashes'] == PINS['rendererFiles']
 print('Pinned runtime input regressions passed')

@@ -164,6 +164,15 @@ def stage_runtime_source(resources, recipe, inputs):
                     '-o', str(resources / 'Sources' / declared['archive'])], check=True)
 
 
+def embedded_recipe(recipe):
+    """The recipe as it ships: its input locations are paths on the build Mac, so they stay behind.
+
+    Everything else is kept; the audit validates the shipped copy with the same rules, and the
+    resource lists still name their inputs, only without saying where those inputs were.
+    """
+    return {**recipe, 'inputs': {name: 'build input, not shipped' for name in recipe['inputs']}}
+
+
 def stage_metadata(contents, recipe, provenance, include_game_data):
     resources = contents / 'Resources'
     provenance.update(gameID=recipe['gameID'], gameDataIncluded=include_game_data)
@@ -177,7 +186,7 @@ def stage_metadata(contents, recipe, provenance, include_game_data):
             'NSHumanReadableCopyright': 'Unofficial local macOS package. Component notices are included.'}
     info.update(USAGE_DESCRIPTIONS)
     (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
-    (resources / 'bundle-recipe.json').write_text(json.dumps(recipe, indent=2) + '\n')
+    (resources / 'bundle-recipe.json').write_text(json.dumps(embedded_recipe(recipe), indent=2) + '\n')
 
 
 def assemble(recipe, inputs, destination, include_game_data):
