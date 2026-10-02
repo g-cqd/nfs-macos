@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import LauncherCore
 import NFS2015Core
@@ -42,21 +43,36 @@ final class NFS2015Model {
   private(set) var edits: [String: String] = [:]
   /// What the last settings request did.
   private(set) var outcome: NFS2015SettingsOutcome?
+  /// The MetalFX choice the player made and has not saved.
+  private(set) var metalFXEdit: NFS2015MetalFXPreference?
+  /// What the last MetalFX request did.
+  private(set) var metalFXOutcome: NFS2015MetalFXOutcome?
   var tab = "Play"
   var request = 0
   let rosetta: RosettaSetup
   /// Whether this app carries the game and prepares its own Windows folder on first launch.
   let carriesGame: Bool
   private let service: any NFS2015Serving
+  private let displayPixels: @MainActor () -> (width: Int, height: Int)?
   private var pending: NFS2015Operation? = .prepare
 
   init(
     service: any NFS2015Serving = NFS2015SessionClient(), rosetta: RosettaSetup = RosettaSetup(),
-    carriesGame: Bool = NFS2015Model.packagedManifestCarriesGame()
+    carriesGame: Bool = NFS2015Model.packagedManifestCarriesGame(),
+    displayPixels: @escaping @MainActor () -> (width: Int, height: Int)? = {
+      NFS2015Model.mainDisplayPixels()
+    }
   ) {
     self.service = service
     self.rosetta = rosetta
     self.carriesGame = carriesGame
+    self.displayPixels = displayPixels
+  }
+
+  /// The pixel size the main display is showing now, which is what a window of this size fills.
+  static func mainDisplayPixels() -> (width: Int, height: Int)? {
+    guard let mode = CGDisplayCopyDisplayMode(CGMainDisplayID()) else { return nil }
+    return (mode.pixelWidth, mode.pixelHeight)
   }
 
   /// Reads this app's own manifest to learn which edition it is; an unreadable one is an import app.
@@ -204,6 +220,83 @@ final class NFS2015Model {
   var canRestoreOriginal: Bool { canEditSettings && snapshot.backups?.original == true }
   var canUndoLastSave: Bool { canEditSettings && snapshot.backups?.previous == true }
 
+  /// The MetalFX choice the next launch will use, as saved.
+  var savedMetalFX: NFS2015MetalFXPreference { snapshot.metalFX?.preference ?? .off }
+  /// The choice shown: the player's unsaved one, else the saved one.
+  var metalFX: NFS2015MetalFXPreference { metalFXEdit ?? savedMetalFX }
+  var hasPendingMetalFX: Bool { metalFXEdit != nil }
+  /// Why a saved MetalFX file was not used, if it was not.
+  var metalFXNotice: String? { snapshot.metalFX?.notice }
+  var canEditMetalFX: Bool { !isBusy }
+  /// Whether anything is saved that Reset would clear, or the saved file could not be used.
+  var canResetMetalFX: Bool {
+    canEditMetalFX && (savedMetalFX != .off || metalFXNotice != nil)
+  }
+  var metalFXRefusal: String? { metalFXOutcome?.refusal }
+
+  /// What the last MetalFX request did, worded for the player.
+  var metalFXOutcomeLine: String? {
+    switch metalFXOutcome {
+    case .saved: "Saved. It applies the next time the game starts."
+    case .reset: "Cleared. MetalFX is off."
+    case .unchanged: "That was already saved."
+    case .refused, nil: nil
+    }
+  }
+
+  /// What the choice does at the game's current resolution on this display.
+  var metalFXSummary: String {
+    let size = value("render.resolution").split(separator: "x").compactMap { Int($0) }
+    return NFS2015MetalFX.summary(
+      game: size.count == 2 && snapshot.settings.isPresent("render.resolution")
+        ? (size[0], size[1]) : nil,
+      factor: metalFX.factor, display: displayPixels())
+  }
+
+  func setMetalFXEnabled(_ enabled: Bool) {
+    guard canEditMetalFX else { return }
+    var choice = metalFX
+    choice.spatialUpscaling = enabled
+    holdMetalFX(choice)
+  }
+
+  func setMetalFXFactor(_ factor: NFS2015UpscaleFactor) {
+    guard canEditMetalFX else { return }
+    var choice = metalFX
+    choice.factor = factor
+    holdMetalFX(choice)
+  }
+
+  func metalFXEnabledBinding() -> Binding<Bool> {
+    Binding(get: { self.metalFX.spatialUpscaling }, set: { self.setMetalFXEnabled($0) })
+  }
+
+  func metalFXFactorBinding() -> Binding<NFS2015UpscaleFactor> {
+    Binding(get: { self.metalFX.factor }, set: { self.setMetalFXFactor($0) })
+  }
+
+  func discardMetalFX() {
+    metalFXEdit = nil
+    metalFXOutcome = nil
+  }
+
+  /// Keeps the shown choice for the next launch.
+  func saveMetalFX() {
+    guard canEditMetalFX, let choice = metalFXEdit else { return }
+    enqueue(.configureMetalFX(NFS2015MetalFXRequest(action: .save, preference: choice)))
+  }
+
+  /// Forgets what is saved, which means MetalFX off.
+  func resetMetalFX() {
+    guard canEditMetalFX else { return }
+    enqueue(.configureMetalFX(NFS2015MetalFXRequest(action: .reset)))
+  }
+
+  private func holdMetalFX(_ choice: NFS2015MetalFXPreference) {
+    metalFXOutcome = nil
+    metalFXEdit = choice == savedMetalFX ? nil : choice
+  }
+
   func reload() { enqueue(.prepare) }
   func play() { enqueue(.play) }
   func enableController() { enqueue(.enableController) }
@@ -318,6 +411,13 @@ final class NFS2015Model {
     } else if operation != .prepare {
       outcome = nil
     }
+    if case .configureMetalFX = operation {
+      metalFXOutcome = result.metalFX?.outcome
+      if result.metalFX?.outcome?.refusal == nil { metalFXEdit = nil }
+    } else if operation != .prepare {
+      metalFXOutcome = nil
+    }
+    if metalFXEdit == (result.metalFX?.preference ?? .off) { metalFXEdit = nil }
     if operation != .prepare, result.outcome?.refusal == nil { edits = [:] }
     edits = edits.filter { id, chosen in
       result.settings.isPresent(id) && result.settings.values[id] != chosen

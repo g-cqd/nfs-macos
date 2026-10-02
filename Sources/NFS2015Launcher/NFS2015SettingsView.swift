@@ -37,6 +37,7 @@ struct NFS2015SettingsView: View {
         .disabled(!model.canEditSettings)
         outcome
       }
+      NFS2015MetalFXView(model: model)
       controller
     }
     .formStyle(.grouped)
@@ -72,9 +73,9 @@ struct NFS2015SettingsView: View {
         """
         On a Retina display the game runs at the display's native size, such as 2560x1600, \
         because this app sets Wine's RetinaMode. Vertical sync may hold the frame rate at 60 on a \
-        ProMotion display. There is no MetalFX scaling control here. A PlayStation controller \
-        that the game does not see is handled by the separate Enable Controller Support button \
-        below.
+        ProMotion display. MetalFX upscaling has its own section below. A PlayStation \
+        controller that the game does not see is handled by the separate Enable Controller \
+        Support button below.
         """
       ).font(.caption).foregroundStyle(.secondary)
     }

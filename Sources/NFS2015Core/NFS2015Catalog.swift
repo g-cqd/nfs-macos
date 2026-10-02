@@ -24,8 +24,8 @@ package enum NFS2015Catalog {
       keys: ["GstRender.ResolutionWidth", "GstRender.ResolutionHeight"],
       help: """
         Width x height. On a Retina display the app sets Wine's RetinaMode, so the game sees the \
-        panel's native size (for example 2560x1600). Pick a size your display supports. This \
-        app has no MetalFX scaling control.
+        panel's native size (for example 2560x1600). Pick a size your display supports. The \
+        MetalFX section multiplies this size when it is on.
         """),
     .init(
       "render.fullscreen", "Full screen", .display, "1", toggle,
