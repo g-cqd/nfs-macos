@@ -13,7 +13,7 @@ struct ClientLayerTests {
   private static let client = "Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop"
 
   private static let hive =
-    "WINE REGEDIT4\n;; All keys relative to \\\\Machine\n\n#arch=win64\n\n"
+    "WINE REGISTRY Version 2\n;; All keys relative to REGISTRY\\\\Machine\n\n#arch=win64\n\n"
     + "[Software\\\\Wine] 1700000000\n#time=1d00000000000000\n\"Version\"=\"win10\"\n\n"
 
   /// A scratch prefix and a private copy of the fixture layer that a test may damage.

@@ -155,6 +155,10 @@ FORBIDDEN_TEXT = [re.compile(pattern, re.IGNORECASE) for pattern in
                    r'machine\.ini']]
 
 
+# The first line of every hive file the bundled Wine writes (WINE REGISTRY Version 2).
+HIVE_HEADER = 'WINE REGISTRY Version 2'
+
+
 # --- Wine hive text -------------------------------------------------------------------------------------
 
 KEY_HEADER = re.compile(r'^\[(.*)\] ([0-9]+)$')
@@ -235,6 +239,8 @@ def merge_hive(hive_text, part):
 
     Refuses a part that names a key the hive already has, so two sources of one key never mix silently.
     """
+    if not hive_text.startswith(HIVE_HEADER):
+        raise ValueError('The prefix\'s registry file is not a Wine registry')
     present = {undouble(key).lower() for key in Hive.parse(hive_text).keys}
     for key in Hive.parse(part).keys:
         if undouble(key).lower() in present:

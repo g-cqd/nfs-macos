@@ -16,9 +16,9 @@ FIXTURE = PROJECT / 'Tests/LauncherCoreTests/Fixtures/client-layer'
 CLIENT = {'name': 'EA app', 'version': '1.2.3.4',
           'installer': {'fileName': 'Setup.exe', 'sha256': 'a' * 64, 'bytes': 11, 'signer': 'Example Publisher'},
           'package': {'fileName': 'Setup-1.2.3.4.msi', 'sha256': 'b' * 64, 'bytes': 13}}
-HIVE_HEADER = 'WINE REGEDIT4\n;; All keys relative to \\\\Machine\n\n#arch=win64\n\n'
+HIVE_HEADER = 'WINE REGISTRY Version 2\n;; All keys relative to REGISTRY\\\\Machine\n\n#arch=win64\n\n'
 BASE_SYSTEM = HIVE_HEADER + '[Software\\\\Wine] 1700000000\n#time=1d00000000000000\n"Version"="win10"\n\n'
-BASE_USER = 'WINE REGEDIT4\n\n#arch=win64\n\n[Software\\\\Wine] 1700000000\n#time=1d00000000000000\n"Version"="win10"\n\n'
+BASE_USER = 'WINE REGISTRY Version 2\n;; All keys relative to REGISTRY\\\\User\\\\S-1-5-21-0-0-0-1000\n\n#arch=win64\n\n[Software\\\\Wine] 1700000000\n#time=1d00000000000000\n"Version"="win10"\n\n'
 PACKAGE = b'MSI-bytes-' + b'x' * 40
 INSTALLER_BYTES = b'MZ installer bytes'
 
@@ -325,7 +325,13 @@ def check_merge():
         pass
     else:
         raise AssertionError('A colliding key differing only in case was merged')
-    print('PASS merge: appends sections, keeps the hive, refuses a colliding key')
+    try:
+        layer.merge_hive('WINE REGEDIT4\n\n' + BASE_SYSTEM.split('\n\n', 2)[2], part)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('A file that is not a Wine registry was merged')
+    print('PASS merge: appends sections, keeps the hive, refuses a colliding key and a non-Wine file')
 
 
 def check_fixture(work):
