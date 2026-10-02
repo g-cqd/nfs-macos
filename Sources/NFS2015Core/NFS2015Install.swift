@@ -23,6 +23,11 @@ package struct NFS2015Install: Equatable, Sendable {
 
   /// The guest path for a host location inside this prefix's `drive_c`.
   package func windowsPath(of url: URL) throws(LauncherError) -> String {
+    try Self.windowsPath(of: url, in: prefix)
+  }
+
+  /// The guest path for a host location inside a prefix's `drive_c`.
+  package static func windowsPath(of url: URL, in prefix: URL) throws(LauncherError) -> String {
     let root = prefix.appendingPathComponent("drive_c").standardizedFileURL
       .resolvingSymlinksInPath()
     let path = url.standardizedFileURL.resolvingSymlinksInPath().path
@@ -31,6 +36,24 @@ package struct NFS2015Install: Equatable, Sendable {
     }
     return "C:\\" + path.dropFirst(root.path.count + 1).replacingOccurrences(of: "/", with: "\\")
   }
+}
+
+/// The EA client found in a prefix, whether or not anyone has signed in to it yet.
+package struct NFS2015Client: Equatable, Sendable {
+  /// The client version folder that was found, such as `13.796.0.6309`.
+  package let version: String
+  /// The window-owning EA client.
+  package let executable: URL
+  /// The stub that hands a launch request to the running client.
+  package let launcher: URL
+}
+
+/// The step a player still has to take before the game can start, when the app owns the prefix.
+package enum NFS2015Setup: String, Codable, Equatable, Sendable {
+  /// The EA app is not installed in the app's own Windows folder yet.
+  case installClient
+  /// The EA app is installed, and the player has not signed in to it.
+  case signIn
 }
 
 /// Why the app cannot start the game yet, in the player's own terms.
@@ -46,6 +69,47 @@ package enum NFS2015Readiness: Equatable, Sendable {
   package var install: NFS2015Install? {
     if case .ready(let install) = self { return install }
     return nil
+  }
+
+  /// What a player must do next in a Windows folder the app owns, or nil when nothing is missing.
+  package var setup: NFS2015Setup? {
+    switch self {
+    case .clientMissing, .clientIncomplete: .installClient
+    case .notSignedIn: .signIn
+    default: nil
+    }
+  }
+
+  /// The same blocker, worded for an app that created and owns its Windows folder, where the
+  /// player installs the EA app and signs in from this app instead of from another one.
+  package var ownedMessage: String? {
+    switch self {
+    case .ready: nil
+    case .noInstallationChosen, .notAWindowsFolder:
+      "This app's own Windows folder is incomplete. Open the log, then reopen the app."
+    case .gameMissing:
+      """
+      The game files are missing from this app's own Windows folder. Open the log; if they were \
+      deleted, remove the NFS2015Mac folder in your Library/Application Support so the app \
+      prepares them again. That also removes the EA app, your sign-in and the game's settings.
+      """
+    case .clientMissing(let name):
+      """
+      Install the \(name): press Install EA App and choose the installer you downloaded from \
+      ea.com. Need for Speed (2015) is protected by Denuvo and cannot start without it.
+      """
+    case .clientIncomplete(let name):
+      """
+      The \(name) folder is there, but its program files are incomplete. Press Install EA App \
+      and run the installer again to repair it.
+      """
+    case .notSignedIn(let name):
+      """
+      Press Open EA App, sign in to your EA account, then quit the \(name) and press Play. Need \
+      for Speed (2015) is activated through your own EA account; this app never stores, \
+      replaces or works around that sign-in.
+      """
+    }
   }
 
   /// A message to show beside a disabled Play button; nil once the game can be started.
@@ -113,12 +177,7 @@ package enum NFS2015Locator {
     guard let installRoot = try GuestPath.resolve(plan.installRoot, in: driveC) else {
       return .clientMissing(plan.name)
     }
-    guard let version = try clientFolder(in: installRoot, plan: plan) else {
-      return .clientIncomplete(plan.name)
-    }
-    guard let client = try GuestPath.resolve(plan.clientExecutable, in: version),
-      let launcher = try GuestPath.resolve(plan.launcherExecutable, in: version)
-    else {
+    guard let installed = try client(in: installRoot, plan: plan) else {
       return .clientIncomplete(plan.name)
     }
     guard let profile = try userProfile(in: driveC) else {
@@ -134,21 +193,42 @@ package enum NFS2015Locator {
     return .ready(
       NFS2015Install(
         prefix: prefix, game: game, executable: executable,
-        clientVersion: version.lastPathComponent, client: client, clientLauncher: launcher,
+        clientVersion: installed.version, client: installed.executable,
+        clientLauncher: installed.launcher,
         userProfile: profile))
   }
 
-  /// Picks the newest version folder that actually contains the client.
+  /// Finds the installed client, if any, without needing a signed-in account.
+  /// - Returns: The client, or nil when it is absent or its launcher stub is missing.
+  /// - Complexity: O(entries in the inspected folders); no file contents are read.
+  package static func client(prefix: URL, plan: StoreClientPlan) throws(LauncherError)
+    -> NFS2015Client?
+  {
+    try plan.validate()
+    let prefix = prefix.standardizedFileURL.resolvingSymlinksInPath()
+    guard let driveC = try GuestPath.resolve("drive_c", in: prefix),
+      let installRoot = try GuestPath.resolve(plan.installRoot, in: driveC)
+    else { return nil }
+    return try client(in: installRoot, plan: plan)
+  }
+
+  /// Picks the newest version folder that actually contains the client, and needs its launcher.
   ///
   /// The installer also registers a stable junction beside the version folders, but the host
   /// sees that junction as a link that need not resolve, and it is absent in a prefix whose
   /// client updated itself. The version folders are therefore the authority.
-  private static func clientFolder(in root: URL, plan: StoreClientPlan) throws(LauncherError)
-    -> URL?
+  private static func client(in root: URL, plan: StoreClientPlan) throws(LauncherError)
+    -> NFS2015Client?
   {
-    for candidate in try GuestPath.versionFolders(in: root)
-    where try GuestPath.resolve(plan.clientExecutable, in: candidate) != nil {
-      return candidate
+    for candidate in try GuestPath.versionFolders(in: root) {
+      guard let executable = try GuestPath.resolve(plan.clientExecutable, in: candidate) else {
+        continue
+      }
+      guard let launcher = try GuestPath.resolve(plan.launcherExecutable, in: candidate) else {
+        return nil
+      }
+      return NFS2015Client(
+        version: candidate.lastPathComponent, executable: executable, launcher: launcher)
     }
     return nil
   }

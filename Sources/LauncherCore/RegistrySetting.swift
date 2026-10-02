@@ -15,7 +15,9 @@ package struct RegistrySetting: Codable, Equatable, Sendable {
     package var file: String { self == .currentUser ? "user.reg" : "system.reg" }
   }
 
-  package enum Kind: String, Codable, Sendable { case string, dword }
+  /// `windowsPath` is a guest folder such as `C:\Program Files\Game\`: it keeps its single
+  /// backslashes in the manifest and is written with doubled ones, as a `.reg` file requires.
+  package enum Kind: String, Codable, Sendable { case string, dword, windowsPath }
 
   package let hive: Hive
   /// The key path below the hive, with single backslashes, as a `.reg` file writes it.
@@ -53,6 +55,10 @@ package struct RegistrySetting: Codable, Equatable, Sendable {
       guard plain(value, limit: 256), !value.contains("\\") else {
         throw .operation("The bundle declares an unusable registry value: \(name)")
       }
+    case .windowsPath:
+      guard Self.isWindowsPath(value) else {
+        throw .operation("The bundle declares an unusable registry path: \(name)")
+      }
     case .dword:
       guard (1...8).contains(value.utf8.count),
         value.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
@@ -65,9 +71,32 @@ package struct RegistrySetting: Codable, Equatable, Sendable {
     }
   }
 
+  /// A drive-letter path of plain folder names, with no traversal and nothing a `.reg` line could misread.
+  static func isWindowsPath(_ value: String) -> Bool {
+    let bytes = Array(value.utf8)
+    guard (4...256).contains(bytes.count), bytes[1] == 58, bytes[2] == 92,
+      (65...90).contains(bytes[0]) || (97...122).contains(bytes[0])
+    else { return false }
+    let folders = value.dropFirst(3).split(separator: "\\", omittingEmptySubsequences: false)
+    // One empty element is the trailing separator; any other empty element is a doubled one.
+    let named = folders.last == "" ? folders.dropLast() : folders[...]
+    return !named.isEmpty
+      && named.allSatisfy { folder in
+        !folder.isEmpty && folder != "." && folder != ".."
+          && folder.utf8.allSatisfy {
+            (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+              || [32, 40, 41, 45, 46, 95].contains($0)
+          }
+      }
+  }
+
   /// The entry as it appears inside a `.reg` script.
   var entry: String {
-    kind == .string ? "\"\(name)\"=\"\(value)\"" : "\"\(name)\"=dword:\(zeroPadded)"
+    switch kind {
+    case .string: "\"\(name)\"=\"\(value)\""
+    case .windowsPath: "\"\(name)\"=\"\(value.replacingOccurrences(of: "\\", with: "\\\\"))\""
+    case .dword: "\"\(name)\"=dword:\(zeroPadded)"
+    }
   }
 
   private var zeroPadded: String { String(repeating: "0", count: 8 - value.count) + value }

@@ -22,6 +22,8 @@ package struct BundleManifest: Codable {
 
   package var kind: GameKind { gameID ?? .nfsmw }
   package var references: Bool { referencesInstallation ?? false }
+  /// Set for a store-client game that ships its files: the app creates and seeds its own prefix.
+  package var seedsPrefix: Bool { kind.requiresStoreClient && !references }
   package var tuning: RuntimeTuning { runtimeTuning ?? RuntimeTuning() }
   package var client: StoreClientPlan? { storeClient }
   package var controllers: [String] { controllerDevices ?? [] }
@@ -72,28 +74,12 @@ package struct BundleManifest: Codable {
       throw .operation("The game manifest has an invalid version or file count.")
     }
     try tuning.validate()
-    // A referencing app owns no game bytes, so it must carry no inventory and name its client.
-    guard references == (kind == .nfs2015) else {
+    // Only a store-client game references an installation; it either does, or ships its own files.
+    guard !references || kind.requiresStoreClient else {
       throw .operation("The game manifest does not match this app's installation contract.")
     }
-    if references {
-      guard gameFiles.isEmpty, let client else {
-        throw .operation(
-          "A referencing game manifest must carry no game files and name its store client.")
-      }
-      try client.validate()
-      guard controllers.count <= 32,
-        controllers.allSatisfy({ device in
-          let parts = device.split(separator: "/", omittingEmptySubsequences: false)
-          return parts.count == 2
-            && parts.allSatisfy { $0.count == 4 && $0.allSatisfy(\.isHexDigit) }
-        })
-      else {
-        throw .operation("The manifest lists an invalid controller device.")
-      }
-      _ = try RegistrySetting.script(registry)
-      // A referencing D3D11 title must say which backend serves it, and may not pick a denied one.
-      _ = try RendererSelection.compatibilityDatabase(rendererSelection, kind: kind)
+    if kind.requiresStoreClient {
+      try validateStoreClientGame()
       return
     }
     guard renderers == nil else {
@@ -134,6 +120,67 @@ package struct BundleManifest: Codable {
       guard seen.contains(kind.executable.lowercased()) else {
         throw .operation("The game executable is missing from the manifest.")
       }
+    }
+  }
+  /// A store-client game's manifest: the recipe's launch contract, and either no files at all
+  /// (it references the player's installation) or the exact files seeded into the app's prefix.
+  private func validateStoreClientGame() throws(LauncherError) {
+    guard let client else {
+      throw .operation(
+        "A store-client game manifest must name its store client.")
+    }
+    try client.validate()
+    guard controllers.count <= 32,
+      controllers.allSatisfy({ device in
+        let parts = device.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.count == 2
+          && parts.allSatisfy { $0.count == 4 && $0.allSatisfy(\.isHexDigit) }
+      })
+    else {
+      throw .operation("The manifest lists an invalid controller device.")
+    }
+    _ = try RegistrySetting.script(registry)
+    // A D3D11 title must say which backend serves it, and may not pick a denied one.
+    _ = try RendererSelection.compatibilityDatabase(rendererSelection, kind: kind)
+    guard importRules == nil else {
+      throw .operation("A store-client game is recognised by its client, not by import rules.")
+    }
+    if references {
+      guard gameFiles.isEmpty else {
+        throw .operation(
+          "A referencing game manifest must carry no game files and name its store client.")
+      }
+      return
+    }
+    try validateSeededFiles()
+  }
+
+  /// The files a bundled store-client edition copies into its own prefix.
+  private func validateSeededFiles() throws(LauncherError) {
+    guard !gameFiles.isEmpty else {
+      throw .operation("The game manifest has an invalid file count.")
+    }
+    var seen = Set<String>()
+    var total = 0
+    for file in gameFiles {
+      try ManifestFile.validate(path: file.path)
+      guard !ManifestFile.isAccountState(path: file.path) else {
+        throw .operation("The game manifest lists account or machine state: \(file.path)")
+      }
+      guard file.size >= 0, file.size <= kind.fileByteLimit,
+        file.sha256.utf8.count == 64,
+        file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+        seen.insert(file.path.lowercased()).inserted
+      else {
+        throw .operation("The game manifest has an invalid or duplicate file: \(file.path)")
+      }
+      total += file.size
+      guard total <= kind.byteLimit else {
+        throw .operation("The game payload exceeds its size limit.")
+      }
+    }
+    guard seen.contains(kind.executable.lowercased()) else {
+      throw .operation("The game executable is missing from the manifest.")
     }
   }
 }

@@ -6,6 +6,11 @@ package struct GuestCommand: Equatable, Sendable {
   package let windowsPath: String
   package let arguments: [String]
 
+  package init(windowsPath: String, arguments: [String]) {
+    self.windowsPath = windowsPath
+    self.arguments = arguments
+  }
+
   /// The argument list handed to the bundle's `wine` binary.
   package var wineArguments: [String] { [windowsPath] + arguments }
 }

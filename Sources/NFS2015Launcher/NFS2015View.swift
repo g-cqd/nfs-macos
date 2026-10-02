@@ -65,21 +65,43 @@ struct NFS2015PlayView: View {
 
   var body: some View {
     Form {
-      Section("Your installation") {
-        if let folder = model.installedAt {
-          Text(folder).font(.callout).textSelection(.enabled)
-        } else {
-          Text("No Windows folder chosen yet.")
+      if model.ownsWindowsFolder {
+        Section("This app's Windows folder") {
+          if let folder = model.installedAt { Text(folder).font(.callout).textSelection(.enabled) }
+          if let version = model.clientVersion { Text("EA app \(version)").font(.caption) }
+          HStack {
+            Button(
+              model.needsClientInstall ? "Install EA App…" : "Reinstall EA App…",
+              action: model.chooseClientInstaller
+            ).disabled(!model.canInstallClient)
+            Button("Open EA App", action: model.openClient).disabled(!model.canOpenClient)
+          }
+          Text(
+            """
+            This app carries your own Need for Speed files and prepared this Windows folder for \
+            them on first launch. Install the EA app from ea.com into it once, sign in to your \
+            own EA account in the EA app, then press Play. This app never stores, copies or \
+            works around your sign-in.
+            """
+          ).font(.caption).foregroundStyle(.secondary)
         }
-        if let version = model.clientVersion { Text("EA app \(version)").font(.caption) }
-        Button("Choose Windows Folder…", action: model.chooseInstallation)
-          .disabled(model.isBusy)
-        Text(
-          """
-          This app runs your own installation where it is. It never copies the game, never \
-          duplicates your Windows folder, and never stores your EA sign-in.
-          """
-        ).font(.caption).foregroundStyle(.secondary)
+      } else {
+        Section("Your installation") {
+          if let folder = model.installedAt {
+            Text(folder).font(.callout).textSelection(.enabled)
+          } else {
+            Text("No Windows folder chosen yet.")
+          }
+          if let version = model.clientVersion { Text("EA app \(version)").font(.caption) }
+          Button("Choose Windows Folder…", action: model.chooseInstallation)
+            .disabled(model.isBusy)
+          Text(
+            """
+            This app runs your own installation where it is. It never copies the game, never \
+            duplicates your Windows folder, and never stores your EA sign-in.
+            """
+          ).font(.caption).foregroundStyle(.secondary)
+        }
       }
       if let blocker = model.blocker {
         Section("Before you can play") { Text(blocker) }
@@ -131,7 +153,7 @@ struct NFS2015View: View {
         Divider()
         HStack {
           if model.isBusy { ProgressView().controlSize(.small) }
-          Text(model.phase.message).font(.callout)
+          Text(model.statusMessage).font(.callout)
             .foregroundStyle(model.errorMessage == nil ? .secondary : .primary)
           Spacer()
           if model.hasPendingChanges {

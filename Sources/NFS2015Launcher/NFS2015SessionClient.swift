@@ -45,6 +45,9 @@ actor NFS2015SessionClient: NFS2015Serving {
     case .enableController: arguments.append("--enable-controller")
     case .chooseInstallation(let folder):
       arguments += ["--choose-installation", "--request", folder.path]
+    case .installClient(let installer):
+      arguments += ["--install-client", "--request", installer.path]
+    case .openClient: arguments.append("--open-client")
     case .configure(let settings):
       try settings.validate()
       let request = support.appendingPathComponent("request-\(UUID().uuidString).json")

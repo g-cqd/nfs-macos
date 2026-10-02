@@ -5,12 +5,13 @@ import NFS2015Core
 import Observation
 import SharedLauncher
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum NFS2015Phase: Equatable {
-  case preparing, ready, playing, needsRosetta, needsInstallation
+  case preparing, ready, playing, needsRosetta, needsInstallation, installing, signingIn
   case failed(String)
 
-  var isBusy: Bool { self == .preparing || self == .playing }
+  var isBusy: Bool { [.preparing, .playing, .installing, .signingIn].contains(self) }
 
   var message: String {
     switch self {
@@ -19,6 +20,8 @@ enum NFS2015Phase: Equatable {
     case .playing: "The EA app is running this session. Quit it to return here."
     case .needsRosetta: "Rosetta is required to run this Windows game."
     case .needsInstallation: "Choose the Windows folder that holds the EA app and this game."
+    case .installing: "Running the EA app installer… finish it, then close its window."
+    case .signingIn: "The EA app is open. Sign in, then quit it to return here."
     case .failed(let message): message
     }
   }
@@ -32,16 +35,47 @@ final class NFS2015Model {
   var tab = "Play"
   var request = 0
   let rosetta: RosettaSetup
+  /// Whether this app carries the game and prepares its own Windows folder on first launch.
+  let carriesGame: Bool
   private let service: any NFS2015Serving
   private var pending: NFS2015Operation? = .prepare
 
-  init(service: any NFS2015Serving = NFS2015SessionClient(), rosetta: RosettaSetup = RosettaSetup())
-  {
+  init(
+    service: any NFS2015Serving = NFS2015SessionClient(), rosetta: RosettaSetup = RosettaSetup(),
+    carriesGame: Bool = NFS2015Model.packagedManifestCarriesGame()
+  ) {
     self.service = service
     self.rosetta = rosetta
+    self.carriesGame = carriesGame
+  }
+
+  /// Reads this app's own manifest to learn which edition it is; an unreadable one is an import app.
+  nonisolated static func packagedManifestCarriesGame() -> Bool {
+    let url = Bundle.main.bundleURL.appendingPathComponent(
+      "Contents/Resources/game-manifest.json")
+    return (try? BundleManifest.read(from: url))?.seedsPrefix ?? false
   }
 
   var blocker: String? { snapshot.blocker }
+  /// Whether this app created its own Windows folder and carries the game in it.
+  var ownsWindowsFolder: Bool { snapshot.ownsWindowsFolder == true }
+  var needsClientInstall: Bool { snapshot.setup == .installClient }
+  var canOpenClient: Bool { ownsWindowsFolder && snapshot.setup != .installClient && !isBusy }
+  var canInstallClient: Bool { ownsWindowsFolder && !isBusy }
+
+  /// The line beside the Play button: the phase, worded for the edition the player has.
+  var statusMessage: String {
+    if phase == .preparing, carriesGame, snapshot.installedAt == nil {
+      return """
+        Preparing the game for first use: creating its Windows folder and copying the game \
+        files. This takes a few minutes.
+        """
+    }
+    guard phase == .needsInstallation, ownsWindowsFolder else { return phase.message }
+    return snapshot.setup == .installClient
+      ? "Install the EA app, then sign in to it."
+      : "Open the EA app and sign in, then quit it and play."
+  }
   var clientVersion: String? { snapshot.clientVersion }
   var installedAt: String? { snapshot.installedAt }
   var isBusy: Bool { phase.isBusy || rosetta.isBusy }
@@ -97,6 +131,28 @@ final class NFS2015Model {
     enqueue(.chooseInstallation(folder))
   }
 
+  /// Asks for the EA app installer the player downloaded from ea.com.
+  func chooseClientInstaller() {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowsMultipleSelection = false
+    panel.resolvesAliases = false
+    panel.allowedContentTypes = [.exe]
+    panel.prompt = "Install"
+    panel.message = """
+      Choose the EA app installer you downloaded from ea.com. It is installed into this app's \
+      own Windows folder, and you sign in to your own account there.
+      """
+    guard panel.runModal() == .OK, let installer = panel.url else { return }
+    installClient(installer)
+  }
+
+  /// Runs the chosen EA app installer in the app's own Windows folder.
+  func installClient(_ installer: URL) { enqueue(.installClient(installer)) }
+
+  func openClient() { enqueue(.openClient) }
+
   func installRosetta() { Task { await rosetta.install() } }
   func refreshRosetta() { Task { await rosetta.refresh() } }
 
@@ -111,14 +167,14 @@ final class NFS2015Model {
   func run() async {
     guard let operation = pending else { return }
     pending = nil
-    if operation == .play {
+    if operation.runsWindowsProgram {
       await rosetta.refresh()
       guard rosetta.isAvailable else {
         phase = .needsRosetta
         return
       }
     }
-    phase = operation == .play ? .playing : .preparing
+    phase = operation.busyPhase
     do {
       let result = try await service.perform(operation)
       snapshot = result

@@ -8,6 +8,30 @@ enum NFS2015Operation: Sendable, Equatable {
   case configure(NFS2015Settings)
   case chooseInstallation(URL)
   case enableController
+  /// Runs the EA app installer the player downloaded, in the app's own Windows folder.
+  case installClient(URL)
+  /// Starts the EA app by itself so the player can sign in to it.
+  case openClient
+}
+
+extension NFS2015Operation {
+  /// Whether the helper starts a Windows program, which needs Rosetta first.
+  var runsWindowsProgram: Bool {
+    switch self {
+    case .play, .installClient, .openClient: true
+    default: false
+    }
+  }
+
+  /// What the starter shows while the helper runs this operation.
+  var busyPhase: NFS2015Phase {
+    switch self {
+    case .play: .playing
+    case .installClient: .installing
+    case .openClient: .signingIn
+    default: .preparing
+    }
+  }
 }
 
 /// Asynchronous boundary for helper transactions, so the UI actor never touches the filesystem.

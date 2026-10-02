@@ -39,6 +39,7 @@ let package = Package(
       name: "LauncherUITests", dependencies: ["NFSMWLauncher", "LauncherCore", "SharedLauncher"]),
     .testTarget(name: "CoD4CoreTests", dependencies: ["CoD4Core", "LauncherCore"]),
     .testTarget(name: "NFS2015CoreTests", dependencies: ["NFS2015Core", "LauncherCore"]),
+    .testTarget(name: "NFS2015SessionTests", dependencies: ["NFS2015Session", "LauncherCore"]),
     .testTarget(
       name: "NFS2015UITests",
       dependencies: ["NFS2015Launcher", "NFS2015Core", "LauncherCore", "SharedLauncher"]),
