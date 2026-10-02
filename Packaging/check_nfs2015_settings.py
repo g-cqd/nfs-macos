@@ -16,6 +16,10 @@ found = {key for path in (ROOT / 'Sources/NFS2015Core').glob('NFS2015Catalog*.sw
          for key in catalog_keys(path.read_text())}
 assert found == ALLOWED_KEYS, (sorted(found ^ ALLOWED_KEYS))
 
+# The documentation lists every key the catalog can write, so a new key cannot be added unannounced.
+documentation = (ROOT / 'docs/NFS2015.md').read_text()
+assert not [key for key in sorted(ALLOWED_KEYS) if f'`{key}`' not in documentation], 'Document every catalog key'
+
 # 2. Comments are ignored and string contents are not.
 assert strip_comments('let a = 1 // FBCHUNKS\n/// PROFILEOPTIONS\nlet b = "x // y"') == 'let a = 1 \n\nlet b = "x // y"'
 assert catalog_keys('// keys: ["GstRender.Nothing"]\nkeys: ["GstRender.VSyncEnabled"]') == ['GstRender.VSyncEnabled']
