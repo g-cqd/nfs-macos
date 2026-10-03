@@ -57,6 +57,22 @@ struct ClientLayerTests {
       try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]).write(to: manifest)
     }
 
+    /// Replaces a registry part and re-pins it in the manifest, so only the part's own rules can refuse it.
+    func rewritePart(_ hive: String, keys: Int? = nil, _ transform: (String) -> String) throws {
+      let url = layer.appendingPathComponent("registry/\(hive).part")
+      let data = Data(transform(try String(contentsOf: url, encoding: .utf8)).utf8)
+      try data.write(to: url)
+      let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+      try edit { object in
+        var parts = try #require(object["registry"] as? [[String: Any]])
+        for index in parts.indices where parts[index]["hive"] as? String == hive {
+          parts[index]["sha256"] = digest
+          if let keys { parts[index]["keys"] = keys }
+        }
+        object["registry"] = parts
+      }
+    }
+
     func entries(_ object: [String: Any]) throws -> [[String: Any]] {
       try #require(object["entries"] as? [[String: Any]])
     }
@@ -271,6 +287,124 @@ struct ClientLayerTests {
     defer { workspace.remove() }
     try FileManager.default.removeItem(at: workspace.driveC)
     #expect(throws: LauncherError.self) { try workspace.open().apply(to: workspace.prefix) }
+  }
+
+  @Test
+  func `refuses a registry part that names a key outside the client's own`() throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    try workspace.rewritePart("system.reg", keys: 2) {
+      $0 + "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run] 1\n#time=1\n\"x\"=\"y\"\n\n"
+    }
+    #expect(throws: LauncherError.self) { try workspace.open().apply(to: workspace.prefix) }
+    #expect(try text(workspace.prefix.appendingPathComponent("system.reg")) == Self.hive)
+  }
+
+  @Test
+  func `refuses a registry part with a stray line or a key count that differs from the manifest`()
+    throws
+  {
+    let stray = try Workspace()
+    defer { stray.remove() }
+    try stray.rewritePart("user.reg") { "stray text\n" + $0 }
+    #expect(throws: LauncherError.self) { try stray.open().apply(to: stray.prefix) }
+    let shape = try Workspace()
+    defer { shape.remove() }
+    try shape.rewritePart("system.reg") {
+      $0.replacingOccurrences(of: "\"ClientPath\"=", with: "ClientPath=")
+    }
+    #expect(throws: LauncherError.self) { try shape.open().apply(to: shape.prefix) }
+    let count = try Workspace()
+    defer { count.remove() }
+    try count.rewritePart("system.reg", keys: 99) { $0 }
+    #expect(throws: LauncherError.self) { try count.open().apply(to: count.prefix) }
+  }
+
+  private struct KeyCases: Decodable {
+    struct Key: Decodable {
+      let hive: String
+      let key: String
+    }
+    let accepted: [Key]
+    let rejected: [Key]
+  }
+
+  @Test
+  func `accepts and refuses exactly the registry keys the packager's policy lists`() throws {
+    let url = URL(fileURLWithPath: "\(#filePath)").deletingLastPathComponent()
+      .appendingPathComponent("Fixtures/client-layer-keys.json")
+    let cases = try JSONDecoder().decode(KeyCases.self, from: Data(contentsOf: url))
+    for entry in cases.accepted {
+      #expect(throws: Never.self, "\(entry.key)") {
+        try ClientLayerPolicy.validate(registryKey: entry.key, hive: entry.hive)
+      }
+    }
+    for entry in cases.rejected {
+      #expect(throws: LauncherError.self, "\(entry.key)") {
+        try ClientLayerPolicy.validate(registryKey: entry.key, hive: entry.hive)
+      }
+    }
+  }
+
+  @Test
+  func `does not chmod through a link planted where a file goes`() throws {
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let outside = workspace.root.appendingPathComponent("outside.txt")
+    try Data("private".utf8).write(to: outside)
+    #expect(chmod(outside.path, 0o600) == 0)
+    let target = workspace.driveC.appendingPathComponent("\(Self.client)/EADesktop.exe")
+    try FileManager.default.createDirectory(
+      at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: target, withDestinationURL: outside)
+    #expect(throws: LauncherError.self) { try workspace.open().apply(to: workspace.prefix) }
+    let mode = try FileManager.default.attributesOfItem(atPath: outside.path)[.posixPermissions]
+    #expect(mode as? Int == 0o600)
+    #expect(try text(outside) == "private")
+  }
+
+  /// The real layer, when this machine has it next to the checkout: every registry part passes the
+  /// app's rules, and applying it to a prefix verifies every file. Skipped elsewhere.
+  private static func realLayer(file: StaticString = #filePath) -> (root: URL, digest: String)? {
+    let repository = URL(fileURLWithPath: "\(file)").deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+    let root = repository.deletingLastPathComponent().appendingPathComponent("inputs/client-layer")
+    guard
+      FileManager.default.fileExists(atPath: root.appendingPathComponent("client-layer.json").path),
+      let recipe = try? Data(
+        contentsOf: repository.appendingPathComponent("Packaging/Recipes/nfs2015.json")),
+      let object = try? JSONSerialization.jsonObject(with: recipe) as? [String: Any],
+      let declared = object["clientLayer"] as? [String: Any],
+      let digest = declared["layerSHA256"] as? String
+    else { return nil }
+    return (root, digest)
+  }
+
+  @Test(.enabled(if: realLayer() != nil))
+  func `applies the real pinned layer to a fresh prefix`() throws {
+    let layer = try #require(Self.realLayer())
+    let workspace = try Workspace()
+    defer { workspace.remove() }
+    let client = try ClientLayer(root: layer.root, expectedSHA256: layer.digest)
+    for part in client.manifest.registry {
+      let data = try Data(contentsOf: layer.root.appendingPathComponent(part.file))
+      try RegistryHiveText.validate(part: data, hive: part.hive, keys: part.keys)
+    }
+    try client.apply(to: workspace.prefix)
+    let files = client.manifest.entries.filter { $0.kind == .file }
+    #expect(files.count > 900)
+    let driveC = workspace.driveC
+    let executable = driveC.appendingPathComponent(
+      "Program Files/Electronic Arts/EA Desktop/\(client.manifest.client.version)/EA Desktop/EADesktop.exe"
+    )
+    #expect(FileManager.default.fileExists(atPath: executable.path))
+    #expect(
+      attribute(
+        "user.WINEREPARSE", of: driveC.appendingPathComponent(Self.junction)) != nil)
+    let system = try text(workspace.prefix.appendingPathComponent("system.reg"))
+    #expect(
+      RegistryHiveText.keys(in: system).contains(
+        "system\\controlset001\\services\\eabackgroundservice"))
   }
 
   /// One mutation of a good manifest that the app must refuse before it writes anything.

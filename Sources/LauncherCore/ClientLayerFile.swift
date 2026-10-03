@@ -4,8 +4,11 @@ import Foundation
 
 /// Installs one entry of a client layer into a prefix, verifying every byte it writes.
 ///
-/// Folders are created one component at a time without following a link, so a prefix that holds
-/// a link where a folder should be cannot send a write outside it. A file is an APFS clone of the
+/// Folders are created one component at a time, each checked with `lstat`, so a prefix that holds
+/// a link where a folder should be cannot send a write outside it, and the file operations never
+/// follow a link at the file itself. A process of the same user that swaps a folder for a link between a
+/// check and a write is outside this app's threat model: it can already write anywhere the user can.
+/// A file is an APFS clone of the
 /// layer's blob when both sit on one volume, and a copy otherwise; either way the result is hashed
 /// against the manifest, so a blob altered in the app, or a copy that went wrong, is caught.
 enum ClientLayerFile {
@@ -39,7 +42,7 @@ enum ClientLayerFile {
         blob: blobs.appendingPathComponent(digest).path, at: target, size: size, digest: digest,
         name: entry.path)
     }
-    guard chmod(target, mode_t(entry.mode)) == 0 else {
+    guard fchmodat(AT_FDCWD, target, mode_t(entry.mode), AT_SYMLINK_NOFOLLOW) == 0 else {
       throw .operation("Could not set the permissions of \(entry.path) (\(errno)).")
     }
     try setAttributes(entry.xattrs ?? [:], at: target, name: entry.path)
@@ -97,7 +100,8 @@ enum ClientLayerFile {
     do {
       let input = try FileHandle(forReadingFrom: URL(fileURLWithPath: blob))
       defer { do { try input.close() } catch { print("Could not close \(name): \(error)") } }
-      let descriptor = open(target, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+      let descriptor = open(
+        target, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
       guard descriptor >= 0 else {
         throw LauncherError.operation("Could not create \(name) (\(errno)).")
       }
@@ -133,17 +137,32 @@ enum ClientLayerFile {
   /// the Mac the app was downloaded to. None of them belongs in the prefix, so all are removed
   /// before the entry's own Wine attributes are set.
   private static func stripAttributes(at path: String) throws(LauncherError) {
-    let size = listxattr(path, nil, 0, XATTR_NOFOLLOW)
-    guard size > 0 else { return }
-    var names = [CChar](repeating: 0, count: size)
-    guard listxattr(path, &names, size, XATTR_NOFOLLOW) >= 0 else { return }
+    var names: [CChar] = []
+    // The list can grow between asking for its size and reading it, so ask again.
+    for _ in 0..<4 {
+      let size = listxattr(path, nil, 0, attributeOptions)
+      guard size >= 0 else {
+        throw .operation("Could not list the attributes of a file (\(errno)).")
+      }
+      guard size > 0 else { return }
+      names = [CChar](repeating: 0, count: size)
+      if listxattr(path, &names, size, attributeOptions) >= 0 { break }
+      guard errno == ERANGE else {
+        throw .operation("Could not list the attributes of a file (\(errno)).")
+      }
+      names = []
+    }
+    guard !names.isEmpty else { throw .operation("The attributes of a file kept changing.") }
     for bytes in names.split(separator: 0) {
       let name = String(decoding: bytes.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-      if removexattr(path, name, XATTR_NOFOLLOW) != 0, !name.hasPrefix("com.apple.") {
+      if removexattr(path, name, attributeOptions) != 0, !name.hasPrefix("com.apple.") {
         throw .operation("Could not clear the attribute \(name) (\(errno)).")
       }
     }
   }
+
+  /// Never follow a link at the file itself.
+  private static let attributeOptions = XATTR_NOFOLLOW
 
   private static func setAttributes(_ attributes: [String: String], at path: String, name: String)
     throws(LauncherError)
@@ -153,7 +172,7 @@ enum ClientLayerFile {
         throw .operation("The EA app's files carry an unreadable attribute: \(name)")
       }
       let status = value.withUnsafeBytes {
-        setxattr(path, attribute, $0.baseAddress, value.count, 0, XATTR_NOFOLLOW)
+        setxattr(path, attribute, $0.baseAddress, value.count, 0, attributeOptions)
       }
       guard status == 0 else {
         throw .operation("Could not set an attribute on \(name) (\(errno)).")
