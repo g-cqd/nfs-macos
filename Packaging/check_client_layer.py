@@ -169,6 +169,8 @@ def check_unreviewed_items(work):
         ('stray', {'extra': {'windows/system32/new.dll': b'x'}}, 'Unclassified new path'),
         ('ini', {'extra': {'Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/user_1.ini': b'x'}}, 'Forbidden new path'),
         ('log', {'extra': {'Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/trace.log': b'x'}}, 'Forbidden new path'),
+        ('cfg', {'extra': {'Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/settings.cfg': b'x'}}, 'unreviewed file type .cfg'),
+        ('dat2', {'extra': {'Program Files/Electronic Arts/EA Desktop/1.2.3.4/EA Desktop/session.state': b'x'}}, 'unreviewed file type .state'),
     ]:
         prefix = work / (name + '-prefix')
         baseline(prefix)
@@ -241,7 +243,23 @@ def check_tamper(work, good, digest):
         assert layer.verify_layer(folder), 'A forbidden entry passed: ' + path
     folder = fresh('t-xattr')
     edit_manifest(folder, lambda m: m['entries'][0].setdefault('xattrs', {}).update({'com.apple.quarantine': 'AA=='}))
-    expect_problem(layer.verify_layer(folder), 'Unreviewed extended attribute', 'a quarantine attribute')
+    expect_problem(layer.verify_layer(folder), 'extended attribute', 'a quarantine attribute')
+    folder = fresh('t-xattr-size')
+    edit_manifest(folder, lambda m: [e for e in m['entries'] if e['path'].endswith('EA Desktop?')][0]['xattrs'].update(
+        {'user.WINEREPARSE': 'QQ==' * 2000}))
+    expect_problem(layer.verify_layer(folder), 'extended attribute', 'an oversized attribute')
+    folder = fresh('t-xattr-base64')
+    edit_manifest(folder, lambda m: [e for e in m['entries'] if e['path'].endswith('EA Desktop?')][0]['xattrs'].update(
+        {'user.WINEREPARSE': '***'}))
+    expect_problem(layer.verify_layer(folder), 'extended attribute', 'an unreadable attribute')
+    folder = fresh('t-client-name')
+    edit_manifest(folder, lambda m: m['client'].update({'name': 'EA \u2013 app'}))
+    expect_problem(layer.verify_layer(folder), 'printable ASCII', 'a non-ASCII client name')
+    folder = fresh('t-kind')
+    edit_manifest(folder, lambda m: m['entries'].append(
+        {'path': 'ProgramData/Package Cache/{C2622085-ABD2-49E5-8AB9-D3D6A642C091}v12.0.0.0/extra', 'kind': 'directory', 'mode': 493})
+        or m['entries'].sort(key=lambda e: e['path'].encode()))
+    assert layer.verify_layer(folder) != [], 'a folder where only the cached package files belong was accepted'
     folder = fresh('t-noncanonical')
     (folder / layer.MANIFEST_NAME).write_text(json.dumps(layer.load_manifest(folder)))
     expect_problem(layer.verify_layer(folder), 'canonical', 'a non-canonical manifest')
@@ -259,7 +277,7 @@ def check_tamper(work, good, digest):
     victim.unlink()
     victim.symlink_to('/etc/hosts')
     assert layer.verify_layer(folder), 'A linked blob passed'
-    print('PASS tamper: 14 mutations of a good layer are each refused')
+    print('PASS tamper: 18 mutations of a good layer are each refused')
 
 
 def check_apply(work):
@@ -302,8 +320,45 @@ def check_app_parity():
         assert layer.app_policy_problem(path) is None, 'The app policy refuses ' + path
     for path in cases['rejected']:
         assert layer.app_policy_problem(path) is not None, 'The app policy accepts ' + path
-    print('PASS parity: %d accepted and %d refused paths agree with the app policy' % (
-        len(cases['accepted']), len(cases['rejected'])))
+    keys = json.loads((PROJECT / 'Tests/LauncherCoreTests/Fixtures/client-layer-keys.json').read_text())
+
+    def kept(entry):
+        rule = layer.classify(layer.KEY_RULES.get(entry['hive'], []), entry['key'])
+        return rule is not None and rule.action == 'keep'
+
+    for entry in keys['accepted']:
+        assert kept(entry), 'Policy refuses the registry key ' + repr(entry)
+    for entry in keys['rejected']:
+        assert not kept(entry), 'Policy accepts the registry key ' + repr(entry)
+    print('PASS parity: %d accepted and %d refused paths, %d accepted and %d refused registry keys agree with the app policy' % (
+        len(cases['accepted']), len(cases['rejected']), len(keys['accepted']), len(keys['rejected'])))
+
+
+def check_identifier_scan(work):
+    """The capture tool's scan finds a host path however a Windows program or a hive file writes it."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('capture_tool', PROJECT / 'tools/capture-client-layer.py')
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    needle = '/Users/someone'
+    spelled = {
+        'posix': needle.encode(), 'windows': b'x Z:\\Users\\someone\\Games y', 'doubled': b'"p"="Z:\\\\Users\\\\someone"',
+        'utf16': needle.encode('utf-16-le'), 'windows utf16': 'Z:\\Users\\someone'.encode('utf-16-le'),
+        'hex list': b'"p"=hex:' + ','.join('%02x' % b for b in 'Z:\\Users\\someone'.encode('utf-16-le')).encode(),
+    }
+    clean = work / 'scan-clean'
+    clean.write_bytes(b'no identifier here ' * 1000)
+    for name, data in spelled.items():
+        leaked = work / ('scan-' + name.replace(' ', '-'))
+        leaked.write_bytes(b'A' * 100 + data + b'B' * 100)
+        assert tool.scan_for([needle], [clean, leaked]) and all(path == str(leaked) for path, _ in tool.scan_for([needle], [clean, leaked])), \
+            'The scan missed the ' + name + ' spelling'
+    assert tool.scan_for([needle], [clean]) == [], 'The scan reported a clean file'
+    assert tool.scan_for([needle], [clean], [('attribute', b'x' + needle.encode())]) == [('attribute', needle)]
+    boundary = work / 'scan-boundary'
+    boundary.write_bytes(b'.' * ((16 << 20) - 4) + needle.encode())
+    assert tool.scan_for([needle], [boundary]), 'The scan missed a hit that straddles a chunk boundary'
+    print('PASS identifier scan: six spellings, a chunk boundary and an attribute value are all found')
 
 
 def check_merge():
@@ -359,6 +414,7 @@ def main():
         good, digest = check_reproducible(work)
         check_tamper(work, good, digest)
         check_apply(work)
+        check_identifier_scan(work)
         check_app_parity()
         check_merge()
         check_fixture(work)

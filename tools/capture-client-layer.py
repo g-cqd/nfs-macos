@@ -26,6 +26,7 @@ What it does, in order, and what it refuses:
 The scratch prefix is deleted at the end, whatever happens, unless --keep is given.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -192,6 +193,8 @@ def identifiers(host, baseline_dir, prefix):
     state = prefix / 'drive_c/ProgramData/EA Desktop'
     if state.is_dir():
         for path in state.rglob('*'):
+            # The names of this machine's state folders are identifiers too (a hash derived from the host).
+            found.update(re.findall(r'[0-9A-Fa-f]{20,}', path.name))
             if not path.is_file() or path.stat().st_size > 1_000_000:
                 continue
             text = path.read_bytes().decode('latin-1')
@@ -208,13 +211,37 @@ def identifiers(host, baseline_dir, prefix):
     return sorted(item for item in found if len(item) >= 6)
 
 
-def scan_for(needles, files):
-    """Search kept bytes for the needles, raw and as UTF-16LE; returns each hit as (file, needle)."""
+def spellings(needle):
+    """Every way a Windows program or a registry file could write down a host string, as bytes.
+
+    A POSIX path appears inside Wine as `Z:\\...` with single or doubled backslashes (a hive file doubles them);
+    each spelling occurs as UTF-8, as UTF-16LE (Windows binaries and text), and, in a registry value of type
+    binary, as a comma-separated list of the UTF-16LE bytes in hex.
+    """
+    texts = {needle}
+    if needle.startswith('/'):
+        windows = needle.replace('/', '\\')
+        texts |= {windows, windows.replace('\\', '\\\\'), 'Z:' + windows, 'Z:' + windows.replace('\\', '\\\\')}
+    found = {}
+    for text in texts:
+        found[text.encode()] = text
+        found[text.encode('utf-16-le')] = text + ' (UTF-16)'
+        found[','.join('%02x' % byte for byte in text.encode('utf-16-le')).encode()] = text + ' (hex list)'
+    return found
+
+
+def scan_bytes(data, patterns, label):
+    return [(label, patterns[pattern]) for pattern in patterns if pattern in data]
+
+
+def scan_for(needles, files, extra=()):
+    """Search kept bytes for the needles in every spelling; `extra` is (label, bytes) pairs, such as decoded attributes.
+
+    Returns each hit as (file, needle). Chunks overlap by the longest pattern so a hit across a boundary is found.
+    """
     patterns = {}
     for needle in needles:
-        patterns[needle.encode()] = needle
-        patterns[needle.encode('utf-16-le')] = needle + ' (UTF-16)'
-    expression = re.compile(b'|'.join(re.escape(pattern) for pattern in patterns))
+        patterns.update(spellings(needle))
     keep = max(len(pattern) for pattern in patterns)
     hits = []
     for path in files:
@@ -222,9 +249,10 @@ def scan_for(needles, files):
         with open(path, 'rb') as stream:
             while block := stream.read(16 << 20):
                 data = tail + block
-                for found in expression.finditer(data):
-                    hits.append((str(path), patterns[found.group(0)]))
+                hits += scan_bytes(data, patterns, str(path))
                 tail = data[-keep:]
+    for label, data in extra:
+        hits += scan_bytes(data, patterns, label)
     return hits
 
 
@@ -295,7 +323,7 @@ def main():
     if (app / 'Contents/Resources/ClientLayer').exists():
         parser.error('The host app already carries a client layer; use an app built without one')
 
-    signature = authenticode.verify(installer, publisher=PUBLISHER)
+    signature = authenticode.verify(installer, publisher=PUBLISHER, expected_root='DigiCert Trusted Root G4')
     if not signature.ok:
         raise SystemExit('The installer is not signed by %s: %s' % (PUBLISHER, signature.problems))
     installer_sha = layer.sha256_file(installer)
@@ -364,7 +392,9 @@ def main():
         needles = identifiers(host, baseline_dir, host.prefix)
         files = [output / 'blobs' / name for name in sorted(os.listdir(output / 'blobs'))]
         files += [output / layer.MANIFEST_NAME] + sorted((output / 'registry').iterdir())
-        hits = scan_for(needles, files)
+        decoded = [('attribute of ' + entry['path'], base64.b64decode(value)) for entry in manifest['entries']
+                   for value in entry.get('xattrs', {}).values()]
+        hits = scan_for(needles, files, decoded)
         problems += ['Host or machine identifier %r in %s' % (needle[:8] + '...', Path(path).name) for path, needle in hits]
         log('identifier scan: %d needles, %d files, %d hits' % (len(needles), len(files), len(hits)))
         problems += check_against_install(output, baseline_dir, host.prefix, work)
