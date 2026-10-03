@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import LauncherCore
 import NFS2015Core
@@ -37,22 +38,41 @@ final class NFS2015Model {
   private(set) var snapshot = NFS2015Snapshot()
   /// How far the first-launch game copy has got, while one runs.
   private(set) var preparation: PrefixSeed.Progress?
-  private(set) var edited = NFS2015Settings()
+  /// What the player changed and has not saved: only the settings they touched, so a value the
+  /// game changed meanwhile is never put back by a save.
+  private(set) var edits: [String: String] = [:]
+  /// What the last settings request did.
+  private(set) var outcome: NFS2015SettingsOutcome?
+  /// The MetalFX choice the player made and has not saved.
+  private(set) var metalFXEdit: NFS2015MetalFXPreference?
+  /// What the last MetalFX request did.
+  private(set) var metalFXOutcome: NFS2015MetalFXOutcome?
   var tab = "Play"
   var request = 0
   let rosetta: RosettaSetup
   /// Whether this app carries the game and prepares its own Windows folder on first launch.
   let carriesGame: Bool
   private let service: any NFS2015Serving
+  private let displayPixels: @MainActor () -> (width: Int, height: Int)?
   private var pending: NFS2015Operation? = .prepare
 
   init(
     service: any NFS2015Serving = NFS2015SessionClient(), rosetta: RosettaSetup = RosettaSetup(),
-    carriesGame: Bool = NFS2015Model.packagedManifestCarriesGame()
+    carriesGame: Bool = NFS2015Model.packagedManifestCarriesGame(),
+    displayPixels: @escaping @MainActor () -> (width: Int, height: Int)? = {
+      NFS2015Model.mainDisplayPixels()
+    }
   ) {
     self.service = service
     self.rosetta = rosetta
     self.carriesGame = carriesGame
+    self.displayPixels = displayPixels
+  }
+
+  /// The pixel size the main display is showing now, which is what a window of this size fills.
+  static func mainDisplayPixels() -> (width: Int, height: Int)? {
+    guard let mode = CGDisplayCopyDisplayMode(CGMainDisplayID()) else { return nil }
+    return (mode.pixelWidth, mode.pixelHeight)
   }
 
   /// Reads this app's own manifest to learn which edition it is; an unreadable one is an import app.
@@ -86,6 +106,7 @@ final class NFS2015Model {
         that comes with it and copying the game files. This takes a few minutes.
         """
     }
+    if phase == .ready, let refusal { return refusal }
     if phase == .ready, let notice = snapshot.notice { return notice }
     guard phase == .needsInstallation, ownsWindowsFolder else { return phase.message }
     return snapshot.setup == .installClient
@@ -104,40 +125,202 @@ final class NFS2015Model {
   var installedAt: String? { snapshot.installedAt }
   var isBusy: Bool { phase.isBusy || rosetta.isBusy }
   var canPlay: Bool { phase == .ready && rosetta.isAvailable && snapshot.blocker == nil }
-  var canEditSettings: Bool { snapshot.hasOptionsFile && !isBusy }
-  var hasPendingChanges: Bool { edited != snapshot.settings }
+  /// Whether the game's own options file can be changed from here.
+  var canEditSettings: Bool {
+    showsSettingControls && snapshot.optionsDigest != nil && !isBusy
+  }
+  /// Whether the page lists settings at all: before the game has written its file, or when its
+  /// layout is not one this app validated, there is nothing to write and nothing is offered.
+  var showsSettingControls: Bool { snapshot.hasOptionsFile && snapshot.optionsProblem == nil }
+  var hasPendingChanges: Bool { !edits.isEmpty }
   var errorMessage: String? {
     if case .failed(let message) = phase { return message }
     return nil
   }
 
   var settingsNotice: String? {
-    snapshot.hasOptionsFile
-      ? nil
-      : """
-      Start the game once and quit it so it writes its own options file. This app then changes \
-      only the values you choose there.
-      """
+    guard snapshot.hasOptionsFile else {
+      return """
+        Start the game once and quit it so it writes its own options file. Until then there is \
+        nothing here to change: this app edits only values the game has already written.
+        """
+    }
+    return snapshot.optionsProblem
   }
 
-  func settings(in group: String) -> [NFS2015Setting] {
-    NFS2015Catalog.settings.filter { $0.group == group }
+  /// Why a request was refused, if the last one was.
+  var refusal: String? { outcome?.refusal }
+
+  /// What the last request did, one line each, worded from what the file was read back as.
+  var outcomeLines: [String] {
+    switch outcome {
+    case .saved(let lines):
+      return ["Saved. The game's file now holds:"] + lines.map(Self.describe)
+    case .restored(let kind, let lines):
+      return [
+        kind == .original
+          ? "Restored the file as the game wrote it before this app first changed it."
+          : "Undid the last save."
+      ] + lines.map(Self.describe)
+    case .unchanged: return ["The file already held those values. Nothing was written."]
+    case .refused, nil: return []
+    }
+  }
+
+  private static func describe(_ line: NFS2015OptionLine) -> String {
+    "\(line.key) \(line.now) (was \(line.before))"
+  }
+
+  func settings(in group: NFS2015SettingGroup) -> [NFS2015Setting] {
+    NFS2015Catalog.settings(in: group)
+  }
+
+  /// Whether the game's file holds a value for this setting that the player can change.
+  func isChangeable(_ setting: NFS2015Setting) -> Bool {
+    showsSettingControls && setting.isEditable && snapshot.settings.isPresent(setting.id)
+  }
+
+  /// What the game wrote for a setting that is shown but not changed, or whose value is outside
+  /// what this app offers.
+  func recordedText(_ setting: NFS2015Setting) -> String? { snapshot.settings.observed[setting.id] }
+
+  /// The value shown: the player's pending choice, else what the game's file holds.
+  func value(_ id: String) -> String { edits[id] ?? snapshot.settings.value(id) }
+
+  /// Holds a typed or dragged value inside its range and keeps it as a pending change.
+  func set(_ id: String, to text: String) {
+    guard let setting = NFS2015Catalog.setting(id), isChangeable(setting),
+      let chosen = setting.clamped(text)
+    else { return }
+    outcome = nil
+    if setting.isEquivalent(chosen, snapshot.settings.value(id)) {
+      edits[id] = nil
+    } else {
+      edits[id] = chosen
+    }
   }
 
   func binding(_ id: String) -> Binding<String> {
+    Binding(get: { self.value(id) }, set: { self.set(id, to: $0) })
+  }
+
+  func numberBinding(_ id: String) -> Binding<Double> {
     Binding(
-      get: { self.edited.value(id) },
-      set: { value in
-        guard NFS2015Catalog.setting(id)?.accepts(value) == true else { return }
-        self.edited.values[id] = value
-      })
+      get: { Double(self.value(id)) ?? 0 }, set: { self.set(id, to: String($0)) })
+  }
+
+  /// The detail levels at their top step with motion blur and film grain off. This changes the
+  /// pending choices only, for the options the game's file holds; Save writes them.
+  func applyMaximumQuality() {
+    for (id, value) in NFS2015Preset.maximumQuality { set(id, to: value) }
+  }
+
+  func discard() {
+    edits = [:]
+    outcome = nil
+  }
+
+  var canRestoreOriginal: Bool { canEditSettings && snapshot.backups?.original == true }
+  var canUndoLastSave: Bool { canEditSettings && snapshot.backups?.previous == true }
+
+  /// The MetalFX choice the next launch will use, as saved.
+  var savedMetalFX: NFS2015MetalFXPreference { snapshot.metalFX?.preference ?? .off }
+  /// The choice shown: the player's unsaved one, else the saved one.
+  var metalFX: NFS2015MetalFXPreference { metalFXEdit ?? savedMetalFX }
+  var hasPendingMetalFX: Bool { metalFXEdit != nil }
+  /// Why a saved MetalFX file was not used, if it was not.
+  var metalFXNotice: String? { snapshot.metalFX?.notice }
+  var canEditMetalFX: Bool { !isBusy }
+  /// Whether anything is saved that Reset would clear, or the saved file could not be used.
+  var canResetMetalFX: Bool {
+    canEditMetalFX && (savedMetalFX != .off || metalFXNotice != nil)
+  }
+  var metalFXRefusal: String? { metalFXOutcome?.refusal }
+
+  /// What the last MetalFX request did, worded for the player.
+  var metalFXOutcomeLine: String? {
+    switch metalFXOutcome {
+    case .saved: "Saved. It applies the next time the game starts."
+    case .reset: "Cleared. MetalFX is off."
+    case .unchanged: "That was already saved."
+    case .refused, nil: nil
+    }
+  }
+
+  /// What the choice does at the game's current resolution on this display.
+  var metalFXSummary: String {
+    let size = value("render.resolution").split(separator: "x").compactMap { Int($0) }
+    return NFS2015MetalFX.summary(
+      game: size.count == 2 && snapshot.settings.isPresent("render.resolution")
+        ? (size[0], size[1]) : nil,
+      factor: metalFX.factor, display: displayPixels())
+  }
+
+  func setMetalFXEnabled(_ enabled: Bool) {
+    guard canEditMetalFX else { return }
+    var choice = metalFX
+    choice.spatialUpscaling = enabled
+    holdMetalFX(choice)
+  }
+
+  func setMetalFXFactor(_ factor: NFS2015UpscaleFactor) {
+    guard canEditMetalFX else { return }
+    var choice = metalFX
+    choice.factor = factor
+    holdMetalFX(choice)
+  }
+
+  func metalFXEnabledBinding() -> Binding<Bool> {
+    Binding(get: { self.metalFX.spatialUpscaling }, set: { self.setMetalFXEnabled($0) })
+  }
+
+  func metalFXFactorBinding() -> Binding<NFS2015UpscaleFactor> {
+    Binding(get: { self.metalFX.factor }, set: { self.setMetalFXFactor($0) })
+  }
+
+  func discardMetalFX() {
+    metalFXEdit = nil
+    metalFXOutcome = nil
+  }
+
+  /// Keeps the shown choice for the next launch.
+  func saveMetalFX() {
+    guard canEditMetalFX, let choice = metalFXEdit else { return }
+    enqueue(.configureMetalFX(NFS2015MetalFXRequest(action: .save, preference: choice)))
+  }
+
+  /// Forgets what is saved, which means MetalFX off.
+  func resetMetalFX() {
+    guard canEditMetalFX else { return }
+    enqueue(.configureMetalFX(NFS2015MetalFXRequest(action: .reset)))
+  }
+
+  private func holdMetalFX(_ choice: NFS2015MetalFXPreference) {
+    metalFXOutcome = nil
+    metalFXEdit = choice == savedMetalFX ? nil : choice
   }
 
   func reload() { enqueue(.prepare) }
   func play() { enqueue(.play) }
-  func apply() { enqueue(.configure(edited)) }
   func enableController() { enqueue(.enableController) }
-  func discard() { edited = snapshot.settings }
+
+  /// Saves the pending choices, quoting the file as the player saw it.
+  func apply() { request(.save, changes: edits) }
+
+  /// Puts the file back as the game wrote it before this app first changed it.
+  func restoreGameDefaults() { request(.restoreOriginal) }
+
+  /// Puts the file back as it was before the latest save.
+  func undoLastSave() { request(.restorePrevious) }
+
+  private func request(
+    _ action: NFS2015SettingsRequest.Action, changes: [String: String] = [:]
+  ) {
+    guard canEditSettings, let digest = snapshot.optionsDigest else { return }
+    enqueue(
+      .configure(
+        NFS2015SettingsRequest(action: action, changes: changes, expectedDigest: digest)))
+  }
 
   /// Asks for the folder the player installed Windows, the EA app and this game into.
   func chooseInstallation() {
@@ -209,7 +392,7 @@ final class NFS2015Model {
     do {
       let result = try await service.perform(operation)
       snapshot = result
-      if !hasPendingChanges || operation != .prepare { edited = result.settings }
+      adopt(result, after: operation)
       if rosetta.state == .unchecked { await rosetta.refresh() }
       phase =
         result.blocker == nil
@@ -220,6 +403,27 @@ final class NFS2015Model {
       phase = .failed(error.localizedDescription)
     } catch {
       phase = .failed(error.localizedDescription)
+    }
+  }
+
+  /// Takes a helper's answer in. A refused save keeps the player's choices, so they can quit the
+  /// game or reload and save again; any other operation starts from what the file now holds.
+  private func adopt(_ result: NFS2015Snapshot, after operation: NFS2015Operation) {
+    if case .configure = operation {
+      outcome = result.outcome
+    } else if operation != .prepare {
+      outcome = nil
+    }
+    if case .configureMetalFX = operation {
+      metalFXOutcome = result.metalFX?.outcome
+      if result.metalFX?.outcome?.refusal == nil { metalFXEdit = nil }
+    } else if operation != .prepare {
+      metalFXOutcome = nil
+    }
+    if metalFXEdit == (result.metalFX?.preference ?? .off) { metalFXEdit = nil }
+    if operation != .prepare, result.outcome?.refusal == nil { edits = [:] }
+    edits = edits.filter { id, chosen in
+      result.settings.isPresent(id) && result.settings.values[id] != chosen
     }
   }
 

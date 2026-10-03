@@ -53,36 +53,14 @@ struct SyntheticPrefix {
     return prefix
   }
 
-  /// The game's own options file, as the installed game writes it.
+  /// The game's own options file, with exactly these bytes.
   @discardableResult
-  func options(_ lines: [String]) throws -> URL {
+  func options(_ bytes: Data) throws -> URL {
     let url = driveC.appendingPathComponent(
       "users/crossover/" + NFS2015SettingsStore.optionsPath)
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: url)
+    try bytes.write(to: url)
     return url
   }
-
-  static let writtenOptions = [
-    "GstAudio.MusicVolume 1.000000",
-    "GstInput.AutoReverseForManualGears 1",
-    "GstInput.DeadZonePadBrake 0.000000",
-    "GstInput.DeadZonePadSteering 0.000000",
-    "GstInput.DeadZonePadThrottle 0.000000",
-    "GstRender.Brightness 0.500000",
-    "GstRender.EffectsQuality 3",
-    "GstRender.FilmGrain 1",
-    "GstRender.FullscreenEnabled 1",
-    "GstRender.FullscreenRefreshRate 60.000000",
-    "GstRender.MeshQuality 3",
-    "GstRender.MotionBlurEnabled 1",
-    "GstRender.ResolutionHeight 1600",
-    "GstRender.ResolutionWidth 2560",
-    "GstRender.ShadowQuality 3",
-    "GstRender.TerrainQuality 1",
-    "GstRender.TextureQuality 3",
-    "GstRender.UndergrowthQuality 1",
-    "GstRender.VSyncEnabled 0",
-  ]
 }

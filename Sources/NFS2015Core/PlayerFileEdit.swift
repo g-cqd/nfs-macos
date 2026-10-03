@@ -8,6 +8,11 @@ import LauncherCore
 /// own options file, which lives beside the player's saves. The journal that makes the edit
 /// recoverable is kept inside this app's folder, records the file's absolute path and its
 /// previous bytes, and is replayed before any later operation reads the file.
+///
+/// The file is replaced atomically: the new bytes are written beside it and renamed over it, so
+/// a reader sees the old file or the new one and never a half-written one. The path handed in is
+/// already resolved through any link on the way to it, so a linked player folder keeps its file;
+/// a link at the file itself is refused.
 package struct PlayerFileEdit {
   private struct Record: Codable {
     let path: String
@@ -16,11 +21,18 @@ package struct PlayerFileEdit {
 
   /// The options file is a few hundred short lines; a larger file is not this file.
   static let byteLimit = ProfileOptionsDocument.byteLimit
+  /// Writes bytes over an existing file. A different one can stand in under test.
+  package typealias Writer = @Sendable (Data, URL) throws -> Void
+
   private let journal: URL
   private let files = FileManager.default
 
   package init(support: URL) {
     journal = support.appendingPathComponent("player-file-edit.json")
+  }
+
+  package static let atomicWrite: Writer = { bytes, url in
+    try bytes.write(to: url, options: .atomic)
   }
 
   /// Restores an interrupted edit. Safe to call when no edit is outstanding.
@@ -37,7 +49,7 @@ package struct PlayerFileEdit {
       }
       let url = URL(fileURLWithPath: record.path)
       if let bytes = record.bytes, files.fileExists(atPath: url.path) {
-        try write(bytes, to: url)
+        try Self.atomicWrite(bytes, url)
       }
       try files.removeItem(at: journal)
     } catch let error as LauncherError { throw error } catch {
@@ -47,7 +59,9 @@ package struct PlayerFileEdit {
 
   /// Replaces an existing regular file's contents, keeping a restorable copy of the originals.
   /// - Precondition: The caller holds the session lock and the game is not running.
-  package func replace(_ url: URL, with bytes: Data) throws(LauncherError) {
+  package func replace(
+    _ url: URL, with bytes: Data, write: Writer = PlayerFileEdit.atomicWrite
+  ) throws(LauncherError) {
     try recover()
     do {
       let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
@@ -61,7 +75,7 @@ package struct PlayerFileEdit {
       try JSONEncoder().encode(Record(path: url.path, bytes: original)).write(
         to: journal, options: .atomic)
       do {
-        try write(bytes, to: url)
+        try write(bytes, url)
         try files.removeItem(at: journal)
       } catch {
         let failure = error.localizedDescription
@@ -71,13 +85,5 @@ package struct PlayerFileEdit {
     } catch let error as LauncherError { throw error } catch {
       throw .operation("Could not change the game's options file: \(error.localizedDescription)")
     }
-  }
-
-  /// Writes in place rather than replacing the file, so a linked player folder keeps its file.
-  private func write(_ bytes: Data, to url: URL) throws {
-    let handle = try FileHandle(forWritingTo: url)
-    defer { do { try handle.close() } catch { print("Could not close options file: \(error)") } }
-    try handle.truncate(atOffset: 0)
-    try handle.write(contentsOf: bytes)
   }
 }

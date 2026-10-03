@@ -9,7 +9,7 @@ struct SessionOptions {
 
   static let actions = [
     "--prepare", "--play", "--configure", "--choose-installation", "--enable-controller",
-    "--install-client", "--open-client",
+    "--install-client", "--open-client", "--configure-metalfx",
   ]
 
   init(arguments: [String]) throws {
@@ -39,7 +39,8 @@ struct SessionOptions {
     guard let support = options["--support"], let action else {
       throw LauncherError.operation("The session needs a player folder and an operation.")
     }
-    if ["--configure", "--choose-installation", "--install-client"].contains(action),
+    if ["--configure", "--choose-installation", "--install-client", "--configure-metalfx"].contains(
+      action),
       options["--request"] == nil
     {
       throw LauncherError.operation("This operation requires a request.")
