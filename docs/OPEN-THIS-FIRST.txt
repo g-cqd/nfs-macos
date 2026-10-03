@@ -1,0 +1,70 @@
+NEED FOR SPEED (2015) - COMPLETE PORTABLE APP - OPEN THIS FIRST
+
+Need for Speed Bundled 20261002-7d108a4-portable-complete.app
+
+WHAT IT IS
+A Mac app that runs Need for Speed (2015) through Wine. It carries your own licensed game files and EA's own
+EA app, exactly as EA's installer installs it, so you do not download EA's installer or run an install step.
+It carries NO EA account, no saved sign-in, no activation record and no save: you sign in with your own EA
+account, in EA's own window, and EA decides whether you may play.
+It is for your personal use on your own Macs. Do not share, upload or redistribute it.
+
+WHAT YOU NEED
+- An Apple silicon Mac (M1 or later) with macOS 15 or later.
+- Rosetta 2 (the app has an "Install Rosetta..." button; it needs the internet once).
+- About 40 GB of free disk space while the app prepares itself the first time (the app is about 16 GB; its
+  own Windows folder, the EA app and EA's downloads come on top; if the app is on another disk than your
+  Library folder, the first start copies the game, which needs about 16 GB more).
+- Your own EA account that owns Need for Speed (2015), and the internet for the sign-in and EA's one-time
+  activation. The first start itself needs no internet.
+
+STEP 1 - LET macOS OPEN THE APP (ONCE, ONLY IF macOS BLOCKS IT)
+The app is signed by its developer but NOT notarized by Apple (the owner decided against it). When an app
+reaches your Mac by AirDrop, a download, mail, a USB stick or an unzipped archive, macOS marks it as
+"quarantined" and refuses to open an app Apple has not checked: "Apple could not verify ... is free of
+malware". The mark is only a note that the file came from outside; it does not say the file is bad or good.
+Open the app only if you trust where this copy came from. Then do ONE of these:
+
+  A. Try to open the app once. Then open System Settings > Privacy & Security, scroll to "Security", and
+     press "Open Anyway" next to this app's name. (On macOS 15 and later, Control-click > Open no longer
+     works for an app that is not notarized.)
+
+  B. Remove the mark yourself. Open Terminal, type this and a space, but do not press Return yet:
+         xattr -dr com.apple.quarantine
+     Drag the app from Finder into the Terminal window (it types the path for you) and press Return.
+     That is the same as:  xattr -dr com.apple.quarantine "/path/to/the app.app"
+
+A copy that never left this Mac, or that came on a drive that does not set the mark, opens without this step.
+Moving the app to your Applications folder (or removing the mark) also makes the first start faster: while the
+mark is on, macOS runs the app from a temporary read-only copy and the first start must copy all of the game.
+
+STEP 2 - OPEN THE APP AND WAIT
+The first start takes a few minutes, once. The app builds its own private Windows folder in
+~/Library/Application Support/NFS2015Mac, installs the EA app that came with it, and copies and checks the
+game files. A progress bar shows the game files. Nothing is sent anywhere.
+
+STEP 3 - SIGN IN
+Press "Open EA App". EA's own window opens; sign in with your own EA account, then quit the EA app.
+This app never sees, stores or copies your sign-in.
+
+STEP 4 - PLAY
+Press "Play". Expect two prompts that do not come from this app:
+- EA may ask you to activate the game on this Mac, once (EA sees a Mac it has not seen).
+- macOS may ask whether the app may use the microphone (the game's voice chat). Answer as you prefer.
+
+IF SOMETHING IS WRONG
+- "Open Log" in the app shows what the helper did.
+- "Reinstall EA App..." exists only for a newer EA app than the one that came with this app (it needs the
+  installer from ea.com).
+- To start over, quit the app and move ~/Library/Application Support/NFS2015Mac to the Trash. That removes the
+  Windows folder, the EA app's state, your EA sign-in on this Mac and the game's settings and saves.
+- Not supported: Intel Macs, macOS 14 or earlier, a Mac without Rosetta.
+
+WHAT WAS AND WAS NOT TESTED
+Tested on the Mac that built the app: the first start in a clean environment with the network switched off, the
+app copied to a different folder, the EA app starting from the app's own copy and showing EA's sign-in window,
+and the result of the first start (the EA app installed and registered, no account or machine state of EA's
+anywhere). NOT tested: a second Mac, macOS 15, Gatekeeper and the quarantine steps above (they describe how
+macOS behaves), EA's sign-in, the activation prompt, playing the game from this build, the microphone prompt,
+or EA's own self-update. docs/NFS2015.md section 15 inside the app's source archive says exactly what was
+checked and how.

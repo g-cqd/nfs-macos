@@ -126,6 +126,13 @@ def verify_client_layer(app, support, name, forbidden_text):
         check(has_key(system, key), name + ': the prefix registry holds ' + what)
     check(has_key(user, 'Software\\Wine\\Mac Driver'), name + ': the display setting is still in the user hive')
     check((root / 'windows/mono/mono-2.0/bin/libmono-2.0-x86_64.dll').is_file(), name + ': Wine Mono was installed first')
+    # What the starter reads after --prepare: the client is found without any installer step, and the only
+    # step left is to sign in (Open EA App), never "Install EA App".
+    launcher = json.loads((support / 'launcher-state.json').read_text())
+    check(launcher.get('clientVersion') == version and launcher.get('setup') == 'signIn'
+          and launcher.get('ownsWindowsFolder') is True and 'Open EA App' in (launcher.get('blocker') or ''),
+          name + ': the starter finds the EA app (%s) and asks only for the sign-in, not for the installer' % version,
+          json.dumps({key: launcher.get(key) for key in ('clientVersion', 'setup', 'ownsWindowsFolder')}))
     state = account_state(prefix)
     check(not state, name + ': no EA machine, user or account state exists in the prefix', ', '.join(state[:6]))
     leaks = []
