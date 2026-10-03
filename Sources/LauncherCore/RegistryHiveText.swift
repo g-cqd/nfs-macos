@@ -24,15 +24,22 @@ enum RegistryHiveText {
     return keys
   }
 
+  /// The key a `[Key] 1234567890` header names, with Wine's doubled backslashes undone and its case
+  /// kept, or nil for any other line.
+  private static func plainKey(ofHeader line: Substring) -> String? {
+    key(ofHeader: line, folded: false)
+  }
+
   /// The key a `[Key] 1234567890` header names, or nil for any other line.
-  private static func key(ofHeader line: Substring) -> String? {
+  private static func key(ofHeader line: Substring, folded: Bool = true) -> String? {
     guard let close = line.lastIndex(of: "]"), close > line.startIndex else { return nil }
     let stamp = line[line.index(after: close)...]
     guard stamp.count > 1, stamp.first == " ", stamp.dropFirst().allSatisfy(\.isASCII),
       stamp.dropFirst().allSatisfy(\.isNumber)
     else { return nil }
-    let key = line[line.index(after: line.startIndex)..<close]
-    return key.replacingOccurrences(of: "\\\\", with: "\\").lowercased()
+    let key = line[line.index(after: line.startIndex)..<close].replacingOccurrences(
+      of: "\\\\", with: "\\")
+    return folded ? key.lowercased() : key
   }
 
   /// The hive with the part appended.
@@ -55,5 +62,49 @@ enum RegistryHiveText {
       separator = Data((hive.last == 10 ? "\n" : "\n\n").utf8)
     }
     return hive + separator + part
+  }
+
+  /// Checks that a part is plain key sections of keys a client layer may add, before any of it is appended.
+  ///
+  /// Each section is a `[Key] stamp` header, an optional `#time=` line, and value lines that start with a
+  /// quoted name or `@=`, where a hex value may continue on lines after a trailing backslash. Anything
+  /// else, a key outside the client's own, or a key count that differs from the manifest's, is refused.
+  /// - Complexity: O(lines).
+  static func validate(part: Data, hive: String, keys expected: Int) throws(LauncherError) {
+    guard let text = String(data: part, encoding: .utf8) else {
+      throw .operation("The EA app's registry entries are not text: \(hive)")
+    }
+    var keys = 0
+    var inSection = false
+    var continued = false
+    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+      if let key = plainKey(ofHeader: line) {
+        try ClientLayerPolicy.validate(registryKey: key, hive: hive)
+        keys += 1
+        inSection = true
+        continued = false
+        continue
+      }
+      // A blank line only separates sections.
+      if line.isEmpty {
+        continued = false
+        continue
+      }
+      guard inSection else {
+        throw .operation("The EA app's registry entries start with something other than a key.")
+      }
+      if continued {
+        continued = line.hasSuffix("\\")
+      } else if !line.hasPrefix("#time=") {
+        guard line.hasPrefix("\"") || line.hasPrefix("@=") else {
+          throw .operation("The EA app's registry entries hold an unexpected line in \(hive).")
+        }
+        let value = line.split(separator: "=", maxSplits: 1).dropFirst().first ?? ""
+        continued = line.hasSuffix("\\") && value.hasPrefix("hex")
+      }
+    }
+    guard keys > 0, keys == expected else {
+      throw .operation("The EA app's registry entries do not hold the keys they declare: \(hive)")
+    }
   }
 }

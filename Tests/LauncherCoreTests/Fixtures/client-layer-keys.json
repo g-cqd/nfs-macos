@@ -1,0 +1,40 @@
+{
+  "accepted": [
+    {"hive": "system.reg", "key": "Software\\Classes\\origin2\\shell\\open\\command"},
+    {"hive": "system.reg", "key": "Software\\Classes\\origin"},
+    {"hive": "system.reg", "key": "Software\\Classes\\ealink\\DefaultIcon"},
+    {"hive": "system.reg", "key": "Software\\Classes\\eaconnect.microsoft\\shell\\open\\command"},
+    {"hive": "system.reg", "key": "Software\\Classes\\AppID\\{F996089D-88E6-4C97-B6B6-63BAAE0E4B37}"},
+    {"hive": "system.reg", "key": "Software\\Classes\\CLSID\\{F996089D-88E6-4C97-B6B6-63BAAE0E4B37}\\LocalServer32"},
+    {"hive": "system.reg", "key": "Software\\Classes\\Installer\\Products\\5802262C2DBA5E94A89B3D6D6A240C19\\SourceList\\Media"},
+    {"hive": "system.reg", "key": "Software\\Electronic Arts\\EA Desktop"},
+    {"hive": "system.reg", "key": "Software\\Wow6432Node\\Electronic Arts\\EA Core"},
+    {"hive": "system.reg", "key": "Software\\Wow6432Node\\Origin"},
+    {"hive": "system.reg", "key": "Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{b3468fcd-fa10-4a55-8d82-bed839e8189e}"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UpgradeCodes\\CC9FD6039AA132C40920B4869A32E4D5"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Products\\5802262C2DBA5E94A89B3D6D6A240C19\\InstallProperties"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Components\\00229A31A1FE55D4F849A89C9D4B2A58"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Xbox\\GamingApp\\Extensions\\CLSID\\XPFC0VB7MLFWLC"},
+    {"hive": "system.reg", "key": "System\\ControlSet001\\Services\\EABackgroundService"},
+    {"hive": "user.reg", "key": "Software\\Microsoft\\Xbox\\GamingApp\\Extensions\\Data\\XPFC0VB7MLFWLC"}
+  ],
+  "rejected": [
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
+    {"hive": "system.reg", "key": "Software\\Wine\\DllOverrides"},
+    {"hive": "system.reg", "key": "Software\\Classes\\exefile\\shell\\open\\command"},
+    {"hive": "system.reg", "key": "Software\\Classes\\.exe"},
+    {"hive": "system.reg", "key": "Software\\Classes\\CLSID"},
+    {"hive": "system.reg", "key": "Software\\Classes\\originevil\\shell"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\SystemCertificates\\Root\\Certificates\\ABCD"},
+    {"hive": "system.reg", "key": "System\\ControlSet001\\Services\\EvilService"},
+    {"hive": "system.reg", "key": "System\\ControlSet001\\Services\\EABackgroundService\\Parameters"},
+    {"hive": "system.reg", "key": "System\\ControlSet001\\Enum\\HID\\VID_1"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-21\\Products\\5802262C2DBA5E94A89B3D6D6A240C19"},
+    {"hive": "system.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NotAGuid"},
+    {"hive": "user.reg", "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
+    {"hive": "user.reg", "key": "Software\\Wine\\Mac Driver"},
+    {"hive": "user.reg", "key": "Software\\Electronic Arts\\EA Desktop"},
+    {"hive": "sam.reg", "key": "Software\\Electronic Arts\\EA Desktop"},
+    {"hive": "system.reg", "key": ""}
+  ]
+}

@@ -39,7 +39,8 @@ package struct ClientLayer: Sendable {
       throw .operation("The EA app's description is unreadable: \(error.localizedDescription)")
     }
     try manifest.validate()
-    self.root = root
+    // Resolved once, so that the file operations below can refuse any link on the path to a blob.
+    self.root = root.standardizedFileURL.resolvingSymlinksInPath()
     digest = actual
   }
 
@@ -77,6 +78,7 @@ package struct ClientLayer: Sendable {
     else {
       throw .operation("The EA app's registry entries do not match their pin: \(part.hive)")
     }
+    try RegistryHiveText.validate(part: data, hive: part.hive, keys: part.keys)
     let hive = prefix.appendingPathComponent(part.hive)
     let merged = try RegistryHiveText.merged(
       hive: try BoundedFile.read(hive, limit: RegistryHiveText.hiveLimit), part: data)
