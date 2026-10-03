@@ -238,6 +238,25 @@ every pinned file matches and the whole payload inventory equals `inventorySHA25
 is the supported way to build: the packager would otherwise write a `.zip` and a `.sha256`, and the
 audit refuses either inside the app.
 
+## Third-party licence texts
+
+A recipe that ships a third-party binary unmodified declares the licence text it must travel with in
+`thirdPartyLicenses`, a list of exactly these fields:
+
+```json
+"thirdPartyLicenses": [{ "component": "dxmt", "version": "v0.80", "licence": "MIT",
+  "path": "Licenses/dxmt.txt", "source": "dxmt-v0.80-LICENSE.txt", "sha256": "<digest of the text>",
+  "url": "https://github.com/3Shain/dxmt/blob/v0.80/LICENSE", "tagCommit": "<commit of the tag>",
+  "blobSHA1": "<git blob of the file at the tag>" }]
+```
+
+`source` is a verbatim file in `Packaging/Licenses`, pinned by `sha256`; `tagCommit` and `blobSHA1` let anyone check
+it against the upstream tag without trusting this tree. The packager writes exactly those bytes to `path` in every
+edition and records the entry in `runtime-provenance.json`; `audit.py` fails an app that lacks the file, holds other
+bytes, or whose NOTICE.md names a component the audit has no licence rule for
+([NFS2015.md §18.3](NFS2015.md#18-the-merged-line-the-seed-layer-the-settings-page-and-metalfx-in-one-app)).
+Only a text taken from the release tag of the version that ships may be pinned: a newer dxmt needs its own text and pin.
+
 ## The client layer (the complete portable app)
 
 A bundled app can carry EA's own client, pre-installed and never signed in, as a *client layer*: the

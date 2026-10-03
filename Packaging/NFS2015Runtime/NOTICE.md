@@ -1,7 +1,10 @@
 # Licences and source availability for the Need for Speed (2015) runtime
 
-This app is an unofficial local package. It contains no game data and no part of EA's
-software. The game and the EA app are the user's own installation, run in place.
+This app is an unofficial local package. The Import edition contains no game data and no part
+of EA's software: the game and the EA app are the user's own installation, run in place. A
+Bundled edition carries the user's own, unmodified game files, and the complete portable edition
+also carries EA's own client as EA's official installer made it, for the user's personal use;
+`Contents/Resources/Licenses/ea-client.txt` says exactly what it is and where it came from.
 
 ## Wine — LGPL-2.1-or-later
 
@@ -25,9 +28,14 @@ the LGPL text ships in `Contents/Resources/Licenses`.
 ## dxmt — the Direct3D 11 backend used by the game
 
 `dxmt` v0.80 is used unmodified, as the published `dxmt-v0.80-builtin.tar.gz` release asset
-from `3Shain/dxmt`, pinned by SHA-256. Its own licence and notices travel with it; nothing in
-this project modifies it. It implements Direct3D 11 on Metal and needs no Apple framework and
-no Vulkan.
+from `3Shain/dxmt`, pinned by SHA-256. It is released under the MIT licence, which asks that its
+copyright and permission notice accompany copies; that text is in
+`Contents/Resources/Licenses/dxmt.txt`, verbatim from the `LICENSE` file of the `v0.80` tag
+(commit `589adb780354b461645b29999cefaf533594ee99`, SHA-256
+`6b928413c6308c106f3e0080bd94b6427b56d587d400fd40e6cbfbab7d9c4ae1`, pinned in the recipe and
+checked by the audit). Nothing in this project modifies dxmt. It implements Direct3D 11 on Metal
+and needs no Apple framework and no Vulkan. The `main` branch of dxmt has been LGPL since
+2026-04-25, so a newer dxmt must come with its own licence text and a new pin.
 
 ## Apple D3DMetal — not shipped
 

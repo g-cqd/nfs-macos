@@ -253,6 +253,42 @@ def validate_managed_runtime(declared):
     return declared
 
 
+def validate_third_party_licenses(items):
+    """The licence texts a recipe must ship beside the third-party binaries it carries unchanged.
+
+    Each entry pins one verbatim text kept in Packaging/Licenses by its SHA-256 and names the upstream
+    tag, the commit the tag points to and the blob it was read from, so the file can be checked
+    against the upstream project without trusting this tree.
+    """
+    keys = {'component', 'version', 'licence', 'path', 'source', 'sha256', 'url', 'tagCommit', 'blobSHA1'}
+    if not isinstance(items, list) or not 0 < len(items) <= 16:
+        raise ValueError('Third-party licences must be a bounded, non-empty list')
+    components, paths = set(), set()
+    for item in items:
+        if not isinstance(item, dict) or set(item) != keys:
+            raise ValueError('A third-party licence declares exactly ' + ', '.join(sorted(keys)))
+        for key in ['component', 'version', 'licence']:
+            if not _simple_name(item[key]) or not item[key].isprintable():
+                raise ValueError('A third-party licence needs a plain ' + key)
+        path = safe_relative(item['path'])
+        if not re.fullmatch(r'Licenses/[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.txt', path):
+            raise ValueError('A third-party licence is shipped as Licenses/<name>.txt: ' + path)
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.txt', str(item['source'])):
+            raise ValueError('A third-party licence text is a plain file name under Packaging/Licenses')
+        if not SHA256.fullmatch(str(item['sha256'])):
+            raise ValueError('A third-party licence needs its SHA-256 pin')
+        for key in ['tagCommit', 'blobSHA1']:
+            if not re.fullmatch('[0-9a-f]{40}', str(item[key])):
+                raise ValueError('A third-party licence needs its ' + key)
+        if not str(item['url']).startswith('https://'):
+            raise ValueError('A third-party licence needs an https url')
+        if item['component'].casefold() in components or path.casefold() in paths:
+            raise ValueError('Duplicate third-party licence: ' + item['component'])
+        components.add(item['component'].casefold())
+        paths.add(path.casefold())
+    return items
+
+
 def validate_client_layer(declared):
     """The pre-installed EA client a bundled app carries: a build input pinned by the digest of its manifest.
 
@@ -394,6 +430,8 @@ def validate_recipe(recipe):
     for name in vendor:
         if safe_relative(name).casefold() not in folded:
             raise ValueError('A vendor runtime path must also be retained: ' + name)
+    if 'thirdPartyLicenses' in recipe:
+        validate_third_party_licenses(recipe['thirdPartyLicenses'])
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
     if recipe.get('referencesInstallation'):
         # The import edition of a store-client recipe ships no game bytes at all, so it carries no

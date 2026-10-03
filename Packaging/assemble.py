@@ -11,7 +11,8 @@ import tempfile
 import uuid
 import client_layer
 from bundle_hygiene import (CLIENT_LAYER_NOTICE, client_layer_notice, client_layer_provenance,
-                            client_layer_reference, problems_in)
+                            client_layer_reference, problems_in, third_party_licence_bytes,
+                            third_party_licence_provenance)
 from payload import inventory, inventory_digest
 from privacy import USAGE_DESCRIPTIONS
 from recipes import load_recipe, resolve_inputs, shipped_recipe, supports_edition
@@ -145,6 +146,23 @@ def stage_managed_runtime(resources, recipe, inputs):
             'sourceURL': declared['sourceURL']}
 
 
+def stage_third_party_licenses(resources, recipe):
+    """Ship the licence text of every component the recipe declares, verbatim, from its pinned source.
+
+    The text is checked against its SHA-256 before it is written, and replaces any file of the
+    same name inherited from the retained base app, so the app carries exactly the pinned bytes.
+    """
+    staged = []
+    for declared in recipe.get('thirdPartyLicenses', []):
+        data = third_party_licence_bytes(declared)
+        target = resources / declared['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.unlink(missing_ok=True)
+        target.write_bytes(data)
+        staged.append(third_party_licence_provenance(declared))
+    return staged
+
+
 def verify_client_layer(recipe, inputs):
     """Refuse a client layer that is not exactly the pinned, policy-clean one; returns its declaration or None."""
     declared = recipe.get('clientLayer')
@@ -254,10 +272,13 @@ def assemble(recipe, inputs, destination, include_game_data):
         stage_resources(recipe['defaults'], inputs, resources / 'Defaults')
         revisions = collect_sources(resources, inputs)
         stage_runtime_source(resources, recipe, inputs)
+        licences = stage_third_party_licenses(resources, recipe)
         managed = stage_managed_runtime(resources, recipe, inputs) if include_game_data else None
         layer = stage_client_layer(resources, recipe, inputs) if include_game_data else None
         stage_cache_key(resources, recipe, inputs, PINS['sources']['mtld3d']['revision'])
         provenance = runtime_provenance(recipe, revisions)
+        if licences:
+            provenance['thirdPartyLicenses'] = licences
         if managed:
             provenance['managedRuntime'] = managed
         if layer:
