@@ -85,6 +85,35 @@ struct NFS2015ClientReadinessTests {
     #expect(probe(log).phase(since: started) == .signedOut)
   }
 
+  /// The real failure of 2026-10-03: the client signed in (`login`) and then its interface stalled
+  /// and `client.boot.ready` never came. The player was told "not signed in", which was false.
+  @Test
+  func `a client that signed in and has not finished booting is not signed out`() throws {
+    let prefix = try SyntheticPrefix.complete()
+    defer { prefix.remove() }
+    let log = try SyntheticClientLog(in: prefix)
+    let started = Date()
+    try log.start(at: started.addingTimeInterval(7))
+    #expect(probe(log).phase(since: started) == .signedOut)
+    try log.event("login", at: started.addingTimeInterval(9), authenticated: true)
+    #expect(probe(log).phase(since: started) == .signedIn)
+    #expect(probe(log).phase(since: nil) == .signedIn)
+    try log.event("client.boot.ready", at: started.addingTimeInterval(14))
+    #expect(probe(log).phase(since: started) == .ready)
+  }
+
+  @Test
+  func `a sign-in from an earlier run does not make the new run signed in`() throws {
+    let prefix = try SyntheticPrefix.complete()
+    defer { prefix.remove() }
+    let log = try SyntheticClientLog(in: prefix)
+    let started = Date()
+    try log.start(at: started.addingTimeInterval(-600))
+    try log.signIn(from: started.addingTimeInterval(-590))
+    try log.start(at: started.addingTimeInterval(7))
+    #expect(probe(log).phase(since: started) == .signedOut)
+  }
+
   @Test
   func `the authenticated flag EA stamps on events is not the evidence`() throws {
     let prefix = try SyntheticPrefix.complete()
@@ -261,6 +290,20 @@ struct NFS2015ClientWaitTests {
     #expect(slept == 5)
     let notice = try #require(result.notice)
     #expect(notice.contains("not signed in"))
+    #expect(notice.contains("Play again"))
+  }
+
+  @Test
+  func `tells a signed in client that is still starting from one that is signed out`() throws {
+    let starting = try ClientWait(deadline: 1).run(
+      phase: { .signedIn }, isRunning: { true }, wait: { _ in })
+    #expect(starting == .timedOut(.signedIn))
+    let signedOut = try ClientWait(deadline: 1).run(
+      phase: { .signedOut }, isRunning: { true }, wait: { _ in })
+    let notice = try #require(starting.notice)
+    #expect(notice != signedOut.notice)
+    #expect(!notice.contains("not signed in"))
+    #expect(notice.contains("is signed in"))
     #expect(notice.contains("Play again"))
   }
 

@@ -107,6 +107,8 @@ struct NFS2015Session {
             + "\(NFS2015MetalFX.executable) only.")
       }
       if let notice = metalFX.notice { print(notice) }
+      let pressure = MemoryPressure.current()?.notice
+      if let pressure { print(pressure) }
       let outcome = try play(
         plan: try NFS2015LaunchPlan.make(install: install, plan: plan), environment: environment,
         runtime: runtime, prefix: install.prefix, lease: lease, adopted: adopted)
@@ -115,7 +117,8 @@ struct NFS2015Session {
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, metalFX: metalFX)
         return status
-      case .notReady(let notice):
+      case .notReady(let reason):
+        let notice = [reason, pressure].compactMap { $0 }.joined(separator: " ")
         print(notice)
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, notice: notice,

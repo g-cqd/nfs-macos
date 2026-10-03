@@ -5,8 +5,12 @@ import LauncherCore
 package enum ClientPhase: Equatable, Sendable {
   /// The client has not written its start line yet, or only an earlier run has.
   case notStarted
-  /// The client started, and has not reported a completed sign-in and boot.
+  /// The client started and has reported none of its sign-in events: it is signed out, or it has
+  /// not got that far yet.
   case signedOut
+  /// The client reported its sign-in (the first ready event) and has not reported that it finished
+  /// booting. This is a slow or stalled start, not a signed-out client: the account is accepted.
+  case signedIn
   /// The client reported its sign-in and that it finished booting.
   case ready
 }
@@ -51,7 +55,11 @@ package struct ClientLogProbe: Equatable, Sendable {
         stamp >= since.addingTimeInterval(-Self.tolerance)
       else { return .notStarted }
     }
-    return hasReadyEvents(in: text[start.upperBound...]) ? .ready : .signedOut
+    let segment = text[start.upperBound...]
+    if hasReadyEvents(in: segment) { return .ready }
+    // The events come in order, sign-in first; only the first one is evidence of a sign-in.
+    return readyEvents.first.map { segment.contains("Telemetry Event [\($0)]") } == true
+      ? .signedIn : .signedOut
   }
 
   private func hasReadyEvents(in segment: Substring) -> Bool {
@@ -104,6 +112,12 @@ package enum ClientWaitResult: Equatable, Sendable {
       return """
         The EA app is open but not signed in. Sign in to it, then press Play again. It stays \
         running; Play reuses it.
+        """
+    case .signedIn:
+      return """
+        The EA app is signed in but has not finished starting. It is slow to start, which is \
+        usual while the Mac is short of memory or busy with other work. Leave it open and give \
+        it a moment, then press Play again. Play reuses it.
         """
     case .notStarted, .ready:
       return """
