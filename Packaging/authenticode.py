@@ -422,7 +422,7 @@ def parse_signature(data: bytes) -> Signature:
     infos = seq(signer_set, 'signerInfos')
     if len(infos) != 1:
         raise SignatureError(f'expected exactly one SignerInfo, found {len(infos)}')
-    kids = seq(expect(infos[0], 0x30, 'SignerInfo'), 'SignerInfo', 5)
+    kids = seq(expect(infos[0], 0x30, 'SignerInfo'), 'SignerInfo', 6)
     issuer_serial = seq(expect(kids[1], 0x30, 'issuerAndSerialNumber'), 'issuerAndSerialNumber', 2)
     signer_digest = algorithm_of(kids[2])
     if kids[3].tag != 0xA0:
@@ -567,11 +567,13 @@ def fmt(moment: datetime) -> str:
 
 
 def verify(path_or_bytes, *, publisher: str, roots_pem: Path | None = None,
-           at_time: datetime | None = None) -> VerifyResult:
+           at_time: datetime | None = None, expected_root: str | None = None) -> VerifyResult:
     """Check a PE's Authenticode signature; never raises for an invalid signature.
 
     Raises ValueError for a file that is not a (complete) PE or has no certificate table. A naive at_time is
-    taken as UTC. Every failure adds a problem string and leaves ok False.
+    taken as UTC. Every failure adds a problem string and leaves ok False. `expected_root`, when given, must
+    occur in the subject of the root the chain ends in, which pins the publisher's CA instead of trusting
+    every root the system store holds.
     """
     data = bytes(path_or_bytes) if isinstance(path_or_bytes, (bytes, bytearray)) else Path(path_or_bytes).read_bytes()
     res = VerifyResult(file_sha256=hashlib.sha256(data).hexdigest())
@@ -583,9 +585,15 @@ def verify(path_or_bytes, *, publisher: str, roots_pem: Path | None = None,
     res.digest_algorithm, res.signature_algorithm = sig.digest_algorithm, SIGNATURES.get(
         sig.signature_algorithm, (sig.signature_algorithm,))[0]
     res.timestamp, res.notes = sig.timestamp, list(sig.notes)
-    if sig.trailing_after_table:
-        res.notes.append(f'{sig.trailing_after_table} bytes follow the certificate table (not signed)')
     problems = res.problems
+    if sig.trailing_after_table:
+        # Windows requires the certificate table to be the last thing in the file; bytes after it are not
+        # covered by any digest, so a signature over the rest would vouch for an appended payload.
+        problems.append(f'{sig.trailing_after_table} bytes follow the certificate table (not signed)')
+    for what, name in [('PE digest', sig.digest_algorithm), ('SignerInfo digest', sig.signer_digest_algorithm),
+                       ('signature', SIGNATURES.get(sig.signature_algorithm, ('',))[0].lower())]:
+        if 'sha1' in name:
+            problems.append(f'the {what} uses SHA-1, which is not accepted')
     # (1) PE digest vs the digest embedded in SpcIndirectDataContent
     if sig.digest_algorithm not in DIGESTS.values():
         problems.append(f'unsupported PE digest algorithm {sig.digest_algorithm}')
@@ -639,6 +647,8 @@ def verify(path_or_bytes, *, publisher: str, roots_pem: Path | None = None,
             problem = f'certificate chain check could not run: {exc}'
         if problem:
             problems.append(problem)
+        elif expected_root is not None and expected_root not in res.chain_root:
+            problems.append(f'the chain ends in {res.chain_root!r}, not in a root named {expected_root!r}')
     finally:
         shutil.rmtree(work, ignore_errors=True)
     return finish(res)
