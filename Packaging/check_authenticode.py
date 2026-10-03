@@ -218,6 +218,18 @@ def real_installer_cases():
             result = verify(data, publisher=PUBLISHER, roots_pem=empty)
             assert not result.ok and any('chain verification failed' in p for p in result.problems), result.problems
         case('chain without the root in the trust store is rejected', untrusted_root)
+
+        def appended_payload():
+            result = verify(data + b'\0' * 16 + b'MZ appended payload', publisher=PUBLISHER, roots_pem=roots)
+            assert not result.ok and any('follow the certificate table' in p for p in result.problems), result.problems
+            assert not any('digest' in p and 'mismatch' in p for p in result.problems), result.problems
+        case('bytes appended after the certificate table are refused', appended_payload)
+
+        def pinned_root():
+            assert verify(data, publisher=PUBLISHER, roots_pem=roots, expected_root='DigiCert Trusted Root G4').ok
+            result = verify(data, publisher=PUBLISHER, roots_pem=roots, expected_root='Some Other Root')
+            assert not result.ok and any('not in a root named' in p for p in result.problems), result.problems
+        case('the chain must end in the pinned root', pinned_root)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
