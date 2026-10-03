@@ -58,13 +58,13 @@ GAME_ROOT = 'Program Files/EA Games'
 class Rule:
     """One classification decision, with the reason it was taken."""
 
-    def __init__(self, ident, action, pattern, reason):
-        assert action in {'keep', 'drop', 'forbid'}
-        self.ident, self.action, self.reason = ident, action, reason
+    def __init__(self, ident, action, pattern, reason, kind=None):
+        assert action in {'keep', 'drop', 'forbid'} and kind in {None, 'dir', 'file'}
+        self.ident, self.action, self.reason, self.kind = ident, action, reason, kind
         self.pattern = re.compile(pattern)
 
-    def matches(self, value):
-        return self.pattern.fullmatch(value) is not None
+    def matches(self, value, kind=None):
+        return (self.kind is None or kind is None or self.kind == kind) and self.pattern.fullmatch(value) is not None
 
 
 # Paths are relative to `drive_c`, with forward slashes. The first matching rule decides.
@@ -82,21 +82,21 @@ FILE_RULES = [
     Rule('F05', 'drop', rf'ProgramData/Package Cache/{GUID}[^/]*/state\.rsm',
          'The setup engine\'s resume state: it records where the installer was started from, which is a path on the build Mac'),
     Rule('F06', 'keep', r'ProgramData/Package Cache',
-         'Folder of the setup engine\'s package cache'),
+         'Folder of the setup engine\'s package cache', kind='dir'),
     Rule('F07', 'keep', rf'ProgramData/Package Cache/{GUID}[^/]*',
-         'The package cache folders the setup engine registers for repair and uninstall'),
+         'The package cache folders the setup engine registers for repair and uninstall', kind='dir'),
     Rule('F08', 'keep', rf'ProgramData/Package Cache/{GUID}[^/]*/[^/]+\.(?:msi|exe)',
-         'The cached MSI and the cached setup engine, which the registered repair and uninstall commands run'),
+         'The cached MSI and the cached setup engine, which the registered repair and uninstall commands run', kind='file'),
     Rule('F09', 'keep', rf'windows/Installer/{GUID}',
-         'Windows Installer product folder'),
+         'Windows Installer product folder', kind='dir'),
     Rule('F10', 'keep', rf'windows/Installer/{GUID}/[^/]+\.ico',
-         'The product icon Windows Installer copies beside its cache'),
+         'The product icon Windows Installer copies beside its cache', kind='file'),
     Rule('F11', 'keep', r'windows/Installer/[0-9a-f]{1,8}\.msi',
-         'Windows Installer\'s cached copy of the package (renamed to a fixed name; the registry value follows)'),
+         'Windows Installer\'s cached copy of the package (renamed to a fixed name; the registry value follows)', kind='file'),
     Rule('F12', 'drop', rf'{EA_PROGRAMS}/.*\.lnk',
-         'A shortcut inside the program folder: it embeds install timestamps and only starts an EA tool from a start menu'),
+         'A shortcut inside the program folder: it embeds install timestamps and only starts an EA tool from a start menu', kind='file'),
     Rule('F13', 'keep', rf'{EA_PROGRAMS}/EA Desktop/[^/]+/EA Desktop/legacyPM/EACore_App\.ini',
-         'The one .ini in the client: a static legacy agent table with placeholders ({clientGUID}); identical in every install'),
+         'The one .ini in the client: a static legacy agent table with placeholders ({clientGUID}); identical in every install', kind='file'),
     Rule('F14', 'forbid', r'.*\.(?:ini|log|sqlite|db|tmp|bak|pem|p12|pfx|reg|keychain|zip|7z|rar|sha256)',
          'A configuration, log, database, key or registry file nobody has reviewed'),
     Rule('F15', 'keep', rf'{EA_PROGRAMS}(/.*)?',
@@ -116,8 +116,17 @@ KEY_RULES = {
              'Wine\'s device enumeration, rewritten on every start with fresh container identifiers and the host\'s controllers'),
         Rule('R04', 'drop', r'System\\ControlSet001\\Control\\Session Manager',
              'A pending delete of an installer temp file'),
-        Rule('R05', 'keep', r'Software\\Classes\\.*',
-             'Windows Installer product, feature and dependency records, and the EA URL protocol handlers and COM extension'),
+        Rule('R13', 'drop', r'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings(\\.*)?',
+             'TLS 1.2 enablement for WinINet and WinHTTP (SecureProtocols 0x800) that the installer writes in some runs and not in '
+             'others; examined, no identifier. Dropped so that every capture is identical; the client signs in without it'),
+        Rule('R14', 'drop', r'System\\ControlSet001\\Control\\SecurityProviders\\Schannel(\\.*)?',
+             'TLS 1.2 client enablement (Enabled 1, DisabledByDefault 0) written in the same runs as R13; examined, no identifier; '
+             'dropped for the same reason'),
+        Rule('R05', 'keep',
+             rf'Software\\Classes\\(?:Installer\\.*|AppID\\{GUID}|CLSID\\{GUID}(?:\\.*)?'
+             r'|(?:eaconnect\.microsoft|ealink|epic2ea|link2ea|luna2ea|origin|origin2|steam2ea)(?:\\.*)?)',
+             'Windows Installer product, feature and dependency records, the EA URL protocol handlers, and the COM extension '
+             'the client registers (other file associations and COM classes are never touched)'),
         Rule('R06', 'keep', r'Software\\(?:Wow6432Node\\)?Electronic Arts(\\.*)?',
              'The EA client\'s own paths and install record'),
         Rule('R07', 'keep', r'Software\\Wow6432Node\\Origin',
@@ -143,6 +152,22 @@ KEY_RULES = {
              'The client\'s Xbox app extension state'),
     ],
 }
+
+# File types the EA client's program files are known to hold, from the 13.796.0.6309 install (two installs
+# compared). A file of any other type under the client's folder was never reviewed, so it stops the build
+# instead of being kept by the catch-all rule: a newer client's generated or personal file would otherwise
+# ship unnoticed. An empty suffix is a plain name such as `qmldir`.
+REVIEWED_SUFFIXES = {'', '.qml', '.dll', '.pak', '.xml', '.png', '.exe', '.qmltypes', '.qm', '.enc', '.rcc', '.js', '.bin',
+                     '.txt', '.winmd', '.ttf', '.dat', '.ini', '.properties', '.json'}
+
+
+def unreviewed_type(path, kind):
+    """Why a kept file under the client's folder has a type nobody reviewed, or None."""
+    if kind != 'file' or not path.startswith(EA_PROGRAMS + '/'):
+        return None
+    name = path.rsplit('/', 1)[-1]
+    suffix = os.path.splitext(name)[1].lower()
+    return None if suffix in REVIEWED_SUFFIXES else 'unreviewed file type ' + suffix
 
 # Values rewritten so that two independent installs give the same bytes.
 LOCAL_PACKAGE = re.compile(r'^("LocalPackage"=")C:\\\\windows\\\\Installer\\\\[0-9a-f]{1,8}\.msi(")$')
@@ -330,9 +355,9 @@ def load_baseline(directory):
             'hives': {hive: read_hive(directory / hive) for hive in HIVES}}
 
 
-def classify(rules, value):
+def classify(rules, value, kind=None):
     for rule in rules:
-        if rule.matches(value):
+        if rule.matches(value, kind):
             return rule
     return None
 
@@ -362,7 +387,8 @@ def build_plan(baseline, prefix):
         elif current[path] != before[path]:
             plan.problems.append('A baseline path was changed by the install: ' + path)
     for path in sorted(set(current) - set(before)):
-        rule = classify(FILE_RULES, path)
+        kind = 'dir' if current[path]['kind'] == 'dir' else 'file'
+        rule = classify(FILE_RULES, path, kind)
         if rule is None:
             plan.problems.append('Unclassified new path (decide keep or drop in client_layer.py): ' + path)
         elif rule.action == 'forbid':
@@ -371,6 +397,8 @@ def build_plan(baseline, prefix):
             plan.drop(plan.dropped, rule, path)
         elif current[path]['kind'] == 'link':
             plan.problems.append('A link cannot be part of a layer: ' + path)
+        elif unreviewed_type(path, kind):
+            plan.problems.append('%s (decide in client_layer.py): %s' % (unreviewed_type(path, kind), path))
         else:
             plan.files[path] = current[path]
     for hive in HIVES:
@@ -496,8 +524,10 @@ def rename_package(entries):
 # --- checking a layer -----------------------------------------------------------------------------------
 
 def safe_path(path):
+    if not isinstance(path, str):
+        return False
     parts = path.split('/')
-    return (isinstance(path, str) and 0 < len(path.encode()) <= 512 and '\\' not in path and '\0' not in path
+    return (0 < len(path.encode()) <= 512 and '\\' not in path and '\0' not in path
             and not any(ord(c) < 32 for c in path) and all(part not in {'', '.', '..'} for part in parts))
 
 
@@ -550,6 +580,11 @@ def verify_layer(layer, expected_digest=None, client=None):
         return ['The layer manifest has an unknown shape']
     if client is not None and manifest['client'] != client:
         problems.append('The layer was made from a different client than the recipe pins')
+    described = manifest['client']
+    if not isinstance(described, dict) or any(
+            not isinstance(described.get(key), str) or not 0 < len(described[key]) <= 64
+            or not all(32 <= ord(c) <= 126 for c in described[key]) for key in ('name', 'version')):
+        problems.append('The layer describes a client the app would refuse (name and version are 1-64 printable ASCII)')
     if manifest_path.read_text() != canonical_json(manifest):
         problems.append('The layer manifest is not in canonical form')
     entries = manifest['entries']
@@ -564,9 +599,12 @@ def verify_layer(layer, expected_digest=None, client=None):
         if path.lower() in seen:
             problems.append('Duplicate layer path: ' + path)
         seen.add(path.lower())
-        rule = classify(FILE_RULES, path) if path != CANONICAL_PACKAGE else classify(FILE_RULES, 'windows/Installer/0.msi')
+        kind = 'dir' if entry.get('kind') == 'directory' else 'file'
+        rule = classify(FILE_RULES, path, kind) if path != CANONICAL_PACKAGE else classify(FILE_RULES, 'windows/Installer/0.msi', kind)
         if rule is None or rule.action != 'keep':
             problems.append('The layer holds a path policy does not keep: ' + path)
+        if unreviewed_type(path, kind):
+            problems.append('%s: %s' % (unreviewed_type(path, kind), path))
         if any(pattern.search(path) for pattern in FORBIDDEN_TEXT):
             problems.append('The layer names a user, host or temporary location: ' + path)
         if path == GAME_ROOT or path.startswith(GAME_ROOT + '/'):
@@ -574,9 +612,14 @@ def verify_layer(layer, expected_digest=None, client=None):
         refusal = app_policy_problem(path)
         if refusal:
             problems.append('The app would refuse this layer path (%s): %s' % (refusal, path))
-        for name in entry.get('xattrs', {}):
-            if name not in ALLOWED_XATTRS:
-                problems.append('Unreviewed extended attribute %s on %s' % (name, path))
+        for name, value in entry.get('xattrs', {}).items():
+            # The app refuses an attribute that is not valid base64 or decodes to more than 4096 bytes.
+            try:
+                decoded = base64.b64decode(value, validate=True)
+            except (ValueError, TypeError):
+                decoded = None
+            if name not in ALLOWED_XATTRS or decoded is None or len(decoded) > 4096:
+                problems.append('Unreviewed or unreadable extended attribute %s on %s' % (name, path))
         if entry.get('kind') == 'directory':
             if set(entry) - {'path', 'kind', 'mode', 'xattrs'} or entry.get('mode') != 0o755:
                 problems.append('Malformed directory entry: ' + path)
@@ -616,7 +659,11 @@ def verify_layer(layer, expected_digest=None, client=None):
         if hashlib.sha256(data).hexdigest() != part.get('sha256'):
             problems.append('Registry part does not match its digest: ' + name)
         text = data.decode('utf-8', errors='surrogateescape')
-        parsed = Hive.parse(text)
+        try:
+            parsed = Hive.parse(text)
+        except ValueError as error:
+            problems.append('Registry part %s cannot be read: %s' % (name, error))
+            continue
         if any(line.strip() for line in parsed.header) or len(parsed.keys) != part.get('keys'):
             problems.append('Registry part is not plain key sections: ' + name)
         if text != part_text({key: section['body'] for key, section in parsed.keys.items()}):
@@ -683,7 +730,8 @@ def describe():
 
     lines = ['| Rule | Decision | Applies to | Why |', '|---|---|---|---|']
     for rule in FILE_RULES:
-        lines.append('| %s | %s | `%s` | %s |' % (rule.ident, rule.action, cell(rule.pattern.pattern), rule.reason))
+        kind = {'dir': ' (folders)', 'file': ' (files)', None: ''}[rule.kind]
+        lines.append('| %s | %s | `%s`%s | %s |' % (rule.ident, rule.action, cell(rule.pattern.pattern), kind, rule.reason))
     for hive, rules in KEY_RULES.items():
         for rule in rules:
             lines.append('| %s | %s | `%s` in %s | %s |' % (rule.ident, rule.action, cell(rule.pattern.pattern), hive,

@@ -273,7 +273,7 @@ def validate_client_layer(declared):
     if not isinstance(client, dict) or set(client) != {'name', 'version', 'installer', 'package'}:
         raise ValueError('The client layer must describe its client, installer and package')
     if not isinstance(client['name'], str) or not 0 < len(client['name']) <= 64 \
-            or any(ord(c) < 32 for c in client['name']):
+            or any(not 32 <= ord(c) <= 126 for c in client['name']):
         raise ValueError('The client layer needs a plain client name')
     if not re.fullmatch(r'[0-9]{1,6}(?:\.[0-9]{1,6}){1,3}', str(client['version'])):
         raise ValueError('The client layer needs the client version')
