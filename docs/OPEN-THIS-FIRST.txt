@@ -1,6 +1,6 @@
-NEED FOR SPEED (2015) - COMPLETE PORTABLE APP - OPEN THIS FIRST
+NEED FOR SPEED (2015) - COMPLETE APP - OPEN THIS FIRST
 
-Need for Speed Bundled 20261002-7d108a4-portable-complete.app
+Need for Speed Bundled 20261003-7d108a4-complete.app
 
 WHAT IT IS
 A Mac app that runs Need for Speed (2015) through Wine. It carries your own licensed game files and EA's own
@@ -50,7 +50,25 @@ This app never sees, stores or copies your sign-in.
 STEP 4 - PLAY
 Press "Play". Expect two prompts that do not come from this app:
 - EA may ask you to activate the game on this Mac, once (EA sees a Mac it has not seen).
-- macOS may ask whether the app may use the microphone (the game's voice chat). Answer as you prefer.
+- macOS asks whether the app may use the microphone. It can already ask on the first launch, when the EA app or the
+  game first looks for an audio input (the game has voice chat). The app never records; answer as you prefer.
+
+THE SETTINGS PAGE
+The "Settings" page in the left list changes a reviewed set of the game's own video, audio and control options (a
+33-option catalog), and nothing else. It works only after the game has written its options file: start the game once
+and quit it. It refuses to save while the game is running, or when the file changed since the page read it, or when
+the file does not have the layout the app knows. Before the first change it keeps the file exactly as the game wrote
+it, and before every later save the file as it was; "Restore Game Defaults" and "Undo Last Save" put either back.
+"Maximum Quality" only chooses values, and nothing is written until you press Save Settings.
+
+METALFX UPSCALING (OFF BY DEFAULT)
+The Settings page has a MetalFX group. It is off, and while it is off the app changes nothing. When you switch it on
+and choose a factor (1.25 to 2.0) and press Save MetalFX, Apple's MetalFX enlarges the game's finished picture by that factor, for the game's
+program only, not for the EA app. Caveat: this app runs the game with Retina mode, so the game's picture is already at
+your screen's pixel size. With the game at that size a factor above 1 only gives the GPU more work and adds no detail;
+it can only pay off when the game itself is set to a resolution below your screen's, so that the enlarged picture
+lands near your screen's size. The page shows the sizes. "Reset MetalFX" turns it off again. It was tried only with a
+small test program, never with the game, so whether it looks or runs better in the game is not known.
 
 IF SOMETHING IS WRONG
 - "Open Log" in the app shows what the helper did.
@@ -58,13 +76,17 @@ IF SOMETHING IS WRONG
   installer from ea.com).
 - To start over, quit the app and move ~/Library/Application Support/NFS2015Mac to the Trash. That removes the
   Windows folder, the EA app's state, your EA sign-in on this Mac and the game's settings and saves.
+- If the EA app's window does not appear after "Open EA App": this has been seen in some sessions (Wine's windows were
+  created but not on screen). It is a known, unsolved issue; docs/NFS2015.md section 15.6 gives the workaround that
+  worked when the EA app was started by hand.
 - Not supported: Intel Macs, macOS 14 or earlier, a Mac without Rosetta.
 
 WHAT WAS AND WAS NOT TESTED
 Tested on the Mac that built the app: the first start in a clean environment with the network switched off, the
 app copied to a different folder, the EA app starting from the app's own copy and showing EA's sign-in window,
 and the result of the first start (the EA app installed and registered, no account or machine state of EA's
-anywhere). NOT tested: a second Mac, macOS 15, Gatekeeper and the quarantine steps above (they describe how
-macOS behaves), EA's sign-in, the activation prompt, playing the game from this build, the microphone prompt,
-or EA's own self-update. docs/NFS2015.md section 15 inside the app's source archive says exactly what was
-checked and how.
+anywhere), and the Settings page and the MetalFX text of the settings against made-up files and a test profile.
+NOT tested: a second Mac, macOS 15, Gatekeeper and the quarantine steps above (they describe how
+macOS behaves), EA's sign-in, the activation prompt, playing the game from this build, changing a setting in the
+game, the visual effect of MetalFX, the microphone prompt, or EA's own self-update. docs/NFS2015.md sections 15 to 18
+inside the app's source archive say exactly what was checked and how.
