@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import tarfile
 
 import client_layer
@@ -133,6 +134,105 @@ def audit_managed_runtime(app, manifest, recipe):
                 problems.append('Unexpected file beside the managed runtime: ' + path.relative_to(app).as_posix())
     if not (resources / 'Licenses/wine-mono.txt').is_file():
         problems.append('The managed runtime has no notice')
+    return problems
+
+
+# The licence texts of third-party components, kept verbatim and pinned by the recipe.
+LICENSE_TEXTS = Path(__file__).with_name('Licenses')
+
+
+def third_party_licence_bytes(declared):
+    """The pinned licence text of one component, read from this tree; refuses a text that is not its pin."""
+    source = LICENSE_TEXTS / declared['source']
+    if source.is_symlink() or not source.is_file():
+        raise ValueError('The licence text of ' + declared['component'] + ' is missing: ' + declared['source'])
+    data = source.read_bytes()
+    if hashlib.sha256(data).hexdigest() != declared['sha256']:
+        raise ValueError('The licence text of ' + declared['component'] + ' does not match its pin')
+    return data
+
+
+def third_party_licence_provenance(declared):
+    """What the app's provenance records about one shipped licence text."""
+    return {key: declared[key] for key in ['component', 'version', 'licence', 'path', 'sha256', 'url', 'tagCommit']}
+
+
+# What a section of the runtime's NOTICE.md promises, by the component its heading names. A heading
+# this table does not know is a problem, so a new promise cannot be written without a check for it.
+NOTICE_REMAINDER = 'Everything else'
+NOTICE_NOT_SHIPPED = {'apple d3dmetal': ('d3dmetal', 'libd3dshared', 'gptk')}
+WINE_LICENCE = 'Licenses/Wine-COPYING.LIB.txt'
+
+
+def notice_components(text):
+    """The component each `## ` heading of a NOTICE.md names (the words before the dash)."""
+    return [re.split(r'\s+[\u2014-]\s+', heading, maxsplit=1)[0].strip()
+            for heading in re.findall(r'^## (.+)$', text, flags=re.M)]
+
+
+def audit_notice_licences(app, recipe):
+    """Every component the shipped NOTICE.md names has its licence in the app, and nothing it says is not shipped is.
+
+    The recipe's pinned texts (`thirdPartyLicenses`) must be in the app byte for byte whether or not a
+    NOTICE names them; Wine's LGPL text and the third-party library notices must be there; and a
+    component the notice says is not shipped must not be anywhere in the app.
+    """
+    app = Path(app)
+    resources = app / 'Contents/Resources'
+    problems = []
+    declared = {item['component'].casefold(): item for item in recipe.get('thirdPartyLicenses', [])}
+    for item in declared.values():
+        target = resources / item['path']
+        if target.is_symlink() or not target.is_file():
+            problems.append('The licence of ' + item['component'] + ' is missing: ' + item['path'])
+        elif hashlib.sha256(target.read_bytes()).hexdigest() != item['sha256']:
+            problems.append('The licence of ' + item['component'] + ' is not the pinned text')
+    notices = sorted(resources.glob('Sources/*/NOTICE.md'))
+    for notice in notices:
+        named = notice_components(notice.read_text())
+        label = notice.relative_to(app).as_posix()
+        if not named:
+            problems.append(label + ' names no component')
+        for component in named:
+            key = component.casefold()
+            if component == NOTICE_REMAINDER:
+                problems += audit_library_notices(resources / 'Licenses/Wine-dependencies')
+            elif key == 'wine':
+                path = resources / WINE_LICENCE
+                text = path.read_text(errors='replace') if path.is_file() and not path.is_symlink() else ''
+                if 'GNU LESSER GENERAL PUBLIC LICENSE' not in text or 'Version 2.1' not in text:
+                    problems.append('Wine is named in ' + label + ' but ' + WINE_LICENCE + ' is not the LGPL 2.1 text')
+            elif key in declared:
+                if not os.path.lexists(resources / declared[key]['path']):
+                    problems.append(component + ' is named in ' + label + ' without its licence file')
+            elif key in NOTICE_NOT_SHIPPED:
+                needles = NOTICE_NOT_SHIPPED[key]
+                found = []
+                for path in sorted(app.rglob('*')):
+                    if path.is_relative_to(resources / 'Licenses') or any(top in path.parents for top in found):
+                        continue
+                    if any(needle in path.name.casefold() for needle in needles):
+                        found.append(path)
+                        problems.append(component + ' is said not to ship but ' + path.relative_to(app).as_posix()
+                                        + ' is in the app')
+            else:
+                problems.append(label + ' names ' + repr(component) + ', which has no licence rule in the audit')
+    return problems
+
+
+def audit_library_notices(folder):
+    """Each retained library version has at least one non-empty licence file."""
+    problems = []
+    if not folder.is_dir() or folder.is_symlink():
+        return ['The library licence notices are missing: ' + folder.name]
+    versions = sorted(path for library in folder.iterdir() if library.is_dir() for path in library.iterdir()
+                      if path.is_dir())
+    if not versions:
+        problems.append('The library licence notices are empty')
+    for version in versions:
+        files = [path for path in version.rglob('*') if path.is_file() and path.stat().st_size > 0]
+        if not files:
+            problems.append('No licence file for ' + version.parent.name + ' ' + version.name)
     return problems
 
 

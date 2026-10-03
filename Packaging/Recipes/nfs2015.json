@@ -63,6 +63,19 @@
   "runtimeRetention": [
     "lib/wine/dxgi/dxmt"
   ],
+  "thirdPartyLicenses": [
+    {
+      "component": "dxmt",
+      "version": "v0.80",
+      "licence": "MIT",
+      "path": "Licenses/dxmt.txt",
+      "source": "dxmt-v0.80-LICENSE.txt",
+      "sha256": "6b928413c6308c106f3e0080bd94b6427b56d587d400fd40e6cbfbab7d9c4ae1",
+      "url": "https://github.com/3Shain/dxmt/blob/v0.80/LICENSE",
+      "tagCommit": "589adb780354b461645b29999cefaf533594ee99",
+      "blobSHA1": "41dd6778e00185dffc2c66a13a541c9faa1ae93c"
+    }
+  ],
   "originalFiles": [
     "dbdata.dll",
     "dbdataEA.dll",

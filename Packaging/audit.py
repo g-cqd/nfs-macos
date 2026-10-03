@@ -7,7 +7,7 @@ import subprocess
 import sys
 import struct
 from bundle_hygiene import (audit_app_tree, audit_build_paths, audit_client_layer, audit_game_payload, audit_managed_runtime,
-                            audit_runtime_pins)
+                            audit_notice_licences, audit_runtime_pins)
 from game_data import bundled_entries
 from privacy import audit_privacy
 from recipes import validate_recipe
@@ -102,6 +102,7 @@ hazards += audit_build_paths(app, Path.home())
 if recipe_path.exists():
     hazards += audit_runtime_pins(app, PINS, embedded, pinned_runtime)
     hazards += audit_managed_runtime(app, manifest, embedded)
+    hazards += audit_notice_licences(app, embedded)
     hazards += audit_client_layer(app, manifest, embedded)
     if manifest.get('gameDataIncluded', True) and manifest.get('storeClient'):
         hazards += audit_game_payload(app, manifest, embedded)
