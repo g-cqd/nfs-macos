@@ -28,6 +28,7 @@ struct NFS2015Session {
         try files.createDirectory(
           at: paths.support.appendingPathComponent(folder), withIntermediateDirectories: true)
       }
+      let metalFX = metalFXState(for: options)
       let manifest = try BundleManifest.read(
         from: paths.resources.appendingPathComponent("game-manifest.json"))
       guard manifest.kind == paths.kind, let plan = manifest.client,
@@ -38,7 +39,8 @@ struct NFS2015Session {
       let owned = manifest.seedsPrefix
       let runtime = WineRuntime(
         paths: paths, output: output, tuning: manifest.tuning,
-        renderers: manifest.rendererSelection, managedRuntime: manifest.managed)
+        renderers: manifest.rendererSelection, managedRuntime: manifest.managed,
+        environments: NFS2015MetalFX.environment(for: metalFX.preference).map { [$0] } ?? [])
       var readiness: NFS2015Readiness
       if owned {
         guard options.action != "--choose-installation" else {
@@ -60,12 +62,15 @@ struct NFS2015Session {
         }
       }
       var store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
-      var settings = try store.load()
+      var settingsOutcome: NFS2015SettingsOutcome?
       if options.action == "--configure", let request = options.request {
         let requested = try JSONDecoder().decode(
-          NFS2015Settings.self, from: BoundedFile.read(request, limit: 65_536))
-        // The game's own file is the record, so the snapshot reports what it now holds.
-        settings = try store.apply(requested)
+          NFS2015SettingsRequest.self, from: BoundedFile.read(request, limit: 65_536))
+        // A refusal is an answer, not a failure: the starter shows the reason beside the
+        // settings, and the snapshot below reports what the game's file holds.
+        do { settingsOutcome = try store.apply(requested) } catch {
+          settingsOutcome = .refused(error.localizedDescription)
+        }
       }
       let prefix = owned ? paths.prefix : readiness.install?.prefix
       if options.action != "--configure", adopted == nil, let prefix {
@@ -86,7 +91,8 @@ struct NFS2015Session {
         store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       }
       try snapshot(
-        readiness: readiness, store: store, settings: settings, plan: plan, owned: owned)
+        readiness: readiness, store: store, plan: plan, owned: owned, outcome: settingsOutcome,
+        metalFX: metalFX)
       guard options.action == "--play" else { return 0 }
       guard let install = readiness.install else {
         throw LauncherError.operation(
@@ -95,22 +101,47 @@ struct NFS2015Session {
       }
       let environment = try runtime.environment(prefix: install.prefix)
       try requireRosetta(environment)
+      if metalFX.preference.spatialUpscaling {
+        print(
+          "MetalFX spatial upscaling is on at \(metalFX.preference.factor.rawValue)x for "
+            + "\(NFS2015MetalFX.executable) only.")
+      }
+      if let notice = metalFX.notice { print(notice) }
       let outcome = try play(
         plan: try NFS2015LaunchPlan.make(install: install, plan: plan), environment: environment,
         runtime: runtime, prefix: install.prefix, lease: lease, adopted: adopted)
       switch outcome {
       case .finished(let status):
         try snapshot(
-          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned)
+          readiness: readiness, store: store, plan: plan, owned: owned, metalFX: metalFX)
         return status
       case .notReady(let notice):
         print(notice)
         try snapshot(
-          readiness: readiness, store: store, settings: try store.load(), plan: plan, owned: owned,
-          notice: notice)
+          readiness: readiness, store: store, plan: plan, owned: owned, notice: notice,
+          metalFX: metalFX)
         return 0
       }
     }
+  }
+
+  /// Carries out a MetalFX request, if this is one, and reads the choice the launch will use.
+  ///
+  /// A choice that cannot be read is MetalFX off with a notice, never a failure, so nothing here
+  /// can stop Play from starting the game.
+  private func metalFXState(for options: SessionOptions) -> NFS2015MetalFXState {
+    let store = NFS2015MetalFXStore(support: paths.support)
+    var outcome: NFS2015MetalFXOutcome?
+    if options.action == "--configure-metalfx", let request = options.request {
+      do {
+        let requested = try JSONDecoder().decode(
+          NFS2015MetalFXRequest.self, from: BoundedFile.read(request, limit: 4096))
+        outcome = store.apply(requested)
+      } catch { outcome = .refused(error.localizedDescription) }
+    }
+    let loaded = store.load()
+    return NFS2015MetalFXState(
+      preference: loaded.preference, notice: loaded.notice, outcome: outcome)
   }
 
   /// The EA app this app recorded earlier, when it is still running and the operation can use it.
@@ -394,19 +425,22 @@ struct NFS2015Session {
   }
 
   private func snapshot(
-    readiness: NFS2015Readiness, store: NFS2015SettingsStore, settings: NFS2015Settings,
-    plan: StoreClientPlan, owned: Bool, notice: String? = nil
+    readiness: NFS2015Readiness, store: NFS2015SettingsStore, plan: StoreClientPlan, owned: Bool,
+    outcome: NFS2015SettingsOutcome? = nil, notice: String? = nil, metalFX: NFS2015MetalFXState
   ) throws {
     let installed = readiness.install
     var version = installed?.clientVersion
     if version == nil, owned {
       version = try NFS2015Locator.client(prefix: paths.prefix, plan: plan)?.version
     }
+    let options = try store.inspect()
     try NFS2015Snapshot(
       blocker: owned ? readiness.ownedMessage : readiness.message, clientVersion: version,
       installedAt: owned ? paths.prefix.path : installed?.prefix.path,
-      hasOptionsFile: try store.optionsFile() != nil, settings: settings,
-      ownsWindowsFolder: owned ? true : nil, setup: owned ? readiness.setup : nil, notice: notice
+      hasOptionsFile: try store.optionsFile() != nil, settings: options.settings,
+      optionsDigest: options.digest, optionsProblem: options.problem, backups: options.backups,
+      outcome: outcome, ownsWindowsFolder: owned ? true : nil,
+      setup: owned ? readiness.setup : nil, notice: notice, metalFX: metalFX
     ).write(to: paths.support.appendingPathComponent("launcher-state.json"))
   }
 }

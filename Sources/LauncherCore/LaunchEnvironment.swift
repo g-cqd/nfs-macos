@@ -33,19 +33,22 @@ package enum LaunchEnvironment {
   /// fixed here. A recipe may instead declare its own selections, which is how a Direct3D 11
   /// title picks a DXGI backend that implements what its engine needs, and how one runtime can
   /// serve a store client and its game differently.
-  static func compatibilityRules(_ kind: GameKind, renderers: [RendererSelection])
-    throws(LauncherError) -> String
-  {
+  static func compatibilityRules(
+    _ kind: GameKind, renderers: [RendererSelection], environments: [ExecutableEnvironment] = []
+  ) throws(LauncherError) -> String {
     guard !renderers.isEmpty else {
-      return "v=3\nname=\(kind.rawValue)-bundle;exe=*;d3d9=mtld3d;dxgi=wined3d"
+      var lines = ["v=3", "name=\(kind.rawValue)-bundle;exe=*;d3d9=mtld3d;dxgi=wined3d"]
+      try ExecutableEnvironment.attach(environments, to: &lines, selections: [], kind: kind)
+      return lines.joined(separator: "\n")
     }
-    return try RendererSelection.compatibilityDatabase(renderers, kind: kind)
+    return try RendererSelection.compatibilityDatabase(
+      renderers, kind: kind, environments: environments)
   }
 
   package static func make(
     paths: AppPaths, prefix: URL, home: URL, temporary: URL,
     tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = [],
-    managedCode: Bool = false
+    managedCode: Bool = false, environments: [ExecutableEnvironment] = []
   ) throws(LauncherError) -> [String: String] {
     var environment = [
       "HOME": home.path,
@@ -59,7 +62,8 @@ package enum LaunchEnvironment {
       "WINEDLLOVERRIDES": overrides(paths.kind, managedCode: managedCode),
       "ROSETTA_X87_PATH": paths.sidecar.path,
       "WINEMSYNC": "1",
-      "WINE_COMPATDB": try compatibilityRules(paths.kind, renderers: renderers),
+      "WINE_COMPATDB": try compatibilityRules(
+        paths.kind, renderers: renderers, environments: environments),
       "MTL_HUD_ENABLED": "0",
       "RUST_LOG": "warn,mtld3d::perf=off",
     ]

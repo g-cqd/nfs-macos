@@ -6,7 +6,10 @@ import NFS2015Core
 enum NFS2015Operation: Sendable, Equatable {
   case prepare
   case play
-  case configure(NFS2015Settings)
+  /// Changes, or restores, the game's own options file; see `NFS2015SettingsRequest`.
+  case configure(NFS2015SettingsRequest)
+  /// Keeps, or forgets, the MetalFX choice in this app's own folder; see `NFS2015MetalFXRequest`.
+  case configureMetalFX(NFS2015MetalFXRequest)
   case chooseInstallation(URL)
   case enableController
   /// Runs the EA app installer the player downloaded, in the app's own Windows folder.

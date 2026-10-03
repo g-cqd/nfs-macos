@@ -12,6 +12,15 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
   /// Whether the game's own options file exists yet; settings cannot be changed before it does.
   package var hasOptionsFile: Bool
   package var settings: NFS2015Settings
+  /// Fingerprint of the options file the settings were read from. A request to change it must
+  /// quote this, so a change the game made since is detected rather than overwritten.
+  package var optionsDigest: String?
+  /// Why the options file is shown but cannot be edited, worded for the player; nil when it can.
+  package var optionsProblem: String?
+  /// Which saved copies of the options file exist, for the restore buttons.
+  package var backups: NFS2015BackupState?
+  /// What the last settings request did; nil for any other operation.
+  package var outcome: NFS2015SettingsOutcome?
   /// Set when this app created its own Windows folder and carries the game in it, so the
   /// starter offers to install the EA app and sign in instead of choosing a folder.
   package var ownsWindowsFolder: Bool?
@@ -20,20 +29,31 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
   /// What the last Play ended with when it did not start the game and nothing is wrong: the EA
   /// app is running and needs the player, or has not finished starting.
   package var notice: String?
+  /// The MetalFX choice the next launch will use, and what the last request for it did. Absent
+  /// from a state file an older version wrote, which reads as MetalFX off.
+  package var metalFX: NFS2015MetalFXState?
 
   package init(
     blocker: String? = nil, clientVersion: String? = nil, installedAt: String? = nil,
     hasOptionsFile: Bool = false, settings: NFS2015Settings = NFS2015Settings(),
-    ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil, notice: String? = nil
+    optionsDigest: String? = nil, optionsProblem: String? = nil,
+    backups: NFS2015BackupState? = nil, outcome: NFS2015SettingsOutcome? = nil,
+    ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil, notice: String? = nil,
+    metalFX: NFS2015MetalFXState? = nil
   ) {
     self.blocker = blocker
     self.clientVersion = clientVersion
     self.installedAt = installedAt
     self.hasOptionsFile = hasOptionsFile
     self.settings = settings
+    self.optionsDigest = optionsDigest
+    self.optionsProblem = optionsProblem
+    self.backups = backups
+    self.outcome = outcome
     self.ownsWindowsFolder = ownsWindowsFolder
     self.setup = setup
     self.notice = notice
+    self.metalFX = metalFX
   }
 
   package static func read(from url: URL) throws(LauncherError) -> Self {

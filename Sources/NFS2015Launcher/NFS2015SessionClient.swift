@@ -72,6 +72,12 @@ actor NFS2015SessionClient: NFS2015Serving {
     case .installClient(let installer):
       arguments += ["--install-client", "--request", installer.path]
     case .openClient: arguments.append("--open-client")
+    case .configureMetalFX(let choice):
+      try choice.validate()
+      let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
+      try JSONEncoder().encode(choice).write(to: request, options: .withoutOverwriting)
+      draft = request
+      arguments += ["--configure-metalfx", "--request", request.path]
     case .configure(let settings):
       try settings.validate()
       let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
