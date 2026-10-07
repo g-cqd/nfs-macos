@@ -195,11 +195,49 @@ struct NFS2015CrashMonitorTests {
   func `the background scan catches a fault without being asked`() throws {
     let fixture = try Fixture()
     defer { fixture.remove() }
-    let sut = monitor(fixture)
+    let reported = Reported()
+    let sut = NFS2015CrashMonitor(
+      log: fixture.log, store: NFS2015CrashReportStore(folder: fixture.reports), context: context(),
+      host: FixedHost(), now: { Date(timeIntervalSince1970: 1_791_000_000) }, interval: 0.01,
+      onReport: { reported.set($0) })
     sut.start()
     try fixture.append(Self.fault)
-    // stop() ends the thread and makes the last scan itself, so the report is there either way.
-    let notice = sut.stop()
-    #expect(notice != nil && fixture.reportFiles().count == 1)
+    // Only the background thread can have written this: nothing else scans before stop().
+    let notice = try #require(reported.wait(seconds: 30))
+    #expect(fixture.reportFiles().count == 1 && notice == sut.notice)
+    #expect(sut.stop() == notice)
+    #expect(fixture.reportFiles().count == 1)
+  }
+
+  @Test
+  func `reads a fault line the log ended without a line feed when it stops`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture)
+    try fixture.append(String(Self.fault.dropLast()))
+    #expect(sut.scan() == nil)
+    #expect(sut.stop() != nil)
+    #expect(fixture.reportFiles().count == 1)
+  }
+}
+
+/// Hands the report a background thread wrote to the test, without a sleep.
+private final class Reported: @unchecked Sendable {
+  private let condition = NSCondition()
+  private var notice: NFS2015CrashNotice?
+
+  func set(_ value: NFS2015CrashNotice) {
+    condition.lock()
+    notice = value
+    condition.broadcast()
+    condition.unlock()
+  }
+
+  func wait(seconds: TimeInterval) -> NFS2015CrashNotice? {
+    let deadline = Date(timeIntervalSinceNow: seconds)
+    condition.lock()
+    defer { condition.unlock() }
+    while notice == nil, condition.wait(until: deadline) {}
+    return notice
   }
 }

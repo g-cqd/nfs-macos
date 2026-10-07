@@ -25,14 +25,18 @@ package final class NFS2015DiagnosticCapture: Sendable {
   /// - Parameters:
   ///   - folder: Where the debug files go; created if absent. Old files are pruned first.
   ///   - main: The session log, which receives every line that is not a debug line.
-  package init(folder: URL, stamp: String, main: FileHandle) throws(LauncherError) {
+  package convenience init(folder: URL, stamp: String, main: FileHandle) throws(LauncherError) {
+    try self.init(folder: folder, stamp: stamp, main: main, pipe: Pipe())
+  }
+
+  /// The same, reading from a pipe the caller made, which a test can break.
+  init(folder: URL, stamp: String, main: FileHandle, pipe: Pipe) throws(LauncherError) {
     do {
       try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     } catch {
       throw .operation("Could not create the log folder: \(error.localizedDescription)")
     }
     NFS2015DiagnosticLog.prune(in: folder, limit: NFS2015DiagnosticLog.totalBytes / 2)
-    let pipe = Pipe()
     output = pipe.fileHandleForWriting
     reader = pipe.fileHandleForReading
     let thread = Thread { [self] in drain(folder: folder, stamp: stamp, main: main) }
@@ -55,7 +59,12 @@ package final class NFS2015DiagnosticCapture: Sendable {
     }
     while true {
       let chunk: Data?
-      do { chunk = try reader.read(upToCount: 65_536) } catch { break }
+      do { chunk = try reader.read(upToCount: 65_536) } catch {
+        // Closing the read end makes Wine's writes fail instead of blocking the game for good.
+        state.withLock { $0.failure = error.localizedDescription }
+        try? reader.close()
+        break
+      }
       guard let chunk, !chunk.isEmpty else { break }
       place(router.feed(chunk))
     }
@@ -63,7 +72,7 @@ package final class NFS2015DiagnosticCapture: Sendable {
     segments.close()
     state.withLock {
       $0.segments = segments.files
-      $0.failure = segments.failure
+      $0.failure = $0.failure ?? segments.failure
       $0.finished = true
     }
     condition.lock()

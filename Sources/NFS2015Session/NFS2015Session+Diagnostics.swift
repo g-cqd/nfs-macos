@@ -13,7 +13,12 @@ struct NFS2015PlayWatch {
   func finish() -> NFS2015CrashNotice? {
     if let capture {
       if !capture.finish(timeout: 10) {
-        print("The diagnostic log did not close within 10 seconds; its last lines may be missing.")
+        print(
+          """
+          The diagnostic log did not close within 10 seconds: the EA app is still running and \
+          keeps writing to a pipe nobody reads now. Its last lines may be missing, and faults of \
+          its game cannot be watched.
+          """)
       }
       if let failure = capture.failure {
         print("The diagnostic log stopped keeping lines: \(failure)")
@@ -96,7 +101,14 @@ extension NFS2015Session {
     }
     // An EA app this Play reuses writes to the log of the session that started it.
     let reused = adopted ? NFS2015ClientOutputLog.recorded(in: paths.support) : nil
-    if let log, !adopted { NFS2015ClientOutputLog.record(log, in: paths.support) }
+    if !adopted {
+      // The EA app inherits the pipe in a diagnostic Play, not the session log.
+      if let log, capture == nil {
+        NFS2015ClientOutputLog.record(log, in: paths.support)
+      } else {
+        NFS2015ClientOutputLog.clear(in: paths.support)
+      }
+    }
     var monitor: NFS2015CrashMonitor?
     if let watched = reused ?? log {
       let created = NFS2015CrashMonitor(

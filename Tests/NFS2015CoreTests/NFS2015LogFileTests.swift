@@ -122,6 +122,21 @@ struct NFS2015ClientOutputLogTests {
   }
 
   @Test
+  func `forgets the record, and clearing nothing is harmless`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let support = try support(scratch)
+    NFS2015ClientOutputLog.clear(in: support)
+    let log = try scratch.write("Support/Logs/session-1.log", "x")
+    NFS2015ClientOutputLog.record(log, in: support)
+    NFS2015ClientOutputLog.clear(in: support)
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+    #expect(
+      !FileManager.default.fileExists(
+        atPath: support.appendingPathComponent(NFS2015ClientOutputLog.fileName).path))
+  }
+
+  @Test
   func `finds nothing when nothing was recorded or the log is gone`() throws {
     let scratch = try Scratch()
     defer { scratch.remove() }
