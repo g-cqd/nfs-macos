@@ -20,6 +20,7 @@ from rosetta_request import build_rosetta_request
 from runtime_inputs import (PINS, PROJECT, clone, collect_sources, digest, runtime_provenance,
                             stage_runtime, verify_hashes, verify_inputs)
 from shader_cache_key import stage_cache_key
+from winehost import stage_winehost
 
 
 def strip_debug_map(binary):
@@ -266,6 +267,8 @@ def assemble(recipe, inputs, destination, include_game_data):
         for built in [contents / 'MacOS' / recipe['launcher'], contents / 'Helpers' / recipe['session']]:
             strip_debug_map(built)
         build_rosetta_request(app, recipe['bundleIdentifier'])
+        # Only a recipe with a winehost block gets the arm64 helper; every other recipe is unchanged.
+        stage_winehost(contents, recipe, inputs)
         optimization = stage_runtime(contents, recipe, inputs)
         (resources / 'size-optimization.json').write_text(json.dumps(optimization, indent=2) + '\n')
         manifest = stage_game(resources, recipe, inputs, include_game_data)

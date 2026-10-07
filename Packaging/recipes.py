@@ -4,6 +4,8 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 
+from winehost import validate_winehost
+
 RECIPE_DIRECTORY = Path(__file__).with_name('Recipes')
 
 
@@ -434,6 +436,8 @@ def validate_recipe(recipe):
     if 'thirdPartyLicenses' in recipe:
         validate_third_party_licenses(recipe['thirdPartyLicenses'])
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
+    if 'winehost' in recipe:
+        validate_winehost(recipe['winehost'], recipe['inputs'])
     if recipe.get('referencesInstallation'):
         # The import edition of a store-client recipe ships no game bytes at all, so it carries no
         # inventory. Its bundled edition, when the recipe declares one, ships the user's verified
