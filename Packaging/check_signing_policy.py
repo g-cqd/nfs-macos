@@ -1,6 +1,7 @@
 """Distribution signing accepts Developer ID and scopes Wine's memory exception."""
 from privacy import DEVICE_ENTITLEMENTS
-from signing_policy import resolve_identity, executable_entitlements, signing_entitlements
+from signing_policy import (resolve_identity, executable_entitlements, signing_entitlements,
+                            WINEHOST_BUNDLE_IDENTIFIER, WINEHOST_TEAM)
 
 development = '1' * 40
 distribution = '2' * 40
@@ -33,4 +34,27 @@ assert signing_entitlements('Contents/SharedSupport/Wine/bin/wine', '-') == DEVI
 assert signing_entitlements('Contents/SharedSupport/Wine/bin/wine', developer_id) == (
     memory | DEVICE_ENTITLEMENTS)
 assert signing_entitlements('Contents/Helpers/x87sidecar', '-') == {}
+winehost_app = 'Contents/Helpers/winehost.app'
+winehost_executable = winehost_app + '/Contents/MacOS/winehost'
+expected_winehost = {
+    'com.apple.developer.cross-architecture-support': True,
+    'com.apple.security.cs.allow-jit': True,
+    'com.apple.security.cs.disable-library-validation': True,
+    'com.apple.application-identifier': WINEHOST_TEAM + '.' + WINEHOST_BUNDLE_IDENTIFIER,
+    'com.apple.developer.team-identifier': WINEHOST_TEAM}
+# The helper's executable and its bundle are signed with the same set: re-signing the nested
+# app replaces the inner signature, so the bundle call has to carry the entitlements.
+for path in [winehost_app, winehost_executable]:
+    assert executable_entitlements(path) == expected_winehost, path
+    assert signing_entitlements(path, developer_id) == expected_winehost, path
+    # Ad-hoc: only the unrestricted keys; a restricted one without a profile gets the process killed.
+    assert signing_entitlements(path, '-') == {
+        'com.apple.security.cs.allow-jit': True,
+        'com.apple.security.cs.disable-library-validation': True}, path
+assert executable_entitlements('Contents/Helpers/Rosetta Request.app') == {}
+assert executable_entitlements('Contents/Helpers/winehost.app/Contents/Resources/other') == {}
+# Every other ad-hoc path keeps signing without entitlements, as before the arm64 route.
+for path in ['Contents/Helpers/x87sidecar', winehost_app + '/Contents/MacOS/other']:
+    assert signing_entitlements(path, '-') == {}, path
+    assert signing_entitlements(path, developer_id) == executable_entitlements(path), path
 print('Distribution signing policy regression passed')

@@ -8,7 +8,7 @@ import subprocess
 import argparse
 import plistlib
 import tempfile
-from signing_policy import resolve_identity, signing_entitlements
+from signing_policy import resolve_identity, signing_entitlements, WINEHOST_APP, WINEHOST_PATHS
 from runtime_inputs import archive_launcher
 
 PROJECT = Path(__file__).resolve().parent.parent
@@ -67,6 +67,9 @@ def main(identity='-'):
             if dependency.startswith("/") and not dependency.startswith(("/System/", "/usr/lib/")):
                 raise ValueError("External library dependency: " + dependency)
 
+    if identity != '-' and (APP / WINEHOST_APP).is_dir() and not (APP / WINEHOST_APP / 'Contents/embedded.provisionprofile').is_file():
+        # The restricted entitlements below are honoured only with the profile; refuse to ship without it.
+        raise ValueError('A Developer ID winehost needs Contents/embedded.provisionprofile')
     subprocess.run(["/usr/bin/xattr", "-cr", str(APP)], check=True)
     def sign(path):
         command = ['/usr/bin/codesign', '--force', '--sign', identity]
@@ -74,6 +77,8 @@ def main(identity='-'):
         # The app itself is signed through its main executable, which is the responsible program
         # for the permission prompts of every program it starts.
         program = APP / 'Contents/MacOS' / plistlib.loads((APP / 'Contents/Info.plist').read_bytes())['CFBundleExecutable'] if path == APP else path
+        # A nested app is re-signed below and a re-sign discards the inner executable's
+        # entitlements, so the policy covers the nested bundle path as well as its executable.
         entitlements = signing_entitlements(program.relative_to(APP).as_posix(), identity)
         if entitlements:
             with tempfile.NamedTemporaryFile(suffix='.plist') as temporary:
@@ -92,13 +97,19 @@ def main(identity='-'):
         with path.open("rb") as stream: pins[str(path.relative_to(APP))] = hashlib.file_digest(stream, "sha256").hexdigest()
     (APP / "Contents/Resources/runtime-files.json").write_text(json.dumps(pins, indent=2) + "\n")
     sign(APP)
+    winehost = [path for path in code if path.relative_to(APP).as_posix() in WINEHOST_PATHS]
+    if winehost and identity == '-':
+        print('Ad-hoc winehost: signed without com.apple.developer.cross-architecture-support, '
+              'the application identifier and the team identifier (a restricted entitlement without '
+              'its provisioning profile gets the process killed); sign with --identity for the arm64 route')
     subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(APP)], check=True)
     game_id = json.loads((APP / 'Contents/Resources/game-manifest.json').read_text()).get('gameID', 'nfsmw')
     (PROJECT / 'Evidence').mkdir(exist_ok=True)
     (PROJECT / 'Evidence' / ('signing-' + game_id + '.json')).write_text(json.dumps(dict(
         signature="ad-hoc" if identity == '-' else 'Developer ID', notarized=False,
         hardenedRuntime=identity != '-', nestedCodeCount=len(code), removedSearchPaths=changes,
-        preservedVendorCode=[str(path.relative_to(APP)) for path in vendor]), indent=2) + "\n")
+        preservedVendorCode=[str(path.relative_to(APP)) for path in vendor],
+        **({'winehost': 'ad-hoc: restricted entitlements omitted' if identity == '-' else 'Developer ID: entitlements and provisioning profile applied'} if winehost else {})), indent=2) + "\n")
     print("Verified", 'ad-hoc' if identity == '-' else 'Developer ID', "signatures for the app and",
           len(code), "nested code files;", len(vendor), "vendor files kept their own signature")
 
