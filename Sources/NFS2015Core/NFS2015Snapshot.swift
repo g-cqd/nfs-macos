@@ -32,6 +32,11 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
   /// The MetalFX choice the next launch will use, and what the last request for it did. Absent
   /// from a state file an older version wrote, which reads as MetalFX off.
   package var metalFX: NFS2015MetalFXState?
+  /// The display-safety and diagnostic-log choices, and what the display rule decided. Absent
+  /// from a state file an older version wrote, which reads as the defaults.
+  package var diagnostics: NFS2015DiagnosticsState?
+  /// The newest crash report of the Play that just ended, if the game faulted in it.
+  package var crashReport: NFS2015CrashNotice?
 
   package init(
     blocker: String? = nil, clientVersion: String? = nil, installedAt: String? = nil,
@@ -39,7 +44,8 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
     optionsDigest: String? = nil, optionsProblem: String? = nil,
     backups: NFS2015BackupState? = nil, outcome: NFS2015SettingsOutcome? = nil,
     ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil, notice: String? = nil,
-    metalFX: NFS2015MetalFXState? = nil
+    metalFX: NFS2015MetalFXState? = nil, diagnostics: NFS2015DiagnosticsState? = nil,
+    crashReport: NFS2015CrashNotice? = nil
   ) {
     self.blocker = blocker
     self.clientVersion = clientVersion
@@ -54,6 +60,8 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
     self.setup = setup
     self.notice = notice
     self.metalFX = metalFX
+    self.diagnostics = diagnostics
+    self.crashReport = crashReport
   }
 
   package static func read(from url: URL) throws(LauncherError) -> Self {

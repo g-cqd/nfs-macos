@@ -45,11 +45,29 @@ package enum LaunchEnvironment {
       renderers, kind: kind, environments: environments)
   }
 
+  /// The silent `WINEDEBUG` every launch uses unless a diagnostic launch asks for more.
+  package static let silentDebugChannels = "-all"
+
+  /// Whether the text is a channel list `WINEDEBUG` could be given: lowercase letters, `+`, `-`,
+  /// `,` and `_` only, and short. Anything else is refused rather than passed to Wine.
+  package static func isDebugChannelList(_ text: String) -> Bool {
+    !text.isEmpty && text.utf8.count <= 64
+      && text.utf8.allSatisfy { (97...122).contains($0) || [43, 44, 45, 95].contains($0) }
+  }
+
+  /// - Parameters:
+  ///   - debugChannels: The `WINEDEBUG` value; silent by default.
+  ///   - usesSidecar: Whether `ROSETTA_X87_PATH` names the x87 sidecar. Only an experiment turns
+  ///     it off.
   package static func make(
     paths: AppPaths, prefix: URL, home: URL, temporary: URL,
     tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = [],
-    managedCode: Bool = false, environments: [ExecutableEnvironment] = []
+    managedCode: Bool = false, environments: [ExecutableEnvironment] = [],
+    debugChannels: String = silentDebugChannels, usesSidecar: Bool = true
   ) throws(LauncherError) -> [String: String] {
+    guard isDebugChannelList(debugChannels) else {
+      throw .operation("The Wine debug channels are not an accepted list.")
+    }
     var environment = [
       "HOME": home.path,
       "USER": home.lastPathComponent,
@@ -58,15 +76,15 @@ package enum LaunchEnvironment {
       "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
       "LANG": "en_US.UTF-8",
       "WINEPREFIX": prefix.path,
-      "WINEDEBUG": "-all",
+      "WINEDEBUG": debugChannels,
       "WINEDLLOVERRIDES": overrides(paths.kind, managedCode: managedCode),
-      "ROSETTA_X87_PATH": paths.sidecar.path,
       "WINEMSYNC": "1",
       "WINE_COMPATDB": try compatibilityRules(
         paths.kind, renderers: renderers, environments: environments),
       "MTL_HUD_ENABLED": "0",
       "RUST_LOG": "warn,mtld3d::perf=off",
     ]
+    if usesSidecar { environment["ROSETTA_X87_PATH"] = paths.sidecar.path }
     // Only the games served out of the renderer subtree get it on the DLL search path. Most
     // Wanted loads mtld3d from the default directory, and Need for Speed (2015) is a Direct3D 11
     // title served through DXGI by D3DMetal, so mtld3d must not be on its path at all.

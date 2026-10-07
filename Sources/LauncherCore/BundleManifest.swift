@@ -2,7 +2,7 @@ import Foundation
 
 /// A bounded inventory used to verify a game generation before publishing it.
 package struct BundleManifest: Codable {
-  let version: String
+  package let version: String
   let gameFiles: [ManifestFile]
   let gameID: GameKind?
   /// Present for an import-only app: the player's files are recognised and inventoried at import time.

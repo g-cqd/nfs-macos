@@ -51,4 +51,49 @@ struct LaunchEnvironmentTests {
         support: URL(fileURLWithPath: support))
     }
   }
+
+  private func environment(
+    debugChannels: String = LaunchEnvironment.silentDebugChannels, usesSidecar: Bool = true
+  ) throws -> [String: String] {
+    let sut = try AppPaths(
+      bundle: URL(fileURLWithPath: "/tmp/Game.app"), support: URL(fileURLWithPath: "/tmp/Player"),
+      game: .nfs2015)
+    return try LaunchEnvironment.make(
+      paths: sut, prefix: sut.prefix, home: URL(fileURLWithPath: "/tmp/Home"),
+      temporary: URL(fileURLWithPath: "/tmp"), debugChannels: debugChannels,
+      usesSidecar: usesSidecar)
+  }
+
+  @Test
+  func `is silent by default and carries the sidecar`() throws {
+    let plain = try environment()
+    #expect(plain["WINEDEBUG"] == "-all")
+    #expect(plain["ROSETTA_X87_PATH"] == "/tmp/Game.app/Contents/Helpers/x87sidecar")
+  }
+
+  @Test
+  func `passes a diagnostic channel list through and nothing else changes`() throws {
+    let plain = try environment()
+    let diagnostic = try environment(debugChannels: "err+all,fixme-all,+seh")
+    #expect(diagnostic["WINEDEBUG"] == "err+all,fixme-all,+seh")
+    var rest = diagnostic
+    rest["WINEDEBUG"] = "-all"
+    #expect(rest == plain)
+  }
+
+  @Test(arguments: ["", "+seh;id", "+SEH", "all -x", "a\nb"])
+  func `refuses a debug channel list that is not one`(list: String) {
+    #expect(throws: LauncherError.self) { try environment(debugChannels: list) }
+  }
+
+  @Test
+  func `leaves the sidecar variable out when an experiment turns it off, and changes nothing else`()
+    throws
+  {
+    let plain = try environment()
+    var without = try environment(usesSidecar: false)
+    #expect(without["ROSETTA_X87_PATH"] == nil)
+    without["ROSETTA_X87_PATH"] = plain["ROSETTA_X87_PATH"]
+    #expect(without == plain)
+  }
 }
