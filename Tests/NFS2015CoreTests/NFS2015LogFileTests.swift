@@ -103,3 +103,70 @@ struct NFS2015SnapshotCompatibilityTests {
     #expect(try NFS2015Snapshot.read(from: scratch.url("state.json")) == snapshot)
   }
 }
+
+struct NFS2015ClientOutputLogTests {
+  private func support(_ scratch: Scratch) throws -> URL {
+    try FileManager.default.createDirectory(
+      at: scratch.url("Support/Logs"), withIntermediateDirectories: true)
+    return scratch.url("Support")
+  }
+
+  @Test
+  func `remembers the log the EA app writes to and finds it again`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let support = try support(scratch)
+    let log = try scratch.write("Support/Logs/session-1.log", "x")
+    NFS2015ClientOutputLog.record(log, in: support)
+    #expect(NFS2015ClientOutputLog.recorded(in: support)?.lastPathComponent == "session-1.log")
+  }
+
+  @Test
+  func `finds nothing when nothing was recorded or the log is gone`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let support = try support(scratch)
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+    let log = scratch.url("Support/Logs/session-1.log")
+    NFS2015ClientOutputLog.record(log, in: support)
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+  }
+
+  @Test(arguments: [
+    "/etc/passwd", "Logs/session-1.log", "/tmp/session-1.log", "{SUPPORT}/session-1.log",
+    "{SUPPORT}/Logs/../session-1.log", "{SUPPORT}/Logs/crash-report-1.txt",
+    "{SUPPORT}/Logs/other.log", "{SUPPORT}/Logs/session-1.log\n/etc/passwd",
+    "{SUPPORT}/Logs/nested/session-1.log",
+    "",
+  ])
+  func `refuses a record that does not name a session log inside the Logs folder`(text: String)
+    throws
+  {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let support = try support(scratch)
+    for name in ["session-1.log", "other.log", "crash-report-1.txt"] {
+      try scratch.write("Support/Logs/" + name, "x")
+    }
+    try scratch.write("Support/session-1.log", "x")
+    try scratch.write(
+      "Support/" + NFS2015ClientOutputLog.fileName,
+      text.replacingOccurrences(of: "{SUPPORT}", with: support.path))
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+  }
+
+  @Test
+  func `refuses a link and an oversized record`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let support = try support(scratch)
+    let target = try scratch.write("elsewhere.log", "x")
+    let link = scratch.url("Support/Logs/session-2.log")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    NFS2015ClientOutputLog.record(link, in: support)
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+    try scratch.write(
+      "Support/" + NFS2015ClientOutputLog.fileName, "/" + String(repeating: "a", count: 2_000))
+    #expect(NFS2015ClientOutputLog.recorded(in: support) == nil)
+  }
+}

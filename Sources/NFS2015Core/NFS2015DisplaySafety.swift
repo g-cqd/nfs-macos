@@ -19,11 +19,13 @@ package struct NFS2015DisplaySafetyPlan: Equatable, Sendable {
 /// what has been seen to work.
 ///
 /// **Evidence.** On the built-in 2560x1600 panel of an M1 MacBook Air (1680x1050 points) the
-/// Wine desktop was 3360x2100, 1.72 times the panel's pixels and 7,056,000 pixels, in about a
-/// dozen launches that got as far as the game's menus **[verified]**. On a 3840x2160 external
-/// screen (as the player reports) the desktop was 7680x4320, four times the panel's pixels and
-/// 33,177,600 pixels, and both launches ended within seconds in a call through a null function
-/// pointer **[verified in the log]**. That the size is the cause is **not proven**.
+/// Wine desktop was 3360x2100, 1.72 times the panel's pixels and 7,056,000 pixels, in all 15 of
+/// that Mac's launches whose logs show a mode, and the player reports the game playable there;
+/// five of its 16 launches faulted anyway, at five different places **[verified in the logs]**.
+/// On a 3840x2160 external screen (as the player reports) the desktop was 7680x4320, four times
+/// the panel's pixels and 33,177,600 pixels, and both launches ended within seconds in a call
+/// through a null function pointer **[verified in the log]**. That the size is the cause is **not
+/// proven**.
 ///
 /// **Rule.** Keep `RetinaMode` on only while the desktop it gives stays within 1.75 times the
 /// panel's pixels (the one ratio seen working, rounded up) and within 3840x2160. Otherwise record
@@ -35,7 +37,7 @@ package struct NFS2015DisplaySafetyPlan: Equatable, Sendable {
 ///
 /// **Not verified.** None of this has run on a screen like the failing one.
 package enum NFS2015DisplaySafety {
-  /// The largest Wine desktop seen working: 3360x2100.
+  /// The largest Wine desktop at which the game has been seen to run: 3360x2100.
   static let provenDesktopPixels = 3360 * 2100
   /// The only desktop-to-panel pixel ratio seen working (3360x2100 on 2560x1600), rounded up to 7/4.
   static let ratioNumerator = 7

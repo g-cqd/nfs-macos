@@ -38,7 +38,7 @@ final class NFS2015CrashMonitor: Sendable {
   init(
     log: URL, store: NFS2015CrashReportStore, context: NFS2015CrashContext,
     host: any NFS2015HostQuerying, debugFiles: @escaping @Sendable () -> [URL] = { [] },
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = { Date() }, startAtEnd: Bool = false
   ) {
     self.log = log
     self.store = store
@@ -46,6 +46,13 @@ final class NFS2015CrashMonitor: Sendable {
     self.host = host
     self.debugFiles = debugFiles
     self.now = now
+    // A log that already holds an earlier session's history is watched from where it ends now,
+    // so a fault that was reported before is not reported again.
+    if startAtEnd,
+      let size = try? FileManager.default.attributesOfItem(atPath: log.path)[.size] as? UInt64
+    {
+      state.withLock { $0.offset = size }
+    }
   }
 
   /// The newest report this monitor wrote.

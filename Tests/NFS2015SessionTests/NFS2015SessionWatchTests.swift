@@ -148,6 +148,58 @@ struct NFS2015SessionWatchTests {
     #expect(FileManager.default.fileExists(atPath: notice.path))
   }
 
+  // MARK: A reused EA app
+
+  @Test
+  func `the helper that starts the EA app records its log for a later Play`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let watch = fixture.session.startWatch(
+      runtime: fixture.runtime, adopted: false, diagnostics: state(.standard), store: fixture.store,
+      context: try fixture.context())
+    _ = watch.finish()
+    let recorded = try #require(NFS2015ClientOutputLog.recorded(in: fixture.paths.support))
+    #expect(recorded.lastPathComponent == "session-1.log")
+  }
+
+  @Test
+  func `a Play that reuses the EA app watches the log that app writes to, from where it ends now`()
+    throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    // The earlier Play's log already holds a fault that was reported then.
+    let earlier = fixture.paths.support.appendingPathComponent("Logs/session-0.log")
+    try Data(NFS2015CrashMonitorTests.fault.utf8).write(to: earlier)
+    NFS2015ClientOutputLog.record(earlier, in: fixture.paths.support)
+    let watch = fixture.session.startWatch(
+      runtime: fixture.runtime, adopted: true, diagnostics: state(.standard), store: fixture.store,
+      context: try fixture.context())
+    // The new session's own log is not the one watched, and the old fault is not repeated.
+    try fixture.log.write(contentsOf: Data(NFS2015CrashMonitorTests.fault.utf8))
+    #expect(watch.finish() == nil)
+    // A fault the game has since written to the reused app's log is found.
+    let again = fixture.session.startWatch(
+      runtime: fixture.runtime, adopted: true, diagnostics: state(.standard), store: fixture.store,
+      context: try fixture.context())
+    let handle = try FileHandle(forWritingTo: earlier)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(NFS2015CrashMonitorTests.fault.utf8))
+    try handle.close()
+    #expect(try #require(again.finish()).headline.hasPrefix("1 fault"))
+  }
+
+  @Test
+  func `a Play that reuses an EA app with no recorded log watches its own log`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let watch = fixture.session.startWatch(
+      runtime: fixture.runtime, adopted: true, diagnostics: state(.standard), store: fixture.store,
+      context: try fixture.context())
+    try fixture.log.write(contentsOf: Data(NFS2015CrashMonitorTests.fault.utf8))
+    #expect(watch.finish() != nil)
+  }
+
   // MARK: Requests
 
   private func options(_ request: String) throws -> (SessionOptions, URL) {

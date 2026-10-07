@@ -62,6 +62,17 @@ struct NFS2015RedactionTests {
   }
 
   @Test
+  func `replaces a Windows profile name too, but not the shared profiles`() {
+    #expect(
+      NFS2015Redaction.maskHome("err: C:\\users\\someone\\AppData\\x and c:/Users/other/y")
+        == "err: C:\\users\\<user>\\AppData\\x and c:/Users/<user>/y")
+    #expect(
+      NFS2015Redaction.maskHome("C:\\Users\\Public\\Documents and C:\\users\\Default\\x")
+        == "C:\\Users\\Public\\Documents and C:\\users\\Default\\x")
+    #expect(NFS2015Redaction.maskHome("C:\\users\\") == "C:\\users\\")
+  }
+
+  @Test
   func `masks long machine-looking strings but not words, numbers or short hashes`() {
     let key = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4"
     #expect(NFS2015Redaction.maskLongStrings("key \(key) end") == "key <masked> end")

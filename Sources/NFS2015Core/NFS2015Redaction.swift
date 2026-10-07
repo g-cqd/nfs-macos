@@ -72,15 +72,26 @@ package enum NFS2015Redaction {
     }.joined(separator: "\n")
   }
 
-  /// `/Users/name/...` becomes `/Users/<user>/...`.
+  /// `/Users/name/...` becomes `/Users/<user>/...`, and so does a Windows profile folder,
+  /// `C:\users\name\...`, except the shared ones (`Public`, `Default`, `All Users`).
   static func maskHome(_ line: String) -> String {
+    maskFolder(
+      maskFolder(line, after: "/Users/", stoppingAt: ["/", " ", "\"", "'"]), after: "\\users\\",
+      stoppingAt: ["\\", "/", "\"", "'"], keeping: ["public", "default", "all users"])
+  }
+
+  /// Replaces the folder name that follows each `marker` (matched without regard to case).
+  private static func maskFolder(
+    _ line: String, after marker: String, stoppingAt stops: Set<Character>,
+    keeping shared: Set<String> = []
+  ) -> String {
     var result = ""
     var rest = Substring(line)
-    while let range = rest.range(of: "/Users/") {
+    while let range = rest.range(of: marker, options: .caseInsensitive) {
       result += rest[..<range.upperBound]
       rest = rest[range.upperBound...]
-      let name = rest.prefix { $0 != "/" && $0 != " " && $0 != "\"" && $0 != "'" }
-      result += name.isEmpty ? "" : "<user>"
+      let name = rest.prefix { !stops.contains($0) }
+      result += name.isEmpty || shared.contains(name.lowercased()) ? String(name) : "<user>"
       rest = rest.dropFirst(name.count)
     }
     return result + rest
