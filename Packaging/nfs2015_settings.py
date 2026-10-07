@@ -32,7 +32,10 @@ TARGETS = ('NFS2015Core', 'NFS2015Launcher', 'NFS2015Session')
 # The only files that may build a PlayerFileEdit or name the options file's location: the store
 # that validates and writes it, and the session that replays an interrupted edit before anything reads.
 WRITERS = {'NFS2015SettingsStore.swift', 'NFS2015Session.swift', 'PlayerFileEdit.swift'}
-OPTIONS_PATH_USERS = {'NFS2015SettingsStore.swift'}
+# NFS2015FirstRunOptions.swift builds the same location to seed the two resolution lines into a
+# settings folder that is empty or absent; it never reads the blob and never replaces a file
+# (tests/NFS2015FirstRunOptionsTests.swift holds the proof). It needs the location and no more.
+OPTIONS_PATH_USERS = {'NFS2015SettingsStore.swift', 'NFS2015FirstRunOptions.swift'}
 
 FORBIDDEN_CODE = [
     (re.compile(r'FBCHUNKS', re.I), 'names the binary options blob format'),
