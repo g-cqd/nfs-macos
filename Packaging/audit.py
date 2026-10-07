@@ -99,6 +99,12 @@ assert actual_game_paths == expected_game_paths, 'Unexpected or missing game pay
 hazards = audit_app_tree(app)
 hazards += audit_privacy(app)
 hazards += audit_build_paths(app, Path.home())
+if (app / 'Contents/Helpers/winehost.app').is_dir():
+    # The native arm64 route: checked only when the helper is present, so other builds are unchanged.
+    from audit_winehost import audit_winehost
+    winehost_report, winehost_problems = audit_winehost(app)
+    hazards += winehost_problems
+    report['winehost'] = winehost_report
 if recipe_path.exists():
     hazards += audit_runtime_pins(app, PINS, embedded, pinned_runtime)
     hazards += audit_managed_runtime(app, manifest, embedded)
