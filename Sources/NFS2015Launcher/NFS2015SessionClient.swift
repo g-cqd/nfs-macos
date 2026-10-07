@@ -47,6 +47,28 @@ actor NFS2015SessionClient: NFS2015Serving {
     NFS2015CrashReportStore(folder: support.appendingPathComponent("Logs")).latest(since: date)
   }
 
+  /// The helper's command-line flag for an operation.
+  static func flag(for operation: NFS2015Operation) -> String {
+    switch operation {
+    case .prepare: "--prepare"
+    case .play: "--play"
+    case .enableController: "--enable-controller"
+    case .chooseInstallation: "--choose-installation"
+    case .installClient: "--install-client"
+    case .openClient: "--open-client"
+    case .configureMetalFX: "--configure-metalfx"
+    case .configureDiagnostics: "--configure-diagnostics"
+    case .configure: "--configure"
+    }
+  }
+
+  /// Writes a request for the helper to read, which the caller removes once the helper ends.
+  private func writeRequest(_ request: some Encodable) throws -> URL {
+    let url = support.appendingPathComponent("request-\(UUID().uuidString).json")
+    try JSONEncoder().encode(request).write(to: url, options: .withoutOverwriting)
+    return url
+  }
+
   func perform(_ operation: NFS2015Operation) async throws -> NFS2015Snapshot {
     try Task.checkCancellation()
     let paths = try AppPaths(bundle: bundle, support: support, game: .nfs2015)
@@ -67,35 +89,22 @@ actor NFS2015SessionClient: NFS2015Serving {
         }
       }
     }
-    var arguments = [paths.bundle.path, "--support", support.path]
+    var arguments = [paths.bundle.path, "--support", support.path, Self.flag(for: operation)]
     switch operation {
-    case .prepare: arguments.append("--prepare")
-    case .play: arguments.append("--play")
-    case .enableController: arguments.append("--enable-controller")
-    case .chooseInstallation(let folder):
-      arguments += ["--choose-installation", "--request", folder.path]
-    case .installClient(let installer):
-      arguments += ["--install-client", "--request", installer.path]
-    case .openClient: arguments.append("--open-client")
+    case .chooseInstallation(let folder): arguments += ["--request", folder.path]
+    case .installClient(let installer): arguments += ["--request", installer.path]
     case .configureMetalFX(let choice):
       try choice.validate()
-      let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
-      try JSONEncoder().encode(choice).write(to: request, options: .withoutOverwriting)
-      draft = request
-      arguments += ["--configure-metalfx", "--request", request.path]
+      draft = try writeRequest(choice)
     case .configureDiagnostics(let choice):
       try choice.validate()
-      let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
-      try JSONEncoder().encode(choice).write(to: request, options: .withoutOverwriting)
-      draft = request
-      arguments += ["--configure-diagnostics", "--request", request.path]
+      draft = try writeRequest(choice)
     case .configure(let settings):
       try settings.validate()
-      let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
-      try JSONEncoder().encode(settings).write(to: request, options: .withoutOverwriting)
-      draft = request
-      arguments += ["--configure", "--request", request.path]
+      draft = try writeRequest(settings)
+    case .prepare, .play, .enableController, .openClient: break
     }
+    if let draft { arguments += ["--request", draft.path] }
     let process = Process()
     process.executableURL = paths.session
     process.arguments = arguments
