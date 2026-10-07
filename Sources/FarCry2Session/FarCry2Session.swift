@@ -29,15 +29,19 @@ struct FarCry2Session {
       }
       let runtime = WineRuntime(paths: paths, output: output)
       var environment = try runtime.environment(prefix: paths.prefix)
-      guard
-        try ProcessCommand(
-          executable: URL(fileURLWithPath: "/usr/bin/arch"),
-          arguments: ["-x86_64", "/usr/bin/true"], directory: paths.support,
-          environment: environment
-        ).run(output: output) == 0
-      else {
-        throw LauncherError.operation(
-          "Install Rosetta from the starter before preparing this game.")
+      let profile = try paths.spawnProfile()
+      // The native arm64 route does not use Rosetta, so its absence is not an obstacle there.
+      if profile.needsRosetta {
+        guard
+          try ProcessCommand(
+            executable: URL(fileURLWithPath: "/usr/bin/arch"),
+            arguments: ["-x86_64", "/usr/bin/true"], directory: paths.support,
+            environment: environment
+          ).run(output: output) == 0
+        else {
+          throw LauncherError.operation(
+            "Install Rosetta from the starter before preparing this game.")
+        }
       }
       let manifest = try BundleManifest.read(
         from: paths.resources.appendingPathComponent("game-manifest.json"))
@@ -82,7 +86,8 @@ struct FarCry2Session {
         // The working directory is bin, as when the game is started from its install folder.
         status = try ProcessCommand(
           executable: paths.wine, arguments: arguments,
-          directory: game.appendingPathComponent("bin"), environment: environment
+          directory: game.appendingPathComponent("bin"), environment: environment,
+          profile: profile
         ).run(output: output, onStart: lease.record)
         try runtime.stop(paths.prefix)
         attempt("save the cache") { report(harvest: try cache.harvest(game: game)) }

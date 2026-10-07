@@ -28,6 +28,14 @@ package struct AppPaths {
   }
   package var sidecar: URL { bundle.appendingPathComponent("Contents/Helpers/x87sidecar") }
   package var session: URL { bundle.appendingPathComponent("Contents/Helpers/" + kind.helper) }
+  /// The native arm64 helper that hosts Wine's child processes on the arm64 route.
+  package var winehost: URL {
+    bundle.appendingPathComponent("Contents/Helpers/winehost.app/Contents/MacOS/winehost")
+  }
+  /// How this bundle starts Wine: `Process` for a Rosetta bundle, `posix_spawn` for arm64.
+  package func spawnProfile() throws(LauncherError) -> SpawnProfile {
+    try SpawnProfile.load(from: resources)
+  }
   package var data: URL { support.appendingPathComponent("Data") }
   package var prefix: URL { data.appendingPathComponent("Prefix") }
   package var saves: URL { data.appendingPathComponent("Saves") }

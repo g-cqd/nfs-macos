@@ -86,7 +86,7 @@ package struct WineRuntime {
         guard
           try ProcessCommand(
             executable: paths.wine, arguments: arguments, directory: prefix,
-            environment: try environment(prefix: prefix)
+            environment: try environment(prefix: prefix), profile: try paths.spawnProfile()
           ).run(output: output) == 0
         else {
           throw LauncherError.operation(
@@ -105,7 +105,7 @@ package struct WineRuntime {
     try WineShutdown.stop { argument in
       try ProcessCommand(
         executable: paths.wineServer, arguments: [argument], directory: prefix,
-        environment: try environment(prefix: prefix)
+        environment: try environment(prefix: prefix), profile: try paths.spawnProfile()
       ).run(output: output)
     }
   }
