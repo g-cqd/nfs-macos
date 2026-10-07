@@ -10,6 +10,9 @@ enum NFS2015Operation: Sendable, Equatable {
   case configure(NFS2015SettingsRequest)
   /// Keeps, or forgets, the MetalFX choice in this app's own folder; see `NFS2015MetalFXRequest`.
   case configureMetalFX(NFS2015MetalFXRequest)
+  /// Keeps, or forgets, the display-safety and diagnostic-log choices; see
+  /// `NFS2015DiagnosticsRequest`.
+  case configureDiagnostics(NFS2015DiagnosticsRequest)
   case chooseInstallation(URL)
   case enableController
   /// Runs the EA app installer the player downloaded, in the app's own Windows folder.
@@ -44,8 +47,11 @@ protocol NFS2015Serving: Sendable {
   func logLocation() async -> URL?
   /// How far a running first-launch preparation has got; nil when none is staged.
   func preparationProgress() async -> PrefixSeed.Progress?
+  /// The newest crash report written at or after `date`; nil when there is none.
+  func latestCrashReport(since date: Date) async -> NFS2015CrashNotice?
 }
 
 extension NFS2015Serving {
   func preparationProgress() async -> PrefixSeed.Progress? { nil }
+  func latestCrashReport(since date: Date) async -> NFS2015CrashNotice? { nil }
 }

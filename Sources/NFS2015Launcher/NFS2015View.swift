@@ -47,6 +47,15 @@ struct NFS2015PlayView: View {
       if let blocker = model.blocker {
         Section("Before you can play") { Text(blocker) }
       }
+      if let report = model.crashNotice {
+        Section("Crash report") {
+          Text(report.sentence).font(.callout).textSelection(.enabled)
+          Button("Reveal in Finder", action: model.revealCrashReport)
+          Text(
+            "The report holds no names and no EA data. Send it as it is if you ask for help."
+          ).font(.caption).foregroundStyle(.secondary)
+        }
+      }
       Section("Rosetta") {
         Text(
           model.rosetta.isAvailable

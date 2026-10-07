@@ -12,6 +12,11 @@ import NFS2015Core
 struct NFS2015Session {
   let paths: AppPaths
   let output: FileHandle
+  /// The main display and the Mac, replaced by fixtures under test.
+  var display: any NFS2015DisplayQuerying = NFS2015SystemDisplay()
+  var host: any NFS2015HostQuerying = NFS2015SystemHost()
+  /// The helper's own environment, which only a developer running it by hand can fill.
+  var hostEnvironment: [String: String] = ProcessInfo.processInfo.environment
 
   func run(_ options: SessionOptions) throws -> Int32 {
     let files = FileManager.default
@@ -29,6 +34,9 @@ struct NFS2015Session {
           at: paths.support.appendingPathComponent(folder), withIntermediateDirectories: true)
       }
       let metalFX = metalFXState(for: options)
+      let experiment = try NFS2015ExperimentOverrides(environment: hostEnvironment)
+      let diagnosticsStore = NFS2015DiagnosticsStore(support: paths.support)
+      var diagnostics = diagnosticsState(for: options, store: diagnosticsStore)
       let manifest = try BundleManifest.read(
         from: paths.resources.appendingPathComponent("game-manifest.json"))
       guard manifest.kind == paths.kind, let plan = manifest.client,
@@ -37,17 +45,32 @@ struct NFS2015Session {
         throw LauncherError.operation("The game manifest belongs to a different app.")
       }
       let owned = manifest.seedsPrefix
-      let runtime = WineRuntime(
-        paths: paths, output: output, tuning: manifest.tuning,
-        renderers: manifest.rendererSelection, managedRuntime: manifest.managed,
-        environments: NFS2015MetalFX.environment(for: metalFX.preference).map { [$0] } ?? [])
+      let tuning = try experiment.applied(to: manifest.tuning)
+      if experiment.isActive { print("EXPERIMENT: \(experiment.summary).") }
+      let facts = display.mainDisplay()
+      let retinaPlan = NFS2015DisplaySafety.plan(
+        facts: facts, hasOptionsFile: nil, preference: diagnostics.preference)
+      let registry = NFS2015DisplaySafety.settings(manifest.registry, plan: retinaPlan)
+      if ["--prepare", "--play"].contains(options.action) {
+        if let facts { print("Display: \(facts.summary).") }
+        for reason in retinaPlan.reasons { print("Display safety: \(reason)") }
+      }
+      func makeRuntime(debugChannels: String = LaunchEnvironment.silentDebugChannels) -> WineRuntime
+      {
+        WineRuntime(
+          paths: paths, output: output, tuning: tuning, renderers: manifest.rendererSelection,
+          managedRuntime: manifest.managed,
+          environments: NFS2015MetalFX.environment(for: metalFX.preference).map { [$0] } ?? [],
+          debugChannels: debugChannels, usesSidecar: !experiment.sidecarOff)
+      }
+      let runtime = makeRuntime()
       var readiness: NFS2015Readiness
       if owned {
         guard options.action != "--choose-installation" else {
           throw LauncherError.operation("This app runs the game in its own Windows folder.")
         }
         _ = try PrefixSeed(paths: paths, manifest: manifest).prepare { prefix in
-          try initialize(prefix, manifest: manifest, runtime: runtime)
+          try initialize(prefix, manifest: manifest, registry: registry, runtime: runtime)
         }
         readiness = try NFS2015Locator.resolve(prefix: paths.prefix, plan: plan)
       } else {
@@ -74,7 +97,7 @@ struct NFS2015Session {
       }
       let prefix = owned ? paths.prefix : readiness.install?.prefix
       if options.action != "--configure", adopted == nil, let prefix {
-        try recordPrefixSettings(manifest.registry, prefix: prefix, runtime: runtime)
+        try recordPrefixSettings(registry, prefix: prefix, runtime: runtime)
       }
       if options.action == "--enable-controller" {
         try enableController(
@@ -90,9 +113,10 @@ struct NFS2015Session {
         readiness = try NFS2015Locator.resolve(prefix: paths.prefix, plan: plan)
         store = NFS2015SettingsStore(support: paths.support, install: readiness.install)
       }
+      diagnostics.displayNote = retinaPlan.reasons.joined(separator: " ")
       try snapshot(
         readiness: readiness, store: store, plan: plan, owned: owned, outcome: settingsOutcome,
-        metalFX: metalFX)
+        metalFX: metalFX, diagnostics: diagnostics)
       guard options.action == "--play" else { return 0 }
       guard let install = readiness.install else {
         throw LauncherError.operation(
@@ -109,20 +133,46 @@ struct NFS2015Session {
       if let notice = metalFX.notice { print(notice) }
       let pressure = MemoryPressure.current()?.notice
       if let pressure { print(pressure) }
-      let outcome = try play(
-        plan: try NFS2015LaunchPlan.make(install: install, plan: plan), environment: environment,
-        runtime: runtime, prefix: install.prefix, lease: lease, adopted: adopted)
+      let safety = NFS2015DisplaySafety.plan(
+        facts: facts, hasOptionsFile: try store.optionsFile() != nil,
+        preference: diagnostics.preference)
+      let seeded = safety.seed.map {
+        NFS2015FirstRunOptions.seed($0, in: install.userProfile, support: paths.support)
+      }
+      if let seeded { print(seeded.sentence) }
+      let watch = try startWatch(
+        runtime: makeRuntime, adopted: adopted != nil, diagnostics: diagnostics,
+        store: diagnosticsStore,
+        context: crashContext(
+          manifest: manifest, facts: facts, plan: safety, seeded: seeded, metalFX: metalFX,
+          diagnostics: diagnostics.preference, tuning: tuning, experiment: experiment,
+          settings: try store.inspect().settings))
+      let outcome: PlayOutcome
+      do {
+        outcome = try play(
+          plan: try NFS2015LaunchPlan.make(install: install, plan: plan),
+          environment: try watch.runtime.environment(prefix: install.prefix), runtime: runtime,
+          prefix: install.prefix, lease: lease, adopted: adopted,
+          programOutput: watch.capture?.output ?? output)
+      } catch {
+        _ = watch.finish()
+        throw error
+      }
+      let crash = watch.finish()
+      diagnostics.displayNote = (safety.reasons + [seeded?.sentence].compactMap { $0 }).joined(
+        separator: " ")
       switch outcome {
       case .finished(let status):
         try snapshot(
-          readiness: readiness, store: store, plan: plan, owned: owned, metalFX: metalFX)
+          readiness: readiness, store: store, plan: plan, owned: owned, metalFX: metalFX,
+          diagnostics: diagnostics, crash: crash)
         return status
       case .notReady(let reason):
         let notice = [reason, pressure].compactMap { $0 }.joined(separator: " ")
         print(notice)
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, notice: notice,
-          metalFX: metalFX)
+          metalFX: metalFX, diagnostics: diagnostics, crash: crash)
         return 0
       }
     }
@@ -170,11 +220,13 @@ struct NFS2015Session {
   /// values the recipe declares, including the controller key, which is this app's to write, then
   /// the .NET runtime the EA client's own updater needs, then the EA client that comes with the
   /// app. The client layer is applied last and while Wine is stopped, because it edits the hives.
-  private func initialize(_ prefix: URL, manifest: BundleManifest, runtime: WineRuntime) throws {
+  private func initialize(
+    _ prefix: URL, manifest: BundleManifest, registry: [RegistrySetting], runtime: WineRuntime
+  ) throws {
     try requireRosetta(try runtime.environment(prefix: prefix))
     try runtime.initializeBare(prefix)
     do {
-      try recordPrefixSettings(manifest.registry, prefix: prefix, runtime: runtime)
+      try recordPrefixSettings(registry, prefix: prefix, runtime: runtime)
       if !manifest.controllers.isEmpty {
         try importRegistry(
           try NFS2015Controller.registry(devices: manifest.controllers), named: "controller",
@@ -371,7 +423,7 @@ struct NFS2015Session {
   /// that has already exited is cleaned up.
   private func play(
     plan: NFS2015LaunchPlan, environment: [String: String], runtime: WineRuntime, prefix: URL,
-    lease: GameLease, adopted: Int32?
+    lease: GameLease, adopted: Int32?, programOutput: FileHandle
   ) throws -> PlayOutcome {
     let started = Date()
     var owned: Process?
@@ -383,7 +435,7 @@ struct NFS2015Session {
       let client = try ProcessCommand(
         executable: paths.wine, arguments: plan.client.wineArguments,
         directory: plan.workingDirectory, environment: environment
-      ).start(output: output)
+      ).start(output: programOutput)
       owned = client
       pid = client.processIdentifier
     }
@@ -400,7 +452,7 @@ struct NFS2015Session {
       let request = try ProcessCommand(
         executable: paths.wine, arguments: plan.request.wineArguments,
         directory: plan.workingDirectory, environment: environment
-      ).run(output: output)
+      ).run(output: programOutput)
       guard request == 0 else {
         throw LauncherError.operation(
           """
@@ -429,7 +481,8 @@ struct NFS2015Session {
 
   private func snapshot(
     readiness: NFS2015Readiness, store: NFS2015SettingsStore, plan: StoreClientPlan, owned: Bool,
-    outcome: NFS2015SettingsOutcome? = nil, notice: String? = nil, metalFX: NFS2015MetalFXState
+    outcome: NFS2015SettingsOutcome? = nil, notice: String? = nil, metalFX: NFS2015MetalFXState,
+    diagnostics: NFS2015DiagnosticsState, crash: NFS2015CrashNotice? = nil
   ) throws {
     let installed = readiness.install
     var version = installed?.clientVersion
@@ -443,7 +496,8 @@ struct NFS2015Session {
       hasOptionsFile: try store.optionsFile() != nil, settings: options.settings,
       optionsDigest: options.digest, optionsProblem: options.problem, backups: options.backups,
       outcome: outcome, ownsWindowsFolder: owned ? true : nil,
-      setup: owned ? readiness.setup : nil, notice: notice, metalFX: metalFX
+      setup: owned ? readiness.setup : nil, notice: notice, metalFX: metalFX,
+      diagnostics: diagnostics, crashReport: crash
     ).write(to: paths.support.appendingPathComponent("launcher-state.json"))
   }
 }

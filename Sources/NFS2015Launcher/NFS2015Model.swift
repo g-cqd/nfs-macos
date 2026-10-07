@@ -47,6 +47,12 @@ final class NFS2015Model {
   private(set) var metalFXEdit: NFS2015MetalFXPreference?
   /// What the last MetalFX request did.
   private(set) var metalFXOutcome: NFS2015MetalFXOutcome?
+  /// The display-safety and diagnostic-log choices the player made and has not saved.
+  private(set) var diagnosticsEdit: NFS2015DiagnosticsPreference?
+  /// What the last diagnostics request did.
+  private(set) var diagnosticsOutcome: NFS2015DiagnosticsOutcome?
+  /// The newest crash report of this run of the starter; it stays until the next Play begins.
+  private(set) var crashNotice: NFS2015CrashNotice?
   var tab = "Play"
   var request = 0
   let rosetta: RosettaSetup
@@ -300,6 +306,114 @@ final class NFS2015Model {
     metalFXEdit = choice == savedMetalFX ? nil : choice
   }
 
+  // MARK: Display safety and diagnostics
+
+  /// The choices the next launch will use, as saved.
+  var savedDiagnostics: NFS2015DiagnosticsPreference {
+    snapshot.diagnostics?.preference ?? .standard
+  }
+  /// The choices shown: the player's unsaved ones, else the saved ones.
+  var diagnostics: NFS2015DiagnosticsPreference { diagnosticsEdit ?? savedDiagnostics }
+  var hasPendingDiagnostics: Bool { diagnosticsEdit != nil }
+  /// Why a saved diagnostics file was not used, if it was not.
+  var diagnosticsNotice: String? { snapshot.diagnostics?.notice }
+  /// What the display rule decided at the last launch, in the log's words.
+  var displayNote: String? {
+    snapshot.diagnostics?.displayNote.flatMap { $0.isEmpty ? nil : $0 }
+  }
+  var canEditDiagnostics: Bool { !isBusy }
+  var canResetDiagnostics: Bool {
+    canEditDiagnostics && (savedDiagnostics != .standard || diagnosticsNotice != nil)
+  }
+  var diagnosticsRefusal: String? { diagnosticsOutcome?.refusal }
+
+  var diagnosticsOutcomeLine: String? {
+    switch diagnosticsOutcome {
+    case .saved: "Saved. It applies the next time you press Play."
+    case .reset: "Cleared. The defaults apply."
+    case .unchanged: "That was already saved."
+    case .refused, nil: nil
+    }
+  }
+
+  func setLimitRetinaDesktop(_ on: Bool) {
+    var choice = diagnostics
+    choice.limitRetinaDesktop = on
+    holdDiagnostics(choice)
+  }
+
+  func setSeedSafeResolution(_ on: Bool) {
+    var choice = diagnostics
+    choice.seedSafeResolution = on
+    holdDiagnostics(choice)
+  }
+
+  func setDiagnosticLogging(_ on: Bool) {
+    var choice = diagnostics
+    choice.diagnosticLoggingNextLaunch = on
+    holdDiagnostics(choice)
+  }
+
+  func limitRetinaBinding() -> Binding<Bool> {
+    Binding(get: { self.diagnostics.limitRetinaDesktop }, set: { self.setLimitRetinaDesktop($0) })
+  }
+
+  func seedResolutionBinding() -> Binding<Bool> {
+    Binding(get: { self.diagnostics.seedSafeResolution }, set: { self.setSeedSafeResolution($0) })
+  }
+
+  func diagnosticLoggingBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.diagnostics.diagnosticLoggingNextLaunch },
+      set: { self.setDiagnosticLogging($0) })
+  }
+
+  private func holdDiagnostics(_ choice: NFS2015DiagnosticsPreference) {
+    guard canEditDiagnostics else { return }
+    diagnosticsOutcome = nil
+    diagnosticsEdit = choice == savedDiagnostics ? nil : choice
+  }
+
+  func discardDiagnostics() {
+    diagnosticsEdit = nil
+    diagnosticsOutcome = nil
+  }
+
+  /// Keeps the shown choices for the next launch.
+  func saveDiagnostics() {
+    guard canEditDiagnostics, let choice = diagnosticsEdit else { return }
+    enqueue(.configureDiagnostics(NFS2015DiagnosticsRequest(action: .save, preference: choice)))
+  }
+
+  /// Forgets what is saved, which means the defaults.
+  func resetDiagnostics() {
+    guard canEditDiagnostics else { return }
+    enqueue(.configureDiagnostics(NFS2015DiagnosticsRequest(action: .reset)))
+  }
+
+  /// Shows the crash report in Finder.
+  func revealCrashReport() {
+    guard let notice = crashNotice else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: notice.path)])
+  }
+
+  /// Looks once for a crash report the helper wrote since `start`. A reading that arrives after
+  /// the watcher was cancelled is dropped.
+  func refreshCrashNotice(since start: Date) async {
+    let found = await service.latestCrashReport(since: start)
+    guard !Task.isCancelled, let found, found != crashNotice else { return }
+    crashNotice = found
+  }
+
+  /// Looks for a crash report while the helper runs, so the notice appears when the game dies
+  /// and not only when the session ends.
+  private func watchCrashReports(since start: Date) async {
+    while !Task.isCancelled {
+      await refreshCrashNotice(since: start)
+      do { try await Task.sleep(for: .seconds(2)) } catch { return }
+    }
+  }
+
   func reload() { enqueue(.prepare) }
   func play() { enqueue(.play) }
   func enableController() { enqueue(.enableController) }
@@ -385,8 +499,15 @@ final class NFS2015Model {
     let watcher =
       operation == .prepare && carriesGame && snapshot.installedAt == nil
       ? Task { await self.watchPreparation() } : nil
+    var crashWatcher: Task<Void, Never>?
+    if operation == .play {
+      crashNotice = nil
+      let start = Date()
+      crashWatcher = Task { await self.watchCrashReports(since: start) }
+    }
     defer {
       watcher?.cancel()
+      crashWatcher?.cancel()
       preparation = nil
     }
     do {
@@ -421,6 +542,14 @@ final class NFS2015Model {
       metalFXOutcome = nil
     }
     if metalFXEdit == (result.metalFX?.preference ?? .off) { metalFXEdit = nil }
+    if case .configureDiagnostics = operation {
+      diagnosticsOutcome = result.diagnostics?.outcome
+      if result.diagnostics?.outcome?.refusal == nil { diagnosticsEdit = nil }
+    } else if operation != .prepare {
+      diagnosticsOutcome = nil
+    }
+    if diagnosticsEdit == (result.diagnostics?.preference ?? .standard) { diagnosticsEdit = nil }
+    if let report = result.crashReport { crashNotice = report }
     if operation != .prepare, result.outcome?.refusal == nil { edits = [:] }
     edits = edits.filter { id, chosen in
       result.settings.isPresent(id) && result.settings.values[id] != chosen
