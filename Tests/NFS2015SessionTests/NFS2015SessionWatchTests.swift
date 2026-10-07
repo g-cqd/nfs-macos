@@ -151,6 +151,24 @@ struct NFS2015SessionWatchTests {
   // MARK: A reused EA app
 
   @Test
+  func
+    `a diagnostic Play leaves no record, because the EA app writes to a pipe and not to the log`()
+    throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    NFS2015ClientOutputLog.record(
+      fixture.paths.support.appendingPathComponent("Logs/session-1.log"), in: fixture.paths.support)
+    _ = try fixture.store.save(armed)
+    let watch = fixture.session.startWatch(
+      runtime: fixture.runtime, adopted: false, diagnostics: state(armed), store: fixture.store,
+      context: try fixture.context())
+    #expect(watch.capture != nil)
+    #expect(NFS2015ClientOutputLog.recorded(in: fixture.paths.support) == nil)
+    _ = watch.finish()
+  }
+
+  @Test
   func `the helper that starts the EA app records its log for a later Play`() throws {
     let fixture = try Fixture()
     defer { fixture.remove() }

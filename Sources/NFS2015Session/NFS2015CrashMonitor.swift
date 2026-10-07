@@ -13,7 +13,6 @@ import Synchronization
 /// never stops the game.
 final class NFS2015CrashMonitor: Sendable {
   static let reportLimit = 5
-  static let interval: TimeInterval = 2
 
   private struct State {
     var digest = NFS2015LogDigest()
@@ -32,13 +31,16 @@ final class NFS2015CrashMonitor: Sendable {
   private let host: any NFS2015HostQuerying
   private let debugFiles: @Sendable () -> [URL]
   private let now: @Sendable () -> Date
+  private let interval: TimeInterval
+  private let onReport: (@Sendable (NFS2015CrashNotice) -> Void)?
   private let state = Mutex(State())
   private let condition = NSCondition()
 
   init(
     log: URL, store: NFS2015CrashReportStore, context: NFS2015CrashContext,
     host: any NFS2015HostQuerying, debugFiles: @escaping @Sendable () -> [URL] = { [] },
-    now: @escaping @Sendable () -> Date = { Date() }, startAtEnd: Bool = false
+    now: @escaping @Sendable () -> Date = { Date() }, startAtEnd: Bool = false,
+    interval: TimeInterval = 2, onReport: (@Sendable (NFS2015CrashNotice) -> Void)? = nil
   ) {
     self.log = log
     self.store = store
@@ -46,6 +48,8 @@ final class NFS2015CrashMonitor: Sendable {
     self.host = host
     self.debugFiles = debugFiles
     self.now = now
+    self.interval = interval
+    self.onReport = onReport
     // A log that already holds an earlier session's history is watched from where it ends now,
     // so a fault that was reported before is not reported again.
     if startAtEnd,
@@ -60,13 +64,15 @@ final class NFS2015CrashMonitor: Sendable {
 
   /// Reads what the log gained since the last scan and writes a report if it holds new faults.
   /// - Returns: The report written, if any.
+  /// - Parameter final: Also reads a last line the log ended without a line feed.
   @discardableResult
-  func scan() -> NFS2015CrashNotice? {
+  func scan(final: Bool = false) -> NFS2015CrashNotice? {
     let written: NFS2015CrashNotice? = state.withLock { state in
       guard let piece = NFS2015LogFile.read(log, from: state.offset) else { return nil }
       if piece.next < state.offset { state.digest = NFS2015LogDigest() }
       state.offset = piece.next
       state.digest.feed(piece.text)
+      if final { state.digest.finish() }
       let faults = state.digest.faults.count
       guard faults > state.reportedFaults, state.reports < Self.reportLimit else { return nil }
       var digest = state.digest
@@ -101,10 +107,10 @@ final class NFS2015CrashMonitor: Sendable {
     state.withLock { $0.started = true }
     let thread = Thread { [self] in
       while true {
-        scan()
+        if let written = scan() { onReport?(written) }
         condition.lock()
         let stopping = state.withLock { $0.stopped }
-        if !stopping { _ = condition.wait(until: Date(timeIntervalSinceNow: Self.interval)) }
+        if !stopping { _ = condition.wait(until: Date(timeIntervalSinceNow: interval)) }
         let done = state.withLock { $0.stopped }
         condition.unlock()
         if done { break }
@@ -129,7 +135,7 @@ final class NFS2015CrashMonitor: Sendable {
     condition.lock()
     while state.withLock({ $0.started && !$0.finished }), condition.wait(until: deadline) {}
     condition.unlock()
-    scan()
+    scan(final: true)
     return notice
   }
 }

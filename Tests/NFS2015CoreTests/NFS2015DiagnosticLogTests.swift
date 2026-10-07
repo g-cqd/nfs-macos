@@ -189,6 +189,22 @@ struct NFS2015DiagnosticLogTests {
   }
 
   @Test
+  func
+    `closes the read end and reports it when reading fails, so Wine's writes fail and never block`()
+    throws
+  {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let pipe = Pipe()
+    try pipe.fileHandleForReading.close()
+    let capture = try NFS2015DiagnosticCapture(
+      folder: scratch.url("Logs"), stamp: "20261007T120000Z", main: try scratch.openLog("s.log"),
+      pipe: pipe)
+    #expect(capture.finish(timeout: 10))
+    #expect(capture.failure != nil)
+  }
+
+  @Test
   func `bounds a long burst of debug lines to the newest files`() throws {
     let scratch = try Scratch()
     defer { scratch.remove() }
