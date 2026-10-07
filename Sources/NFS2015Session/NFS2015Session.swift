@@ -168,7 +168,12 @@ struct NFS2015Session {
           diagnostics: diagnostics, crash: crash)
         return status
       case .notReady(let reason):
-        let notice = [reason, pressure].compactMap { $0 }.joined(separator: " ")
+        var notice = [reason, pressure].compactMap { $0 }.joined(separator: " ")
+        if watch.capture != nil {
+          notice +=
+            " The diagnostic log ended with this session, because the EA app was left running; "
+            + "quit the EA app, switch the log on again and press Play."
+        }
         print(notice)
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, notice: notice,
@@ -393,6 +398,9 @@ struct NFS2015Session {
     let command = GuestCommand(
       windowsPath: try NFS2015Install.windowsPath(of: client.executable, in: paths.prefix),
       arguments: plan.clientArguments)
+    if let log = NFS2015LogFile.path(of: output) {
+      NFS2015ClientOutputLog.record(log, in: paths.support)
+    }
     let process = try ProcessCommand(
       executable: paths.wine, arguments: command.wineArguments, directory: directory,
       environment: environment

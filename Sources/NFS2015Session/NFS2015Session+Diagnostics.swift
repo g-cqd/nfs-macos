@@ -94,15 +94,21 @@ extension NFS2015Session {
         } catch { print("Diagnostic logging could not start: \(error.localizedDescription)") }
       }
     }
+    // An EA app this Play reuses writes to the log of the session that started it.
+    let reused = adopted ? NFS2015ClientOutputLog.recorded(in: paths.support) : nil
+    if let log, !adopted { NFS2015ClientOutputLog.record(log, in: paths.support) }
     var monitor: NFS2015CrashMonitor?
-    if let log {
+    if let watched = reused ?? log {
       let created = NFS2015CrashMonitor(
-        log: log, store: NFS2015CrashReportStore(folder: folder), context: context, host: host,
-        debugFiles: { [capture] in capture?.files ?? [] })
+        log: watched, store: NFS2015CrashReportStore(folder: folder), context: context, host: host,
+        debugFiles: { [capture] in capture?.files ?? [] }, startAtEnd: reused != nil)
       created.start()
       monitor = created
     } else {
       print("Crash reports need the session log as standard output; none will be written.")
+    }
+    if adopted, reused == nil {
+      print("The reused EA app's log is not known, so faults of its game are not watched.")
     }
     return NFS2015PlayWatch(runtime: runtime, capture: capture, monitor: monitor)
   }
