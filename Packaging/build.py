@@ -56,6 +56,7 @@ def main():
         [sys.executable, 'Packaging/check_signing_policy.py'],
         [sys.executable, 'Packaging/check_privacy.py'],
         [sys.executable, 'Packaging/check_winehost.py'],
+        [sys.executable, 'Packaging/check_audit_winehost.py'],
         [sys.executable, 'Packaging/check_widescreen_compat.py'],
         assembly,
         [sys.executable, 'Packaging/sign.py', str(output), '--identity', options.identity],
