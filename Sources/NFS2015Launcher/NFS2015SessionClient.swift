@@ -42,6 +42,11 @@ actor NFS2015SessionClient: NFS2015Serving {
     return PrefixSeed(paths: paths, manifest: manifest).progress()
   }
 
+  /// The newest crash report below the player folder's `Logs`, written at or after `date`.
+  func latestCrashReport(since date: Date) -> NFS2015CrashNotice? {
+    NFS2015CrashReportStore(folder: support.appendingPathComponent("Logs")).latest(since: date)
+  }
+
   func perform(_ operation: NFS2015Operation) async throws -> NFS2015Snapshot {
     try Task.checkCancellation()
     let paths = try AppPaths(bundle: bundle, support: support, game: .nfs2015)
@@ -78,6 +83,12 @@ actor NFS2015SessionClient: NFS2015Serving {
       try JSONEncoder().encode(choice).write(to: request, options: .withoutOverwriting)
       draft = request
       arguments += ["--configure-metalfx", "--request", request.path]
+    case .configureDiagnostics(let choice):
+      try choice.validate()
+      let request = support.appendingPathComponent("request-\(UUID().uuidString).json")
+      try JSONEncoder().encode(choice).write(to: request, options: .withoutOverwriting)
+      draft = request
+      arguments += ["--configure-diagnostics", "--request", request.path]
     case .configure(let settings):
       try settings.validate()
       let request = support.appendingPathComponent("request-\(UUID().uuidString).json")

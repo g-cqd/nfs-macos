@@ -12,6 +12,7 @@ struct NFS2015ModelTests {
     var snapshot: NFS2015Snapshot
     var failure: (any Error)?
     var progress: PrefixSeed.Progress?
+    var crashReport: NFS2015CrashNotice?
     private(set) var performed: [NFS2015Operation] = []
 
     init(snapshot: NFS2015Snapshot) { self.snapshot = snapshot }
@@ -25,6 +26,8 @@ struct NFS2015ModelTests {
     func logLocation() async -> URL? { nil }
 
     func preparationProgress() async -> PrefixSeed.Progress? { progress }
+
+    func latestCrashReport(since date: Date) async -> NFS2015CrashNotice? { crashReport }
   }
 
   struct FakeRosetta: RosettaProviding {

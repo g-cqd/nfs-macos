@@ -38,6 +38,7 @@ struct NFS2015SettingsView: View {
         outcome
       }
       NFS2015MetalFXView(model: model)
+      NFS2015DiagnosticsView(model: model)
       controller
     }
     .formStyle(.grouped)

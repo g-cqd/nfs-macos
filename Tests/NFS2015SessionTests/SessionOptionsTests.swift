@@ -14,8 +14,10 @@ struct SessionOptionsTests {
       #expect(options.action == flag && options.request == nil)
       #expect(options.bundle.path == app && options.support.path == "/tmp/Player")
     }
-    for flag in ["--configure", "--choose-installation", "--install-client", "--configure-metalfx"]
-    {
+    for flag in [
+      "--configure", "--choose-installation", "--install-client", "--configure-metalfx",
+      "--configure-diagnostics",
+    ] {
       let options = try SessionOptions(
         arguments: [app, "--support", "/tmp/Player", flag, "--request", "/tmp/request"])
       #expect(options.action == flag && options.request?.path == "/tmp/request")
@@ -29,6 +31,7 @@ struct SessionOptionsTests {
     ["/A.app", "--support", "/tmp/p", "--install-client"],
     ["/A.app", "--support", "/tmp/p", "--configure"],
     ["/A.app", "--support", "/tmp/p", "--configure-metalfx"],
+    ["/A.app", "--support", "/tmp/p", "--configure-diagnostics"],
     ["/A.app", "--support", "/tmp/p", "--choose-installation"],
     ["/A.app", "--support", "/tmp/p", "--install-client", "--request"],
     ["/A.app", "--support", "/tmp/p", "--install-client", "--request", "a", "--request", "b"],
