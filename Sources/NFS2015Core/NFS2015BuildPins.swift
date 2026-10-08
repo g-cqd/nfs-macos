@@ -18,6 +18,11 @@ package struct NFS2015BuildPins: Equatable, Sendable {
   package var sidecarSHA256: String?
   package var runtimeTuning: [String: String] = [:]
   package var clientLayerSHA256: String?
+  /// What the runtime profile says the runtime can do, such as `crashContextBlock`.
+  package var runtimeCapabilities: [String] = []
+
+  /// Whether the runtime prints a `wine-crash:` block when a program faults (patch 0005).
+  package var expectsCrashBlock: Bool { runtimeCapabilities.contains("crashContextBlock") }
 
   private struct Provenance: Decodable {
     var runtimeProfile: String?
@@ -25,6 +30,7 @@ package struct NFS2015BuildPins: Equatable, Sendable {
     var inputRuntimeHashes: [String: String]?
     var inputSidecarSHA256: String?
     var runtimeTuning: [String: String]?
+    var runtimeCapabilities: [String]?
   }
 
   private struct Info: Decodable {
@@ -49,6 +55,7 @@ package struct NFS2015BuildPins: Equatable, Sendable {
       runtimeHashes = provenance.inputRuntimeHashes ?? [:]
       sidecarSHA256 = provenance.inputSidecarSHA256
       runtimeTuning = provenance.runtimeTuning ?? [:]
+      runtimeCapabilities = provenance.runtimeCapabilities ?? []
     }
     if let data = try? BoundedFile.read(
       bundle.appendingPathComponent("Contents/Info.plist"), limit: 262_144)
@@ -74,6 +81,9 @@ package struct NFS2015BuildPins: Equatable, Sendable {
       "runtime switches in the recipe: \(list(runtimeTuning))",
       "client layer sha256: \(clientLayerSHA256 ?? "none")",
     ]
+    if !runtimeCapabilities.isEmpty {
+      lines.append("runtime capabilities: \(runtimeCapabilities.sorted().joined(separator: " "))")
+    }
     for (path, hash) in runtimeHashes.sorted(by: { $0.key < $1.key }) {
       lines.append("runtime file \(path) sha256 \(hash)")
     }

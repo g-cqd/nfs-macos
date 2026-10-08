@@ -8,7 +8,7 @@
   "category": "public.app-category.racing-games",
   "launcher": "NFS2015Launcher",
   "session": "NFS2015Session",
-  "runtimeProfile": "nfs2015-tf-cx11-rebuild-20261008",
+  "runtimeProfile": "nfs2015-tf-cx11-rebuild-0005-20261008",
   "requiredRuntimeCapabilities": [
     "trapFlagEmulation",
     "dxmtDXGI"
@@ -54,7 +54,7 @@
     "sidecar": "{tools}/inputs/x87sidecar/x87sidecar",
     "x87Source": "{tools}/inputs/x87sidecar-src",
     "packaging": "{project}/Packaging",
-    "runtime": "{games}/wine-rebuild/runtime/wine",
+    "runtime": "{games}/wine-rebuild/runtime/wine-0005",
     "runtimeSourceTree": "{games}/wine-rebuild/src/wine",
     "game": "{games}/NFS2015-game",
     "wineMono": "{tools}/inputs/wine-mono",
@@ -208,7 +208,7 @@
     "repository": "https://github.com/athei/wine",
     "branch": "cx-26-patched",
     "baseRevision": "1a7b0c76",
-    "patchCount": 4,
-    "archive": "wine-nfs2015-source.tar.gz"
+    "patchCount": 5,
+    "archive": "wine-nfs2015-source-0005.tar.gz"
   }
 }

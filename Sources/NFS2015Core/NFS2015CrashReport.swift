@@ -80,6 +80,7 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       "wineserver reported a crash \(digest.serverCrashes) time(s); game launches in this session: "
         + "\(digest.launches)")
     lines += Self.faultLines(findings)
+    lines += Self.crashBlockSection(digest: digest, context: context)
     lines.append("")
     lines += Self.displaySection(digest: digest, context: context)
     lines.append("")
@@ -148,6 +149,25 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       lines.append(
         "the same place, nfs16+0x\(String(rva, radix: 16, uppercase: true)), faulted "
           + "\(hits.count) times in this session")
+    }
+    return lines
+  }
+
+  /// The `wine-crash:` blocks of a runtime that prints them. Nothing for a runtime that does not,
+  /// so a report from an older runtime reads exactly as before.
+  private static func crashBlockSection(digest: NFS2015LogDigest, context: NFS2015CrashContext)
+    -> [String]
+  {
+    let blocks = digest.crashBlocks
+    guard !blocks.isEmpty || context.pins.expectsCrashBlock else { return [] }
+    var lines = ["", "== Crash context (wine-crash block) =="]
+    if blocks.isEmpty {
+      lines.append(
+        "this runtime prints a crash block when a program faults, and none was found in the log")
+    }
+    for (index, block) in blocks.enumerated() {
+      lines.append("block \(index + 1) of \(blocks.count): " + block.reportLines[0])
+      lines += block.reportLines.dropFirst()
     }
     return lines
   }

@@ -5,6 +5,7 @@
 | mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
 | x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `c3969379750531fb124859ae742ab4f727f54f9c` |
 | NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
+| NFS (2015) Wine, from 2026-10-08 | local patched tree, not published: `athei/wine` `cx-26-patched` `1a7b0c76` plus five patches | HEAD `ce7b8eaa908e2cf4f91450f50c4e4694e21a6674` (profile `nfs2015-tf-cx11-rebuild-0005-20261008`; NFS2015.md §24) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
 
 **Repin of 2026-10-02 (third), the release line.** One integration line, `release-latest`, repins every shipped
@@ -134,3 +135,14 @@ Fetch future source updates without resetting users' working trees. Stage candid
 artifacts separately, retain the previous app, verify the required compatibility gates,
 and update pins only with evidence. A source update alone is not evidence of improved
 frame rate. The retained CoD4 result and its limits are summarized in [CoD4](COD4.md).
+
+## Repin of 2026-10-08 (runtime with patch 0005), Need for Speed (2015) only
+
+| Pin | Was (profile `nfs2015-tf-cx11-rebuild-20261008`) | Now (profile `nfs2015-tf-cx11-rebuild-0005-20261008`) |
+|---|---|---|
+| Wine source revision | `1e98e299ad2900fce2ab4f103cc1f98608fc7bfa` (base `1a7b0c76` + 4 commits) | `ce7b8eaa908e2cf4f91450f50c4e4694e21a6674` (base `1a7b0c76` + 5 commits) |
+| Source archive in the app | `wine-nfs2015-source.tar.gz`, `e3c8c7ce…bf7fe` | `wine-nfs2015-source-0005.tar.gz`, `25f91e0791942a350c1acb2cf9caffb83be44d5e7bc840c43d992d6337ad8919` |
+| `lib/wine/x86_64-windows/kernelbase.dll` | `4cdca0f5…39b6` (not pinned before) | `14e82c52ff0494287f3b2e921647a45254d20b7a2cf2b730f17df5f8092356e5` |
+| `lib/wine/i386-windows/kernelbase.dll` | `c1efceb5…1a726` (not pinned before) | `09ce21ffa620c7195dd400f1aa10e10e5451fdcc765ff2b9c651c5dc1d289c2c` |
+| The five earlier pinned files, `sidecarSHA256`, mtld3d, EA client layer | | unchanged |
+

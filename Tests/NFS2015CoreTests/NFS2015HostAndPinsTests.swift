@@ -40,6 +40,26 @@ struct NFS2015HostAndPinsTests {
     #expect(pins.runtimeTuning == ["WINE_TF_EMULATION": "1"])
     #expect(pins.lines.contains("runtime file bin/wine sha256 aa"))
     #expect(pins.lines.contains("sources: mtld3d=7d108a4 x87sidecar=c396937"))
+    #expect(pins.runtimeCapabilities.isEmpty && !pins.expectsCrashBlock)
+    #expect(!pins.lines.contains { $0.hasPrefix("runtime capabilities") })
+  }
+
+  @Test
+  func `reads the runtime capabilities, and knows a runtime that prints the crash block`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let app = try bundle(
+      scratch,
+      provenance: """
+        {"runtimeProfile":"nfs2015-tf-cx11-rebuild-0005-20261008",
+         "runtimeCapabilities":["trapFlagEmulation","crashContextBlock"]}
+        """)
+    let pins = NFS2015BuildPins(bundle: app, manifest: nil)
+    #expect(pins.expectsCrashBlock)
+    #expect(pins.lines.contains("runtime capabilities: crashContextBlock trapFlagEmulation"))
+    let other = try bundle(
+      scratch, provenance: #"{"runtimeCapabilities":["trapFlagEmulation","dxmtDXGI"]}"#)
+    #expect(!NFS2015BuildPins(bundle: other, manifest: nil).expectsCrashBlock)
   }
 
   @Test
