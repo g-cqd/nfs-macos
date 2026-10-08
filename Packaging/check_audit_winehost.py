@@ -13,7 +13,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 
 from audit_winehost import audit_winehost, decode_profile, profile_problems, run_tool
-from signing_policy import signing_entitlements
+from signing_policy import WINEHOST_BUNDLE_IDENTIFIER, WINEHOST_TEAM, signing_entitlements
 from winehost import APP_RELATIVE, EXECUTABLE_RELATIVE, PROFILE_RELATIVE, info_plist
 
 NOW = datetime(2026, 10, 7, tzinfo=timezone.utc)
@@ -33,11 +33,11 @@ def make_certificate(root, name):
 def make_profile(root, certificate, **overrides):
     """A CMS-wrapped profile like Apple's, signed with the throwaway certificate."""
     key, pem, der = certificate
-    body = {'Name': 'synthetic winehost', 'TeamIdentifier': ['NP94WB3P75'],
+    body = {'Name': 'synthetic winehost', 'TeamIdentifier': [WINEHOST_TEAM],
             'ExpirationDate': NOW + timedelta(days=3650), 'DeveloperCertificates': [der],
             'Entitlements': {'com.apple.developer.cross-architecture-support': True,
-                             'com.apple.application-identifier': 'NP94WB3P75.fr.gcqd.winehost',
-                             'com.apple.developer.team-identifier': 'NP94WB3P75'}}
+                             'com.apple.application-identifier': WINEHOST_TEAM + '.' + WINEHOST_BUNDLE_IDENTIFIER,
+                             'com.apple.developer.team-identifier': WINEHOST_TEAM}}
     body.update(overrides)
     source, target = root / 'profile.plist', root / 'profile.cms'
     source.write_bytes(plistlib.dumps(body))
@@ -76,7 +76,7 @@ with TemporaryDirectory() as temporary:
 
     # The CMS envelope decodes with the system tool, as the audit decodes a real profile.
     decoded = decode_profile(profile)
-    assert decoded['TeamIdentifier'] == ['NP94WB3P75']
+    assert decoded['TeamIdentifier'] == [WINEHOST_TEAM]
     assert decoded['Entitlements']['com.apple.developer.cross-architecture-support'] is True
 
     # An ad-hoc helper signed by the project's policy passes, and says what it leaves out.
@@ -127,7 +127,7 @@ with TemporaryDirectory() as temporary:
         'does not carry': dict(Entitlements={**body['Entitlements'],
                                              'com.apple.developer.cross-architecture-support': False}),
         'App ID': dict(Entitlements={**body['Entitlements'],
-                                     'com.apple.application-identifier': 'NP94WB3P75.other.app'}),
+                                     'com.apple.application-identifier': WINEHOST_TEAM + '.other.app'}),
     }
     for expected, change in cases.items():
         altered = {**deepcopy(body), **change}

@@ -6,6 +6,7 @@ import plistlib
 from tempfile import TemporaryDirectory
 
 from recipes import RECIPE_DIRECTORY, load_recipe, validate_recipe
+from signing_policy import WINEHOST_BUNDLE_IDENTIFIER
 from winehost import (EXECUTABLE_RELATIVE, PROFILE_RELATIVE, require_arm64_macho, stage_winehost,
                       validate_winehost)
 
@@ -101,7 +102,7 @@ with TemporaryDirectory() as temporary:
     assert (app / PROFILE_RELATIVE).read_bytes() == PROFILE
     assert PROFILE_RELATIVE == 'Contents/Helpers/winehost.app/Contents/embedded.provisionprofile'
     info = plistlib.loads((app / 'Contents/Helpers/winehost.app/Contents/Info.plist').read_bytes())
-    assert info['CFBundleIdentifier'] == 'fr.gcqd.winehost'
+    assert info['CFBundleIdentifier'] == WINEHOST_BUNDLE_IDENTIFIER
     assert info['CFBundleExecutable'] == 'winehost' and info['CFBundlePackageType'] == 'APPL'
     assert info['LSArchitecturePriority'] == ['arm64']
     marker = json.loads((contents / 'Resources/runtime-profile.json').read_text())
