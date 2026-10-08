@@ -70,6 +70,24 @@ struct NFS2015WineExperimentsModelTests {
   }
 
   @Test
+  func `the workaround toggle changes only its own switch and is sent as chosen`() async {
+    let (sut, service) = model()
+    await sut.run()
+    #expect(!sut.rwxWxEmulationBinding().wrappedValue)
+    sut.rwxWxEmulationBinding().wrappedValue = true
+    #expect(sut.experiments == .init(rwxWxEmulation: true) && sut.hasPendingExperiments)
+    sut.saveExperiments()
+    await sut.run()
+    #expect(
+      service.performed.last
+        == .configureExperiments(
+          NFS2015WineExperimentsRequest(
+            action: .save, preference: NFS2015WineExperimentsPreference(rwxWxEmulation: true))))
+    sut.rwxWxEmulationBinding().wrappedValue = false
+    #expect(!sut.hasPendingExperiments)
+  }
+
+  @Test
   func `adopts the saved choice and says when it applies`() async {
     let (sut, service) = model()
     await sut.run()

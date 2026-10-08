@@ -62,6 +62,9 @@ final class NFS2015CrashMonitor: Sendable {
     }
   }
 
+  /// One line about the `wine-rwx:` lines the log held so far, or nil when it held none.
+  var rwxSummary: String? { state.withLock { $0.digest.rwx.summary } }
+
   /// The newest report this monitor wrote.
   var notice: NFS2015CrashNotice? { state.withLock { $0.notice } }
 

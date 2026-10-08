@@ -25,6 +25,8 @@ package struct NFS2015LogDigest: Equatable, Sendable {
   private var blockReader = NFS2015CrashBlockReader()
   /// The `wine-trace:` lines of a session that set `WINE_TRACE_PAGE`.
   package private(set) var pageTrace = NFS2015PageTrace()
+  /// The `wine-rwx:` lines of a session that set `WINE_RWX_WX_EMULATION`.
+  package private(set) var rwx = NFS2015RwxLog()
   private var pending = ""
 
   package init() {}
@@ -42,7 +44,7 @@ package struct NFS2015LogDigest: Equatable, Sendable {
       && left.displayModes.map(\.count) == right.displayModes.map(\.count)
       && left.serverCrashes == right.serverCrashes && left.context == right.context
       && left.trace == right.trace && left.crashBlocks == right.crashBlocks
-      && left.pageTrace == right.pageTrace
+      && left.pageTrace == right.pageTrace && left.rwx == right.rwx
   }
 
   /// Reads the whole of a log at once.
@@ -90,6 +92,7 @@ package struct NFS2015LogDigest: Equatable, Sendable {
     let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
     blockReader.read(line)
     pageTrace.read(line)
+    rwx.read(line)
     if line.hasPrefix("compatdb: NFS16.exe [") { launches += 1 }
     if line.hasPrefix("wineserver crashed") { serverCrashes += 1 }
     if let mode = Self.displayMode(in: line) { note(mode) }

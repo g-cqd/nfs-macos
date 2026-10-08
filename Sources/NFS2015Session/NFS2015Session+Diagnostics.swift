@@ -24,7 +24,10 @@ struct NFS2015PlayWatch {
         print("The diagnostic log stopped keeping lines: \(failure)")
       }
     }
-    return monitor?.stop()
+    let notice = monitor?.stop()
+    // The emulation's own counters, whether or not the game crashed: numbers only.
+    if let summary = monitor?.rwxSummary { print(summary) }
+    return notice
   }
 }
 
