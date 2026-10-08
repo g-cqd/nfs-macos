@@ -27,10 +27,8 @@ Status of 2026-10-08. The inventory is [THIRD_PARTY.md](../THIRD_PARTY.md), the 
    profile (`Packaging/runtime-inputs.json`), and no recipe records which commit it was built from.
    Their corresponding source is therefore not established. Either find and publish the tree, or
    rebuild those apps from a published commit.
-4. **The Need for Speed (2015) Wine tree is not published.** Commit
-   `1e98e299ad2900fce2ab4f103cc1f98608fc7bfa` exists only in the local build tree and in the archive
-   shipped inside the app. Decide whether to push it as a branch or tag of `g-cqd/wine` (for example
-   `nfs2015-fix`).
+4. **The Need for Speed (2015) Wine tree: resolved.** Published as `g-cqd/wine` branch `nfs2015-runtime-0005` with tags
+   `nfs2015-runtime-20261008` and `nfs2015-runtime-0005-20261008` (see [SOURCE-OFFER.md](SOURCE-OFFER.md)).
 5. **The native arm64 build scripts are not published.** `scripts/build-arm64.sh` and the bring-up notes
    are in the unpublished *wine-arm64* working repository. Publish it, or move the scripts into
    `g-cqd/wine` next to the branches, before an arm64 app is distributed.
