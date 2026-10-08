@@ -31,6 +31,8 @@ package struct NFS2015RwxLog: Equatable, Sendable {
 
   package private(set) var activations: [Activation] = []
   package private(set) var counters: [Counters] = []
+  /// The per-page lines of patch 0010, when the runtime printed any.
+  package private(set) var pageLog = NFS2015RwxPageLog()
   /// Every well-formed line read, past the lists' limits too.
   package private(set) var lines = 0
   package private(set) var totalStores: UInt64 = 0
@@ -48,7 +50,9 @@ package struct NFS2015RwxLog: Equatable, Sendable {
   mutating func read(_ line: String) {
     guard line.hasPrefix(Self.prefix) else { return }
     let body = line.dropFirst(Self.prefix.count)
-    if body.hasPrefix("active "), let value = Self.activation(body.dropFirst(7)) {
+    if body.hasPrefix("page ") {
+      if pageLog.read(line) { lines += 1 }
+    } else if body.hasPrefix("active "), let value = Self.activation(body.dropFirst(7)) {
       lines += 1
       if !activations.contains(value), activations.count < Self.listLimit {
         activations.append(value)
@@ -112,6 +116,16 @@ package struct NFS2015RwxLog: Equatable, Sendable {
         text += " (\(hotReleasedProcesses) because they were written too often)"
       }
     }
-    return text + "."
+    text += "."
+    if !pageLog.isEmpty {
+      let released = pageLog.pages.reduce(0) { $0 + $1.releases.values.reduce(0, +) }
+      let protected = pageLog.pages.reduce(0) { $0 + $1.protections.values.reduce(0, +) }
+      let lines = pageLog.total
+      let pages = pageLog.pages.count
+      text +=
+        " Page log: \(lines) line\(lines == 1 ? "" : "s") about \(pages) "
+        + "page\(pages == 1 ? "" : "s"), \(protected) protected, \(released) released."
+    }
+    return text
   }
 }

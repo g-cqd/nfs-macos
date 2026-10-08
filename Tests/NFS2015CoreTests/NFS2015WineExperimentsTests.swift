@@ -57,9 +57,17 @@ struct NFS2015WineExperimentsTests {
     let loaded = NFS2015WineExperimentsStore(support: scratch.root).load()
     #expect(loaded.preference == .standard && loaded.notice == nil)
     let choice = NFS2015WineExperimentsChoice.standard
-    #expect(choice.environment == ["WINE_RWX_WX_EMULATION": "1"])
+    // The workaround and the history of the stub's page, nothing else.
+    #expect(
+      choice.environment == [
+        "WINE_RWX_WX_EMULATION": "1", "WINE_RWX_WX_LOG": "1B30000-1B31000",
+      ])
     #expect(choice.isActive && !choice.tracesPages && choice.emulatesWriteXorExecute)
-    #expect(choice.line == "WINE_RWX_WX_EMULATION=1 (default)")
+    #expect(choice.rwxLogWindow == "1B30000-1B31000")
+    #expect(
+      choice.line == "WINE_RWX_WX_EMULATION=1 (default), WINE_RWX_WX_LOG=1B30000-1B31000 (default)")
+    // With the workaround saved off there is nothing to log, and nothing is set.
+    #expect(NFS2015WineExperimentsChoice.allOff.rwxLogWindow == nil)
   }
 
   @Test
@@ -241,7 +249,9 @@ struct NFS2015WineExperimentsTests {
   func `the default session carries the workaround and none of the three experiments`() throws {
     let environment = try environment(.standard)
     #expect(environment["WINE_RWX_WX_EMULATION"] == "1")
-    for name in WineExperimentSwitches.names where name != "WINE_RWX_WX_EMULATION" {
+    #expect(environment["WINE_RWX_WX_LOG"] == "1B30000-1B31000")
+    for name in WineExperimentSwitches.names
+    where name != "WINE_RWX_WX_EMULATION" && name != "WINE_RWX_WX_LOG" {
       #expect(environment[name] == nil, "\(name)")
     }
     #expect(environment["ROSETTA_X87_PATH"] == nil)
@@ -323,6 +333,7 @@ struct NFS2015WineExperimentsTests {
     #expect(
       derived.wineSwitches.environment == [
         "WINE_ROSETTA_FLUSH_TOGGLE": "1", "WINE_RWX_WX_EMULATION": "1",
+        "WINE_RWX_WX_LOG": "1B30000-1B31000",
       ])
   }
 

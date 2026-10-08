@@ -28,6 +28,12 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
   package var rwxWxEmulation: Bool?
   /// `WINE_RWX_WX_HOT_LIMIT`, a decimal count; only a developer can set it.
   package var rwxHotLimit: String?
+  /// `WINE_RWX_WX_LOG` window as `<hexstart>-<hexend>` or `all`, or `off`; nil leaves the default.
+  package var rwxLog: String?
+  /// `WINE_RWX_WX_NEAR_LIMIT`, a decimal count; only a developer can set it.
+  package var rwxNearLimit: String?
+  /// Forces `WINE_RWX_WX_TF_RELEASE=1` on (true); false and nil set nothing.
+  package var rwxTfRelease: Bool?
   /// `WINE_TRACE_PAGE` window as `<hexstart>-<hexend>`, or `off`; nil leaves the saved setting.
   package var tracePage: String?
 
@@ -38,7 +44,8 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
 
   package var isActive: Bool {
     sidecar != nil || !tuning.isEmpty || flushToggle != nil || protectToggle != nil
-      || tracePage != nil || rwxWxEmulation != nil || rwxHotLimit != nil
+      || tracePage != nil || rwxWxEmulation != nil || rwxHotLimit != nil || rwxLog != nil
+      || rwxNearLimit != nil || rwxTfRelease != nil
   }
 
   /// - Throws: A failure for a value that is not accepted, so a typo never runs as a different
@@ -53,6 +60,23 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
     flushToggle = try Self.toggle(environment, WineExperimentSwitches.flushToggle)
     protectToggle = try Self.toggle(environment, WineExperimentSwitches.protectToggle)
     rwxWxEmulation = try Self.toggle(environment, WineExperimentSwitches.rwxWxEmulation)
+    rwxTfRelease = try Self.toggle(environment, WineExperimentSwitches.rwxTfRelease)
+    if let window = environment[Self.tuningPrefix + WineExperimentSwitches.rwxLog] {
+      guard window == Self.off || WineExperimentSwitches.isLogWindow(window) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxLog) must be <hexstart>-<hexend> with "
+            + "the end above the start, all, or off.")
+      }
+      rwxLog = window
+    }
+    if let limit = environment[Self.tuningPrefix + WineExperimentSwitches.rwxNearLimit] {
+      guard WineExperimentSwitches.isHotLimit(limit) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxNearLimit) must be a decimal number "
+            + "of at most seven digits.")
+      }
+      rwxNearLimit = limit
+    }
     if let limit = environment[Self.tuningPrefix + WineExperimentSwitches.rwxHotLimit] {
       guard WineExperimentSwitches.isHotLimit(limit) else {
         throw .operation(
@@ -111,6 +135,13 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
       parts.append("\(WineExperimentSwitches.rwxWxEmulation)=\(rwxWxEmulation ? 1 : 0)")
     }
     if let rwxHotLimit { parts.append("\(WineExperimentSwitches.rwxHotLimit)=\(rwxHotLimit)") }
+    if let rwxLog { parts.append("\(WineExperimentSwitches.rwxLog)=\(rwxLog)") }
+    if let rwxNearLimit {
+      parts.append("\(WineExperimentSwitches.rwxNearLimit)=\(rwxNearLimit)")
+    }
+    if let rwxTfRelease {
+      parts.append("\(WineExperimentSwitches.rwxTfRelease)=\(rwxTfRelease ? 1 : 0)")
+    }
     if let sidecar { parts.insert("x87 sidecar \(sidecar ? "on" : "off")", at: 0) }
     return parts.joined(separator: ", ")
   }
