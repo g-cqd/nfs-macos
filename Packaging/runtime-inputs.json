@@ -102,6 +102,27 @@
         "lib/wine/x86_64-windows/kernelbase.dll": "14e82c52ff0494287f3b2e921647a45254d20b7a2cf2b730f17df5f8092356e5",
         "lib/wine/i386-windows/kernelbase.dll": "09ce21ffa620c7195dd400f1aa10e10e5451fdcc765ff2b9c651c5dc1d289c2c"
       }
+    },
+    "nfs2015-tf-cx11-rebuild-0007-20261008": {
+      "description": "CX26.3 / Wine11.0 (athei/wine cx-26-patched 1a7b0c76 plus seven patches): the runtime of profile nfs2015-tf-cx11-rebuild-0005-20261008 plus patch 0006 (page history, checksum, code windows and return addresses in the wine-crash block) and patch 0007 (opt-in executable-page experiments and a page trace, off unless an environment variable is set)",
+      "capabilities": [
+        "trapFlagEmulation",
+        "dxmtDXGI",
+        "x87Sidecar",
+        "crashContextBlock",
+        "crashContextCodeWindows",
+        "rosettaPageExperiments"
+      ],
+      "toolchainNote": "The runtime of profile nfs2015-tf-cx11-rebuild-0005-20261008 with two more patches (source HEAD c2afb959): patch 0006 changes both kernelbase.dll files, patch 0007 changes lib/wine/x86_64-unix/ntdll.so (virtual.c and signal_x86_64.c); the other 1788 files are byte-identical to that profile's runtime (compared by this build's own sha256 of both trees). Same toolchain as that profile: PE builtins by Homebrew mingw-w64 GCC 16.1.0 rather than llvm-mingw clang, Mach-O by Apple clang 21.0.0. The switches of patch 0007 (WINE_ROSETTA_FLUSH_TOGGLE, WINE_ROSETTA_PROTECT_TOGGLE, WINE_TRACE_PAGE) are all off unless set. Behaviour was checked only on test programs (the execution-breakpoint fixture, the crash-context fixture, a toy executable-page probe that could not reproduce stale execution), never with NFS16.exe or the EA client.",
+      "files": {
+        "bin/wine": "03985ed96db1781bb38fe7428392929284dce1f37a9b020ba2ce09eb110ff360",
+        "bin/wineserver": "11a0d304e25a5a7b185d49db7331119f3e2b4a8535a55dcc3f0dd7257b5f0529",
+        "lib/wine/x86_64-unix/ntdll.so": "b1bddee45bbc61a74486464e842c739f68b489d0da29ef458210985ca6340de4",
+        "lib/wine/x86_64-unix/wine": "86283fa89482996e3865a8bc75d8fe4f8ac535699fe5bde0b781e18c2b0a5a1f",
+        "lib/wine/i386-windows/ntdll.dll": "10b33abc5834a630fb9de6a7a33c1abd64ccefbd210fcac4350765bfea456978",
+        "lib/wine/x86_64-windows/kernelbase.dll": "ec494aca12cac61e4236c27692fc467ce12a24dd4943a6035b873563e5882f66",
+        "lib/wine/i386-windows/kernelbase.dll": "15c1001c859753a3f70a1c54292b04ace79a404dfbb8195ac4b959917b52b4a3"
+      }
     }
   }
 }

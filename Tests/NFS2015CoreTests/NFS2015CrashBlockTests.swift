@@ -284,7 +284,8 @@ struct NFS2015CrashBlockReaderTests {
   @Test
   func `a block that never ends is closed at the line limit`() {
     let lines =
-      [CrashBlockFixtures.block[0]] + Array(repeating: "wine-crash: rax=1", count: 40)
+      [CrashBlockFixtures.block[0]]
+      + Array(repeating: "wine-crash: rax=1", count: NFS2015CrashBlock.lineLimit + 40)
     let reader = read(lines)
     #expect(reader.blocks.count == 1 && !reader.isOpen)
   }

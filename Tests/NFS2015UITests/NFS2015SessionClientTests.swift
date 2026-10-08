@@ -17,6 +17,10 @@ struct NFS2015SessionClientTests {
       (.configureDiagnostics(NFS2015DiagnosticsRequest(action: .reset)), "--configure-diagnostics"),
       (.configureSidecar(NFS2015SidecarRequest(action: .reset)), "--configure-sidecar"),
       (
+        .configureExperiments(NFS2015WineExperimentsRequest(action: .reset)),
+        "--configure-experiments"
+      ),
+      (
         .configure(
           NFS2015SettingsRequest(action: .restoreOriginal, changes: [:], expectedDigest: "d")),
         "--configure"

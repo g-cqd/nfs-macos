@@ -57,6 +57,8 @@ package enum LaunchEnvironment {
 
   /// - Parameters:
   ///   - debugChannels: The `WINEDEBUG` value; silent by default.
+  ///   - experiments: Wine experiment switches for the whole session (`WineExperimentSwitches`);
+  ///     empty unless the player or a developer set one. Any other name is refused.
   ///   - usesSidecar: Whether `ROSETTA_X87_PATH` names the x87 sidecar for the whole Wine session.
   ///     The other games always pass true; Need for Speed (2015) passes the player's choice, off
   ///     unless they turned it on or a developer override forces it.
@@ -64,8 +66,10 @@ package enum LaunchEnvironment {
     paths: AppPaths, prefix: URL, home: URL, temporary: URL,
     tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = [],
     managedCode: Bool = false, environments: [ExecutableEnvironment] = [],
-    debugChannels: String = silentDebugChannels, usesSidecar: Bool = true
+    debugChannels: String = silentDebugChannels, usesSidecar: Bool = true,
+    experiments: [String: String] = [:]
   ) throws(LauncherError) -> [String: String] {
+    try WineExperimentSwitches.validate(experiments)
     guard isDebugChannelList(debugChannels) else {
       throw .operation("The Wine debug channels are not an accepted list.")
     }
@@ -96,6 +100,7 @@ package enum LaunchEnvironment {
         ).path
     }
     for (name, value) in try tuning.environment() { environment[name] = value }
+    for (name, value) in experiments { environment[name] = value }
     return environment
   }
 }

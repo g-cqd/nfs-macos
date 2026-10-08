@@ -3,6 +3,37 @@ NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 Need for Speed Bundled <date>-<commit>-rebuilt.app    (the complete app: game and EA app inside)
 Need for Speed Import <date>-<commit>-rebuilt.app     (no game, no EA app: uses your own Windows folder)
 
+WHAT IS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; use these for the MetalFX experiments)
+Need for Speed Bundled 20261008-<commit>-0007.app and Need for Speed Import 20261008-<commit>-0007.app are the "-0005" apps with:
+ 1. A Wine runtime with two more patches. 0006 makes the "wine-crash:" block much fuller: the memory state of the crashing page and
+    its neighbours, a checksum of that page, the thread count, return addresses, and 512 bytes of code around the crashing
+    instruction. 0007 adds three EXPERIMENT SWITCHES, all OFF unless you turn them on (below), and a trace of memory calls.
+    Three Wine files differ from "-0005" (both kernelbase.dll and ntdll.so); the rest is the same.
+ 2. The crash report (Logs/crash-report-*.txt) shows the fuller block ("Crash context") and, when you switched the trace on, a
+    "Page trace" section: the last 200 memory calls on the traced page before the crash, as numbers. It also lists which
+    experiment switches were set ("wine experiment switches: ...").
+ 3. A "Wine experiments" group in Settings (three switches, off by default; Save, Discard, Reset) and, in the MetalFX group,
+    the words "experimental, known to crash NFS16": with MetalFX on, the game faulted at the same place (0x1B30159) in 2 of 2 launches
+    that got as far as a display-mode change, on two Macs, and in none of 17 launches with it off. Why is not known.
+Defaults did not change: MetalFX off, x87 sidecar off, all experiments off. Same app identity and same folder as the earlier apps.
+NOT checked: that any switch changes anything in the game (the guess behind them, that Rosetta runs a stale copy of a code page the
+game rewrote, could not be reproduced with a small test program), the full block and the trace from the game itself, a 32-bit program.
+The EA app's update-restart problem is not fixed.
+
+HOW TO RUN THE FOUR VARIANTS (quit the app and the EA app between runs; each Save applies at the next Play)
+Where: Settings tab. MetalFX group = "MetalFX"; experiments group = "Wine experiments (for finding the NFS16 crash)".
+ (i) Baseline, MetalFX ON, no experiment: MetalFX group: switch on, factor 1.5, press "Save MetalFX". Wine experiments group: press
+     "Reset" (all three off). Quit the EA app if it is running, press Play, play until it crashes or for the same time each run.
+ (ii) FLUSH: as (i), and in Wine experiments switch on the FIRST toggle (WINE_ROSETTA_FLUSH_TOGGLE=1), press "Save", then Play.
+ (iii) PROTECT: as (i), and switch on the SECOND toggle (WINE_ROSETTA_PROTECT_TOGGLE=1), press "Save", then Play.
+ (iv) BOTH: as (i), and switch on the first and the second toggle, press "Save", then Play.
+ Trace (add to any of the four): also switch on the THIRD toggle (WINE_TRACE_PAGE=1B30000-1B31000), press "Save", then Play.
+ After a crash: the Play tab shows the crash report with "Reveal in Finder" (folder ~/Library/Application Support/NFS2015Mac/Logs).
+ The report's line "wine experiment switches:" says which variant it was. Send the report for each run. Run each variant several
+ times: one run per variant says nothing. To turn everything off again: "Reset" in both groups.
+ For a developer without the Settings page: set NFS2015_AB_WINE_ROSETTA_FLUSH_TOGGLE=1, NFS2015_AB_WINE_ROSETTA_PROTECT_TOGGLE=1
+ and NFS2015_AB_WINE_TRACE_PAGE=1B30000-1B31000 (or "off") in front of the session helper command (docs/NFS2015.md section 20.5).
+
 WHAT IS DIFFERENT IN THE "-0005" APPS (added 2026-10-08, they sit next to the "-rebuilt" ones)
 Need for Speed Bundled 20261008-8b9bcba-0005.app and Need for Speed Import 20261008-8b9bcba-0005.app are the "-rebuilt" apps
 with exactly two changes, and nothing else:
@@ -94,14 +125,16 @@ Save, quit the EA app if it is running, and press Play. The setting covers the w
 and an EA app that is already running keeps the setting it was started with. If the EA app or EA's one-time activation
 prompt misbehaves, try the toggle on. "Reset" returns to off.
 
-METALFX UPSCALING (OFF BY DEFAULT)
-The Settings page has a MetalFX group. It is off, and while it is off the app changes nothing. When you switch it on
-and choose a factor (1.25 to 2.0) and press Save MetalFX, Apple's MetalFX enlarges the game's finished picture by that factor, for the game's
-program only, not for the EA app. Caveat: this app runs the game with Retina mode, so the game's picture is already at
-your screen's pixel size. With the game at that size a factor above 1 only gives the GPU more work and adds no detail;
-it can only pay off when the game itself is set to a resolution below your screen's, so that the enlarged picture
-lands near your screen's size. The page shows the sizes. "Reset MetalFX" turns it off again. It was tried only with a
-small test program, never with the game, so whether it looks or runs better in the game is not known.
+METALFX UPSCALING (OFF BY DEFAULT; EXPERIMENTAL, KNOWN TO CRASH NFS16)
+The Settings page has a MetalFX group, labelled "experimental, known to crash NFS16". It is off, and while it is off the app changes
+nothing. With it on, the game faulted at the same place in every launch that got as far as a display-mode change (2 launches, 2 Macs,
+2026-10-07 and 2026-10-08), and it did not in 17 launches with it off; why is not known, and the factor is not known to matter. Leave
+it off to play; turn it on only to help find the cause (see the variants above). When you switch it on and choose a factor (1.25 to
+2.0) and press Save MetalFX, Apple's MetalFX enlarges the game's finished picture by that factor, for the game's program only, not for
+the EA app. Caveat: this app runs the game with Retina mode, so the game's picture is already at your screen's pixel size. With the
+game at that size a factor above 1 only gives the GPU more work and adds no detail; it can only pay off when the game itself is set to
+a resolution below your screen's. The page shows the sizes. "Reset MetalFX" turns it off again. Whether it looks or runs better in the
+game is not known.
 
 IF SOMETHING IS WRONG
 - "Open Log" in the app shows what the helper did.

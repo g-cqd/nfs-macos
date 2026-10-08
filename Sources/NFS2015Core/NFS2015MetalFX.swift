@@ -27,6 +27,23 @@ package enum NFS2015MetalFX {
   /// The player-facing name of the group on the settings page.
   package static let title = "MetalFX"
 
+  /// The status the settings page shows beside the group's name and the toggle. Two of two
+  /// launches with MetalFX on that reached a display-mode change faulted at the same place
+  /// (`0x1B30159`), and none of 17 launches with it off did; why is not known (see
+  /// `docs/NFS2015.md` section 25). It stays off by default.
+  package static let statusLabel = "experimental, known to crash NFS16"
+
+  /// The group's heading, with its status.
+  package static var heading: String { "\(title) (\(statusLabel))" }
+
+  /// The warning printed with the factor's explanation.
+  package static let crashWarning = """
+    With MetalFX on, the game faulted at the same place in every launch that got as far as a \
+    display-mode change (2 launches on 2 Macs, 2026-10-07 and 2026-10-08), and it did not in 17 \
+    launches with MetalFX off. Why is not known, and the scale factor is not known to matter. \
+    Leave it off to play; turn it on only to help find the cause.
+    """
+
   /// The environment this preference gives the game's executable; nil when it is off.
   package static func environment(for preference: NFS2015MetalFXPreference)
     -> ExecutableEnvironment?

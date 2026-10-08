@@ -38,6 +38,9 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
   /// The x87 sidecar choice the next Play will use, and what the last request for it did. Absent
   /// from a state file an older version wrote, which reads as the sidecar off.
   package var sidecar: NFS2015SidecarState?
+  /// The Wine experiment switches the next Play will use. Absent from a state file an older
+  /// version wrote, which reads as every switch off.
+  package var experiments: NFS2015WineExperimentsState?
   /// The newest crash report of the Play that just ended, if the game faulted in it.
   package var crashReport: NFS2015CrashNotice?
 
@@ -48,7 +51,8 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
     backups: NFS2015BackupState? = nil, outcome: NFS2015SettingsOutcome? = nil,
     ownsWindowsFolder: Bool? = nil, setup: NFS2015Setup? = nil, notice: String? = nil,
     metalFX: NFS2015MetalFXState? = nil, diagnostics: NFS2015DiagnosticsState? = nil,
-    sidecar: NFS2015SidecarState? = nil, crashReport: NFS2015CrashNotice? = nil
+    sidecar: NFS2015SidecarState? = nil, experiments: NFS2015WineExperimentsState? = nil,
+    crashReport: NFS2015CrashNotice? = nil
   ) {
     self.blocker = blocker
     self.clientVersion = clientVersion
@@ -65,6 +69,7 @@ package struct NFS2015Snapshot: Codable, Equatable, Sendable {
     self.metalFX = metalFX
     self.diagnostics = diagnostics
     self.sidecar = sidecar
+    self.experiments = experiments
     self.crashReport = crashReport
   }
 
