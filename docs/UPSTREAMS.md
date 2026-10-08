@@ -14,7 +14,7 @@ app together. Old -> new:
 |---|---|---|
 | mtld3d revision | `845b6c914a55633cbe099a076432d2dbe3656d1d` | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
 | x87sidecar revision | `c3969379750531fb124859ae742ab4f727f54f9c` | unchanged (`c396937` is still the tip of `development`) |
-| `sidecarSHA256` | `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5` | unchanged; a new scratch clone rebuilt it byte for byte |
+| `sidecarSHA256` | `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5` | unchanged at that date; **moved on 2026-10-08 to `3ca9cc724b2e4685c271ed6af187f73f147b38ae3e4521793b978c9f09d3a628`, same revision (NFS2015.md §22.2)** |
 | `rendererSourceManifestSHA256` | `2fa01910...2e23` | `fd47420c1ba3c0c51b9b9c2fcb6c4f5efcf94c9acf6894bc6df3ef1683fd445f` |
 | `d3d9/mtld3d/i386-windows/d3d8.dll` | `24493c04...b27a` | `e2ad9398...4344` |
 | `d3d9/mtld3d/i386-windows/d3d9.dll` | `f3a1551a...463e` | `5f0c974c...0abf` |

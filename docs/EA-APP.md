@@ -6,7 +6,7 @@ This track uses a separate Wine runtime and fresh prefix. It does not share Most
 
 - Wine 11.0 from the local CrossOver 26.3-based bundle.
 - Apple-signed D3DMetal framework 4.0b2, minimum macOS 14.
-- Official EA installer 13.796.0.6309, downloaded from the link on [EA's app page](https://www.ea.com/ea-app).
+- Official EA installer 13.796.0.6309, downloaded from the link on [EA's app page](https://www.ea.com/ea-app). (On 2026-10-08 the same link served a newer installer, EA app 13.805.2.6319, `52bf7628…d0f3`; see NFS2015.md §22.3.)
 - Installer SHA-256: `dcbda653c9776320b283157be70def64db73c2b01bf45d5fa78f35d7e4e29320`.
 - Installer completed with result 0 and exit 0. Its first quiet attempt stalled during update checking; a diagnostic retry completed.
 - The user signed in manually, and the library confirms ownership of Need for Speed (2015) Standard Edition.

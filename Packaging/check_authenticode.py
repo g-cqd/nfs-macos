@@ -17,7 +17,7 @@ from authenticode import (Node, SignatureError, parse_signature, pe_authenticode
                           verify, export_roots)
 
 INSTALLER = Path(os.environ.get('EA_INSTALLER', Path.home() / 'Downloads/EAappInstaller.exe'))
-INSTALLER_SHA256 = 'dcbda653c9776320b283157be70def64db73c2b01bf45d5fa78f35d7e4e29320'
+INSTALLER_SHA256 = '52bf76284b76b376163763326b2793e200228c1b42d7fedbe02068fc7a94d0f3'
 PUBLISHER = 'Electronic Arts, Inc.'
 failures = 0
 

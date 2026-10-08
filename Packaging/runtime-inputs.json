@@ -12,7 +12,8 @@
       "url": "https://github.com/g-cqd/x87sidecar"
     }
   },
-  "sidecarSHA256": "160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5",
+  "sidecarSHA256": "3ca9cc724b2e4685c271ed6af187f73f147b38ae3e4521793b978c9f09d3a628",
+  "sidecarBuild": "Rebuilt 2026-10-08 from a clean clone detached at c3969379750531fb124859ae742ab4f727f54f9c with cmake -DCMAKE_BUILD_TYPE=Release, target x87sidecar (Apple clang 21.0.0, clang-2100.3.34.2), in a separate build folder. The result is byte-identical to the independent in-tree build kept in wine-rebuild/ab/sidecar/bin/c396937, so two builds on this toolchain agree. It replaces the earlier pin 160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5: that binary no longer exists, so the two were never compared. The only comparison made (wine-rebuild/ab/README-AB.md section 7) was a rebuild of revision 12afdc2 against an old 8aa4d30 build, which differ in 81 bytes, all in LC_UUID, the linker version field and the ad-hoc signature; that the same holds for c396937 is inferred, not verified.",
   "rendererFiles": {
     "d3d9/mtld3d/i386-windows/d3d8.dll": "e2ad939867789ef0563c4898040743a2dbf024199b60a2d3763adce52afd4344",
     "d3d9/mtld3d/i386-windows/d3d9.dll": "5f0c974cb0c7cef41d0eb8d01e866a6ae067fd4f264c77ea8f89a74893570abf",
@@ -65,6 +66,22 @@
         "lib/wine/x86_64-unix/ntdll.so": "171e363dc8ff69755ebc1ecbeadaad37cf9c06901fa8c2272216d9acc1235270",
         "lib/wine/x86_64-unix/wine": "86283fa89482996e3865a8bc75d8fe4f8ac535699fe5bde0b781e18c2b0a5a1f",
         "lib/wine/i386-windows/ntdll.dll": "e64165eba13e581c10dc69ab27e9b316d638e8988fae8c19f7a0ecb0fa27bd86"
+      }
+    },
+    "nfs2015-tf-cx11-rebuild-20261008": {
+      "description": "CX26.3 / Wine11.0 (athei/wine cx-26-patched 1a7b0c76 plus four patches) rebuilt on 2026-10-07/08 with x86 hardware execution-breakpoint delivery and the dxmt Metal Direct3D 11 backend",
+      "capabilities": [
+        "trapFlagEmulation",
+        "dxmtDXGI",
+        "x87Sidecar"
+      ],
+      "toolchainNote": "Rebuilt 2026-10-07/08 from the patched source tree at HEAD 1e98e299 (base 1a7b0c76 plus four patches). PE builtins were built with Homebrew mingw-w64 GCC 16.1.0 (ntdll.dll reports GCC: (GNU) 16.1.0) rather than llvm-mingw clang, a known parity gap with CI that was not rebuilt for; the Mach-O binaries with Apple clang 21.0.0 (Xcode). Not bit-identical to profile nfs2015-tf-cx11: bin/wine and lib/wine/x86_64-unix/wine match it, bin/wineserver, lib/wine/x86_64-unix/ntdll.so and lib/wine/i386-windows/ntdll.dll differ. The PE ntdll.dll embeds the build folder and a link time, so it cannot match; the cause for the other two is not isolated. Behaviour was checked only by the execution-breakpoint fixture (2 failures with WINE_TF_EMULATION unset, 0 with it set), wine cmd /c ver and the compatibility selection, never with NFS16.exe or the EA client.",
+      "files": {
+        "bin/wine": "03985ed96db1781bb38fe7428392929284dce1f37a9b020ba2ce09eb110ff360",
+        "bin/wineserver": "11a0d304e25a5a7b185d49db7331119f3e2b4a8535a55dcc3f0dd7257b5f0529",
+        "lib/wine/x86_64-unix/ntdll.so": "82cf3d480ffe07ba327eef11e096644bf830c919d4244277acbafc39836f7689",
+        "lib/wine/x86_64-unix/wine": "86283fa89482996e3865a8bc75d8fe4f8ac535699fe5bde0b781e18c2b0a5a1f",
+        "lib/wine/i386-windows/ntdll.dll": "10b33abc5834a630fb9de6a7a33c1abd64ccefbd210fcac4350765bfea456978"
       }
     }
   }

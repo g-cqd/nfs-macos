@@ -22,8 +22,13 @@ That obligation is met by the material shipped in `Contents/Resources/Sources`:
 - `wine-nfs2015-source.tar.gz` — the complete source tree of the modified Wine at the exact
   revision built, so the source is present in the package and not only by reference.
 
-Together these allow anyone holding this app to reproduce the runtime it contains. A copy of
-the LGPL text ships in `Contents/Resources/Licenses`.
+- `wine-nfs2015/rebuild-deviations/` — every change made to the upstream build scripts for the
+  rebuild of 2026-10-07/08 that produced these binaries, as diffs.
+
+Together these allow anyone holding this app to reproduce the runtime it contains, although the
+rebuilt binaries are not bit-identical to those of the earlier apps (`BUILD.md` says which files
+differ and what is not known about why). A copy of the LGPL text ships in
+`Contents/Resources/Licenses`.
 
 ## dxmt — the Direct3D 11 backend used by the game
 
