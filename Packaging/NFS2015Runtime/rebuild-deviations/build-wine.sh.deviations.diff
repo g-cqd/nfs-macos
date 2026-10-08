@@ -1,0 +1,162 @@
+--- local/build-wine.orig.sh	2026-10-07 22:44:54
++++ local/build-wine.sh	2026-10-07 22:45:05
+@@ -1,8 +1,11 @@
+ #!/bin/bash
+ set -e
+ 
+-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+-WINE_SRC="${WINE_SRC:-$ROOT/src}"
++ROOT="<build root>"
++DEPS="$ROOT/deps"            # the deps-2026-09-06 tarball, unpacked in user space instead of /usr/local
++SYSROOT="$ROOT/sysroot"      # sysroot/usr/local -> deps, so pkg-config paths that say /usr/local resolve
++JOBS="${JOBS:-4}"
++WINE_SRC="${WINE_SRC:-$ROOT/src/wine}"
+ BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
+ MINGW_DIR="${MINGW_DIR:-/opt/llvm-mingw}"
+ 
+@@ -16,17 +19,9 @@
+     exit 1
+ fi
+ 
+-if [ ! -x "$MINGW_DIR/bin/x86_64-w64-mingw32-clang" ]; then
+-    echo "Error: llvm-mingw not found at $MINGW_DIR"
+-    exit 1
+-fi
+-export PATH="$PATH:$MINGW_DIR/bin"
++# DEVIATION: the llvm-mingw presence gates are removed. llvm-mingw is not installed; the x86/i386 PE side is built by Homebrew mingw-w64 GCC as it was for the shipped runtime.
++[ -d "$MINGW_DIR/bin" ] && export PATH="$PATH:$MINGW_DIR/bin"
+ 
+-if [ ! -x "$MINGW_DIR/bin/arm64ec-w64-mingw32-clang" ]; then
+-    echo "Error: llvm-mingw at $MINGW_DIR has no arm64ec toolchain"
+-    exit 1
+-fi
+-
+ # Without this, clang takes the deployment target from whatever host is
+ # building, so the artifact's macOS floor was an accident of the runner image:
+ # cx-26.3.0-3 shipped minos 15.0 off the macos-15 runner, while a local build
+@@ -36,6 +31,8 @@
+ # .cargo/config.toml.
+ export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
+ 
++export PKG_CONFIG_SYSROOT_DIR="$SYSROOT"
++
+ # Parse flags
+ CLEAN=0
+ if [ "$1" = "--clean" ]; then
+@@ -89,9 +86,9 @@
+         CC="clang -arch x86_64" \
+         CROSSCC="clang -arch x86_64" \
+         --host=x86_64-apple-darwin \
+-        PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
+-        CFLAGS="-I/usr/local/include" \
+-        LDFLAGS="-L/usr/local/lib"
++        PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" \
++        CFLAGS="-I$DEPS/include" \
++        LDFLAGS="-L$DEPS/lib"
+ else
+     echo "==> Skipping configure (already configured, use --clean to reconfigure)"
+ fi
+@@ -115,6 +112,9 @@
+     patch_sonames
+ fi
+ 
++# ADDED: stop here when only the configure phase is wanted.
++if [ -n "$CONFIGURE_ONLY" ]; then echo "==> Configure phase done (CONFIGURE_ONLY)."; exit 0; fi
++
+ # Build. make runs natively even though the target is x86_64: clang is a
+ # universal binary and CC/CROSSCC above already pin `-arch x86_64`, so putting
+ # make under `arch -x86_64` only means translating every compiler invocation.
+@@ -124,12 +124,12 @@
+ # Rosetta from this arm64 make, which works and is a small share of the time.
+ # Configure above stays translated; that is where the host probing happens.
+ echo "==> Building Wine..."
+-make -j$(sysctl -n hw.ncpu)
++make -j"$JOBS"
+ 
+ if sonames_unpatched; then
+     echo "==> config.h was regenerated during the build, re-patching and rebuilding..."
+     patch_sonames
+-    make -j$(sysctl -n hw.ncpu)
++    make -j"$JOBS"
+ fi
+ 
+ # The d3d9 test binaries, which bundle-wine.sh publishes so a consumer can run
+@@ -140,75 +140,12 @@
+ # of a by-product, and costs nothing when they are already built.
+ # `dlls/d3d9/tests/all` depends on exactly the two per-arch `d3d9_test.exe`.
+ echo "==> Building the d3d9 test binaries..."
+-make -j$(sysctl -n hw.ncpu) dlls/d3d9/tests/all
++make -j"$JOBS" dlls/d3d9/tests/all
+ 
+ # Verify
+ echo "==> Build complete."
+ file "$BUILD_DIR/loader/wine"
+ "$BUILD_DIR/loader/wine" --version 2>/dev/null || true
+ 
+-# The ARM64X link libraries, from a second, separate tree. The output is two
+-# link archives, not a Wine: nothing here is runnable and none of it is
+-# installed. An ARM64X PE builtin needs a `libwinecrt0.a` to take its
+-# `unix_lib.o` from and a `libntdll.a` to import from, each with an ARM64 and
+-# an ARM64EC member, and that is all this produces. The Wine that eventually
+-# loads such a builtin is CrossOver's, not this one, and it ships no link
+-# archives of its own.
+-#
+-# arm64ec is paired with aarch64 so makedep sets up ARM64X (`native_archs` /
+-# `hybrid_archs`): the pair emits ONE set of libraries under `aarch64-windows`
+-# carrying both arches' objects, which is also where the loader looks, since
+-# `get_pe_dir` knows no arm64ec directory and redirects a hybrid module
+-# requested as AMD64 to the ARM64 one. arm64ec alone would build a standalone
+-# `arm64ec-windows` tree that no loader ever searches.
+-#
+-# Configure still probes the host side, so every unix dependency is switched
+-# off; only the two PE targets below are ever built, which is a small fraction
+-# of a full Wine build. Unlike the tree above, this one is arm64 in both host
+-# and target, so configure is not translated either.
+-echo "==> Building the ARM64X link libraries..."
+-if [ "$CLEAN" -eq 1 ]; then
+-    rm -rf "$ARM64X_BUILD_DIR"
+-fi
+-mkdir -p "$ARM64X_BUILD_DIR"
+-cd "$ARM64X_BUILD_DIR"
+-
+-if [ "$CLEAN" -eq 1 ] || [ ! -f "$ARM64X_BUILD_DIR/Makefile" ]; then
+-    echo "==> Configuring the ARM64X link library tree (arm64ec,aarch64)..."
+-    "$WINE_SRC/configure" \
+-        --enable-archs=arm64ec,aarch64 \
+-        --with-mingw \
+-        --without-alsa --without-capi --without-coreaudio --without-cups \
+-        --without-dbus --without-ffmpeg --without-fontconfig --without-freetype \
+-        --without-gettext --without-gnutls --without-gphoto --without-gssapi \
+-        --without-gstreamer --without-hwloc --without-inotify --without-krb5 \
+-        --without-netapi --without-opencl --without-oss --without-pcap \
+-        --without-pcsclite --without-pulse --without-sane --without-sdl \
+-        --without-udev --without-unwind --without-usb --without-v4l2 \
+-        --without-vulkan --without-wayland --without-x \
+-        --host=aarch64-apple-darwin
+-else
+-    echo "==> Skipping configure (already configured, use --clean to reconfigure)"
+-fi
+-
+-make -j$(sysctl -n hw.ncpu) \
+-    dlls/winecrt0/aarch64-windows/libwinecrt0.a \
+-    dlls/ntdll/aarch64-windows/libntdll.a
+-
+-# Staged in the layout of an installed Wine, so a consumer can point its
+-# WINE_SDK at this directory and find the libraries where it expects them.
+-echo "==> Staging the ARM64X link libraries into $ARM64X_LIB_DIR ..."
+-mkdir -p "$ARM64X_LIB_DIR/lib/wine/aarch64-windows"
+-cp "$ARM64X_BUILD_DIR/dlls/winecrt0/aarch64-windows/libwinecrt0.a" \
+-   "$ARM64X_BUILD_DIR/dlls/ntdll/aarch64-windows/libntdll.a" \
+-   "$ARM64X_LIB_DIR/lib/wine/aarch64-windows/"
+-
+-# An ARM64X link takes both halves from the same archive. A missing EC half
+-# means the ARM64X pairing did not happen and the archive holds ARM64 code
+-# only; a missing ARM64 half means the archive is not the paired one at all.
+-WINECRT0_MEMBERS="$("$MINGW_DIR/bin/llvm-ar" t "$ARM64X_LIB_DIR/lib/wine/aarch64-windows/libwinecrt0.a")"
+-for member in arm64ec-windows/unix_lib.o aarch64-windows/unix_lib.o; do
+-    grep -q "$member" <<<"$WINECRT0_MEMBERS" \
+-        || { echo "Error: staged libwinecrt0.a carries no $member"; exit 1; }
+-done
+-echo "==> ARM64X link libraries staged."
++# DEVIATION: the ARM64X link library tree (arm64ec,aarch64) is not built. It produces
++# two link archives that are never installed and are not part of any runtime.

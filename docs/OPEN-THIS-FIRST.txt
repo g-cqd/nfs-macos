@@ -1,13 +1,18 @@
-NEED FOR SPEED (2015) - COMPLETE APP - OPEN THIS FIRST
+NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
-Need for Speed Bundled 20261003-7d108a4-complete.app
+Need for Speed Bundled <date>-<commit>-rebuilt.app    (the complete app: game and EA app inside)
+Need for Speed Import <date>-<commit>-rebuilt.app     (no game, no EA app: uses your own Windows folder)
 
 WHAT IT IS
 A Mac app that runs Need for Speed (2015) through Wine. It carries your own licensed game files and EA's own
 EA app, exactly as EA's installer installs it, so you do not download EA's installer or run an install step.
 It carries NO EA account, no saved sign-in, no activation record and no save: you sign in with your own EA
 account, in EA's own window, and EA decides whether you may play.
-It is for your personal use on your own Macs. Do not share, upload or redistribute it.
+It is for your personal use on your own Macs. Do not share, upload or redistribute it. The Bundled app contains your
+licensed copy of the game and EA's client; it is not a distributable product.
+The Wine runtime inside was REBUILT from source on 2026-10-08. It is not byte for byte the runtime of the earlier apps
+(two of its five pinned files match, three differ), and the EA app inside is a newer version than the earlier apps
+had (13.805.2.6319, from EA's installer of 2026-10-07). Neither has been tried with the game or with an EA sign-in.
 
 WHAT YOU NEED
 - An Apple silicon Mac (M1 or later) with macOS 15 or later.
@@ -53,6 +58,11 @@ Press "Play". Expect two prompts that do not come from this app:
 - macOS asks whether the app may use the microphone. It can already ask on the first launch, when the EA app or the
   game first looks for an audio input (the game has voice chat). The app never records; answer as you prefer.
 
+THE IMPORT APP
+The Import app carries no game and no EA app. It runs the game in a Windows folder (a Wine prefix) that you choose and that
+already holds EA's app, signed in, and Need for Speed (2015). It does not build its own folder and does not install
+anything of EA's. It has the same Settings page, including the sidecar and MetalFX groups, and the same Gatekeeper step.
+
 THE SETTINGS PAGE
 The "Settings" page in the left list changes a reviewed set of the game's own video, audio and control options (a
 33-option catalog), and nothing else. It works only after the game has written its options file: start the game once
@@ -60,6 +70,15 @@ and quit it. It refuses to save while the game is running, or when the file chan
 the file does not have the layout the app knows. Before the first change it keeps the file exactly as the game wrote
 it, and before every later save the file as it was; "Restore Game Defaults" and "Undo Last Save" put either back.
 "Maximum Quality" only chooses values, and nothing is written until you press Save Settings.
+
+THE X87 SIDECAR (OFF BY DEFAULT, EXPERIMENTAL)
+The Settings page has an "x87 sidecar (experimental)" group. The sidecar is a helper that handles old x87 floating-point
+instructions of 32-bit Windows programs. This game is 64-bit and uses little of that, so this app starts WITHOUT the
+sidecar. That is a judgement from how the game is built, NOT a measurement: nobody has compared this game with the
+sidecar on and off, and the choice may be wrong in either direction. To compare, switch the group's toggle on, press
+Save, quit the EA app if it is running, and press Play. The setting covers the whole Windows session (the EA app too),
+and an EA app that is already running keeps the setting it was started with. If the EA app or EA's one-time activation
+prompt misbehaves, try the toggle on. "Reset" returns to off.
 
 METALFX UPSCALING (OFF BY DEFAULT)
 The Settings page has a MetalFX group. It is off, and while it is off the app changes nothing. When you switch it on
@@ -82,11 +101,10 @@ IF SOMETHING IS WRONG
 - Not supported: Intel Macs, macOS 14 or earlier, a Mac without Rosetta.
 
 WHAT WAS AND WAS NOT TESTED
-Tested on the Mac that built the app: the first start in a clean environment with the network switched off, the
-app copied to a different folder, the EA app starting from the app's own copy and showing EA's sign-in window,
-and the result of the first start (the EA app installed and registered, no account or machine state of EA's
-anywhere), and the Settings page and the MetalFX text of the settings against made-up files and a test profile.
-NOT tested: a second Mac, macOS 15, Gatekeeper and the quarantine steps above (they describe how
-macOS behaves), EA's sign-in, the activation prompt, playing the game from this build, changing a setting in the
-game, the visual effect of MetalFX, the microphone prompt, or EA's own self-update. docs/NFS2015.md sections 15 to 18
-inside the app's source archive say exactly what was checked and how.
+The checks made on the Mac that built the app, and what was not checked, are in the text file delivered beside the app
+and in docs/NFS2015.md section 23 of the app's source archive at a later commit. In short, nothing was run with the
+game or with an EA sign-in: not a second Mac, macOS 15, Gatekeeper and the quarantine steps above, EA's sign-in, the
+activation prompt, playing the game, changing a setting in the game, the visual effect of MetalFX, what the x87 sidecar
+setting does to speed or stability, the microphone prompt, or EA's own self-update. The rebuilt Wine and the newer EA
+app have not been run with the game. docs/NFS2015.md sections 15 to 23 inside the app's source archive say what was
+checked and how.

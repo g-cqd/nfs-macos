@@ -154,7 +154,7 @@ KEY_RULES = {
 }
 
 # File types the EA client's program files are known to hold, from the 13.796.0.6309 install (two installs
-# compared). A file of any other type under the client's folder was never reviewed, so it stops the build
+# compared); the 13.805.2.6319 capture needed no new type. A file of any other type under the client's folder was never reviewed, so it stops the build
 # instead of being kept by the catch-all rule: a newer client's generated or personal file would otherwise
 # ship unnoticed. An empty suffix is a plain name such as `qmldir`.
 REVIEWED_SUFFIXES = {'', '.qml', '.dll', '.pak', '.xml', '.png', '.exe', '.qmltypes', '.qm', '.enc', '.rcc', '.js', '.bin',

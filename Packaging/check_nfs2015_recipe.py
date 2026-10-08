@@ -96,13 +96,13 @@ assert managed['version'] in managed['source'] and managed['version'] in managed
 layer = recipe['clientLayer']
 assert layer['input'] == 'clientLayer' and layer['path'] == 'ClientLayer'
 assert recipe['inputs']['clientLayer'] == '{tools}/inputs/client-layer'
-assert layer['layerSHA256'] == '9ed3bf73529b899f2b934743ef86c51d34013dfc5fb092678b0d465a79547f86'
+assert layer['layerSHA256'] == '36d26f9b23acf9a60d1104563ccb76d252bcf109893665e337aaab4ccf7ca690'
 assert layer['client'] == {
-    'name': 'EA app', 'version': '13.796.0.6309',
-    'installer': {'fileName': 'EAappInstaller.exe', 'bytes': 2141240, 'signer': 'Electronic Arts, Inc.',
-                  'sha256': 'dcbda653c9776320b283157be70def64db73c2b01bf45d5fa78f35d7e4e29320'},
-    'package': {'fileName': 'EAapp-13.796.0.6309-15736974.msi', 'bytes': 246083584,
-                'sha256': 'cb773af8c1400d0139824dc2148c0ceef978ba95654812f8a7eeec46c34dcdc8'}}
+    'name': 'EA app', 'version': '13.805.2.6319',
+    'installer': {'fileName': 'EAappInstaller.exe', 'bytes': 2141208, 'signer': 'Electronic Arts, Inc.',
+                  'sha256': '52bf76284b76b376163763326b2793e200228c1b42d7fedbe02068fc7a94d0f3'},
+    'package': {'fileName': 'EAapp-13.805.2.6319-15940128.msi', 'bytes': 251686912,
+                'sha256': '4a49e665afe3840342b1fa644cf15140faae5f10882bb7d27d93d0d885538d02'}}
 assert layer['client']['version'] in layer['client']['package']['fileName']
 real_layer = resolve_inputs(recipe)['clientLayer']
 if real_layer.is_dir():
