@@ -3,6 +3,20 @@ NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 Need for Speed Bundled <date>-<commit>-rebuilt.app    (the complete app: game and EA app inside)
 Need for Speed Import <date>-<commit>-rebuilt.app     (no game, no EA app: uses your own Windows folder)
 
+WHAT IS DIFFERENT IN THE "-0005" APPS (added 2026-10-08, they sit next to the "-rebuilt" ones)
+Need for Speed Bundled 20261008-8b9bcba-0005.app and Need for Speed Import 20261008-8b9bcba-0005.app are the "-rebuilt" apps
+with exactly two changes, and nothing else:
+ 1. The Wine runtime has one more patch (0005). When a Windows program dies of an unhandled exception, Wine now also prints a
+    short block of lines starting "wine-crash:" (the CPU registers, the bytes at the crashing instruction, what Wine knows about
+    the crashing address, some stack words). Only two Wine files differ (the two kernelbase.dll); all other runtime files are the same.
+ 2. The app's crash report (Logs/crash-report-*.txt) reads that block and adds a section "Crash context (wine-crash block)". A crash
+    report from a log without the block is unchanged. The block holds no names, paths or account data.
+Defaults did not change: MetalFX is off, the x87 sidecar is off, the EA app inside is still 13.805.2.6319. The "-0005" apps use the
+same app identity and the same folder ~/Library/Application Support/NFS2015Mac as the "-rebuilt" apps, so a Windows folder that an
+earlier app made is reused, with whatever EA app it has since updated itself to. NOT checked: that the block appears for the game's
+own crash (it was produced by a small test program only), that the 32-bit form of the block appears for a 32-bit program, and
+anything in the game. The EA app's update-restart problem seen on the second Mac is not fixed here.
+
 WHAT IT IS
 A Mac app that runs Need for Speed (2015) through Wine. It carries your own licensed game files and EA's own
 EA app, exactly as EA's installer installs it, so you do not download EA's installer or run an install step.
