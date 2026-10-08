@@ -471,7 +471,7 @@ final class NFS2015Model {
   var experimentsOutcomeLine: String? {
     switch experimentsOutcome {
     case .saved: "Saved. It applies the next time you press Play."
-    case .reset: "Cleared. Every experiment is off."
+    case .reset: "Cleared. The defaults apply: the Rosetta workaround on, the experiments off."
     case .unchanged: "That was already saved."
     case .refused, nil: nil
     }
@@ -520,7 +520,7 @@ final class NFS2015Model {
     enqueue(.configureExperiments(NFS2015WineExperimentsRequest(action: .save, preference: choice)))
   }
 
-  /// Forgets what is saved, which means every experiment off.
+  /// Forgets what is saved, which means the defaults: the workaround on, the experiments off.
   func resetExperiments() {
     guard canEditExperiments else { return }
     enqueue(.configureExperiments(NFS2015WineExperimentsRequest(action: .reset)))

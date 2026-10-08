@@ -19,7 +19,7 @@ That obligation is met by the material shipped in `Contents/Resources/Sources`:
   from, the configure flags, and the toolchain that produced the delivered binaries.
 - `wine-nfs2015/patches/*.patch` — every modification applied to that base, as
   `git format-patch` files that apply cleanly with `git am`.
-- `wine-nfs2015-source-0008.tar.gz` — the complete source tree of the modified Wine at the exact
+- `wine-nfs2015-source-0009.tar.gz` — the complete source tree of the modified Wine at the exact
   revision built, so the source is present in the package and not only by reference.
 
 - `wine-nfs2015/rebuild-deviations/` — every change made to the upstream build scripts for the

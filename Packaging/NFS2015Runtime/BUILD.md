@@ -1,15 +1,14 @@
 # Rebuilding the Need for Speed (2015) Wine runtime
 
 This directory is the complete description of the modified Wine that the Need for Speed
-(2015) bundle ships: the exact upstream base, the eight patches applied to it, the configure
+(2015) bundle ships: the exact upstream base, the nine patches applied to it, the configure
 flags used, and the toolchain that actually produced the delivered binaries.
 
-**This description is of the runtime rebuilt on 2026-10-07/08, with patches 0005 to 0008** (runtime profile
-`nfs2015-tf-cx11-rebuild-0008-20261008`), built from the patched source tree at commit `dae832f4`
-that `wine-nfs2015-source-0008.tar.gz` archives. The same runtime without patches 0005 to 0008 (profile
+**This description is of the runtime rebuilt on 2026-10-07/08, with patches 0005 to 0009** (runtime profile
+`nfs2015-tf-cx11-rebuild-0009-20261008`), built from the patched source tree at commit `b5ac45cf`
+that `wine-nfs2015-source-0009.tar.gz` archives. The same runtime without patches 0005 to 0009 (profile
 `nfs2015-tf-cx11-rebuild-20261008`, tree `1e98e299`) differs in three files: both `kernelbase.dll` and
-`lib/wine/x86_64-unix/ntdll.so`; the profile of patch 0007 (`nfs2015-tf-cx11-rebuild-0007-20261008`) differs from this one in `ntdll.so` only,
-and the profile of patch 0005 alone (`nfs2015-tf-cx11-rebuild-0005-20261008`) in the same three files as the rebuild without patches.
+`lib/wine/x86_64-unix/ntdll.so`; the profile of patch 0008 (`nfs2015-tf-cx11-rebuild-0008-20261008`) differs from this one in `ntdll.so` only.
 It is not bit-identical to the runtime the earlier apps shipped; the section "The rebuild of 2026-10-07/08" says exactly how it differs.
 
 ## Upstream base
@@ -23,7 +22,7 @@ It is not bit-identical to the runtime the earlier apps shipped; the section "Th
 
 ## Patches
 
-Patches 0001 to 0004 were exported with `git format-patch 1a7b0c76..nfs2015-fix` and patches 0005 to 0008 each from its own commit, applied in numbered order. The commit
+Patches 0001 to 0004 were exported with `git format-patch 1a7b0c76..nfs2015-fix` and patches 0005 to 0009 each from its own commit, applied in numbered order. The commit
 column is the commit the patch file was exported from (the `From` line of the file); applying
 the files with `git am` onto `1a7b0c76` makes new commits with the same content, which are the
 last column and the ones in the source archive:
@@ -38,8 +37,9 @@ last column and the ones in the source archive:
 | `0006-kernelbase-crash-context-code-windows-and-page-history.patch` | `473ffab` | `473ffab` | Extends the `wine-crash:` block: `NtQueryVirtualMemory` of the page of the program counter and its two neighbours, an FNV-1a checksum and zero-group count of that page, the thread count and TEB, up to six return-address candidates as `module+offset`, 512 bytes of code around the program counter and 128 bytes around up to three registers that point within 4 KiB of it, and the registers that point near it. Changes both `kernelbase.dll` files only |
 | `0007-ntdll-rosetta-exec-page-toggles-and-page-trace.patch` | `c2afb95` | `c2afb95` | Three environment switches, all off unless set: `WINE_ROSETTA_FLUSH_TOGGLE=1` (after `NtFlushInstructionCache`, round-trip the protection of the executable regions of the range), `WINE_ROSETTA_PROTECT_TOGGLE=1` (the same after `NtProtectVirtualMemory` gives execute) and `WINE_TRACE_PAGE=<hexstart>-<hexend>` (a numeric `wine-trace:` line on standard error for each allocate, free, protect, write, flush, map and unmap call that touches the window, with the caller's return address). Changes `lib/wine/x86_64-unix/ntdll.so` only; also adds the probe `tests/nfs2015/exec-page-stale.c` |
 | `0008-ntdll-rwx-wx-emulation-for-rosetta-late-resume.patch` | `dae832f` | `dae832f` | With `WINE_RWX_WX_EMULATION=1` (off by default, x86-64 Wine under Rosetta only) private committed `PAGE_EXECUTE_READWRITE` pages are mapped read-execute on the host; a store faults, the page is opened for exactly one instruction with the trap flag and closed again by the single-step trap, so Rosetta retranslates between the stores. Works around Rosetta resuming one byte late after code built by two stores right ahead of the instruction pointer (the game's fault at `0x1B30159`). Pages written by host code or by the kernel, pages written more than `WINE_RWX_WX_HOT_LIMIT` (default 300) times within 100 ms, and every fault while the trap-flag emulation is active are released instead. Prints `wine-rwx:` lines. Changes `lib/wine/x86_64-unix/ntdll.so` only (`signal_x86_64.c`, `virtual.c`) |
+| `0009-ntdll-wx-emulation-trap-flag-leak-and-straddling-stores.patch` | `b5ac45c` | `b5ac45c` | Fixes four faults of the emulation of patch 0008: Rosetta takes the single-step trap while the thread is still in the signal-return trampoline, and 0008 cleared the trap flag in the trampoline's frame instead of the program's, so the program resumed with the trap flag set and took a stray `EXCEPTION_SINGLE_STEP` (seen in the EA client's `libcef`); a thread context captured while a store window was open (SuspendThread, Get/SetThreadContext) carried the trap flag; a store that straddles two protected pages could never complete (a fault on a second page now releases the open page); and the busy-page limit released a page that was merely being filled before its code ran (the default is now 4096 stores per second, `WINE_RWX_WX_HOT_LIMIT` still overrides, 0 never). Changes `lib/wine/x86_64-unix/ntdll.so` only |
 
-The archived tree is `1a7b0c76` plus exactly these eight commits (`dae832f4f33bf1fd11800f7d41a8651bc8fd21e9`);
+The archived tree is `1a7b0c76` plus exactly these nine commits (`b5ac45cf36e57d12cd916b6ef9ad57945d8e7f63`);
 the content of each commit equals its patch file, apart from the `From` hash line and the
 `git` version trailer that `git format-patch` writes.
 
@@ -95,9 +95,10 @@ reported upstream.
 
 ## The rebuild of 2026-10-07/08
 
-The runtime in this app was rebuilt from the source in `wine-nfs2015-source-0008.tar.gz` because the
+The runtime in this app was rebuilt from the source in `wine-nfs2015-source-0009.tar.gz` because the
 build tree of the earlier apps no longer existed. What is the same and what is not:
 
+- **Patch 0009** (2026-10-08, after owner tests of the apps with patch 0008) changes `lib/wine/x86_64-unix/ntdll.so` again (`8f593e28…9d35` to `610ecca6…0bfe`); every other file is byte-identical to the runtime of patch 0008 (the build session's manifest and this build's own sha256 of both trees agree).
 - **Patch 0008** (2026-10-08, after the Rosetta defect behind the fault was reproduced without Wine) changes `lib/wine/x86_64-unix/ntdll.so` again (`b1bddee4…0de4` to `8f593e28…9d35`); every other file is byte-identical to the runtime of patch 0007 (the build session's manifest and this build's own sha256 of both trees agree). Its switch does nothing unless the environment sets it.
 - **Patches 0006 and 0007** (2026-10-08, after the first capture of the game's fault): 0006 changes both `kernelbase.dll` again (`14e82c52…56e5` to `ec494aca…2f66`, `09ce21ff…289c2c` to `15c1001c…b4a3`), 0007 changes `lib/wine/x86_64-unix/ntdll.so` (`82cf3d48…7689` to `b1bddee4…0de4`); every other file is byte-identical to the runtime of patch 0005 (the build session's manifest and this build's own sha256 of both trees agree). The switches of 0007 do nothing unless the environment sets them.
 - **Patch 0005** changes `lib/wine/x86_64-windows/kernelbase.dll` (`4cdca0f5…39b6` to `14e82c52…56e5`) and `lib/wine/i386-windows/kernelbase.dll` (`c1efceb5…1a726` to `09ce21ff…289c2c`); `ntdll.so` is unchanged because the patch adds only compile-time offset checks to `signal_x86_64.c`. The other 1790 files are byte-identical to the rebuild without it (the build session's manifest).
@@ -139,7 +140,7 @@ build tree of the earlier apps no longer existed. What is the same and what is n
   7. The compatibility library (`compatdb.so`) was built with the official Rust 1.97.1 toolchain,
      not necessarily the original's.
 - **Rebuild recipe:** fetch `athei/wine` at `1a7b0c766262276e7e7bb50c80abe5ccd08e292b`, apply the
-  eight patches with `git am`, configure with the flags above and the deviations, run
+  nine patches with `git am`, configure with the flags above and the deviations, run
   `make`, then the bundle script of `athei/wine-build` with `--runtime-only`.
 
 ## Third-party runtime components

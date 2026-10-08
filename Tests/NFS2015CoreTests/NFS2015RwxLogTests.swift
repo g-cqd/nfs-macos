@@ -140,7 +140,7 @@ struct NFS2015RwxLogTests {
 struct NFS2015RwxInReportTests {
   private let fault = PageFixtures.realLines[0]
 
-  private func report(_ log: String, switches: NFS2015WineExperimentsChoice = .standard) throws
+  private func report(_ log: String, switches: NFS2015WineExperimentsChoice = .allOff) throws
     -> String
   {
     var context = CrashFixtures.context()

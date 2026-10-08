@@ -12,8 +12,9 @@ struct NFS2015RwxSwitchTests {
   }
 
   @Test
-  func `is off by default and the saved file keeps it`() throws {
-    #expect(NFS2015WineExperimentsPreference.standard.rwxWxEmulation == false)
+  func `is on by default, and the saved file keeps either choice`() throws {
+    #expect(NFS2015WineExperimentsPreference.standard.rwxWxEmulation)
+    #expect(!NFS2015WineExperimentsPreference.allOff.rwxWxEmulation)
     let scratch = try Scratch()
     defer { scratch.remove() }
     let store = NFS2015WineExperimentsStore(support: scratch.root)
@@ -21,10 +22,15 @@ struct NFS2015RwxSwitchTests {
     #expect(store.load() == .init(preference: rwx, notice: nil))
     #expect(try scratch.text("experiments.json").contains("\"rwxWxEmulation\" : true"))
     #expect(try !store.save(rwx))
+    #expect(try store.save(.allOff))
+    #expect(try scratch.text("experiments.json").contains("\"rwxWxEmulation\" : false"))
+    #expect(store.load() == .init(preference: .allOff, notice: nil))
   }
 
   @Test
-  func `a file the -0007 apps wrote, with no such key, reads as off and not as damaged`() throws {
+  func `a file the -0007 apps wrote, with no such key, gets the default (on) and is not damaged`()
+    throws
+  {
     let scratch = try Scratch()
     defer { scratch.remove() }
     try scratch.write(
@@ -32,7 +38,13 @@ struct NFS2015RwxSwitchTests {
       #"{"version":1,"flushToggle":true,"protectToggle":false,"tracePage":true}"#)
     let loaded = NFS2015WineExperimentsStore(support: scratch.root).load()
     #expect(loaded.notice == nil)
-    #expect(loaded.preference == .init(flushToggle: true, tracePage: true, rwxWxEmulation: false))
+    #expect(loaded.preference == .init(flushToggle: true, tracePage: true, rwxWxEmulation: true))
+    // A file that says off keeps saying off.
+    try scratch.write(
+      "experiments.json",
+      #"{"version":1,"flushToggle":false,"protectToggle":false,"tracePage":false,"rwxWxEmulation":false}"#
+    )
+    #expect(NFS2015WineExperimentsStore(support: scratch.root).load().preference == .allOff)
     try scratch.write(
       "experiments.json",
       #"{"version":1,"flushToggle":true,"protectToggle":false,"tracePage":true,"rwxWxEmulation":"yes"}"#
@@ -45,14 +57,15 @@ struct NFS2015RwxSwitchTests {
     let choice = NFS2015WineExperimentsChoice(preference: rwx, experiment: .init())
     #expect(choice.environment == ["WINE_RWX_WX_EMULATION": "1"])
     #expect(choice.emulatesWriteXorExecute && choice.isActive && !choice.tracesPages)
-    #expect(choice.line == "WINE_RWX_WX_EMULATION=1 (saved setting)")
+    #expect(choice.line == "WINE_RWX_WX_EMULATION=1 (default)")
     let everything = NFS2015WineExperimentsChoice(
       preference: .init(
         flushToggle: true, protectToggle: true, tracePage: true, rwxWxEmulation: true),
       experiment: .init())
     #expect(everything.environment.count == 4)
     #expect(everything.line.hasSuffix("WINE_RWX_WX_EMULATION=1 (saved setting)"))
-    #expect(!NFS2015WineExperimentsChoice.standard.emulatesWriteXorExecute)
+    #expect(NFS2015WineExperimentsChoice.standard.emulatesWriteXorExecute)
+    #expect(!NFS2015WineExperimentsChoice.allOff.emulatesWriteXorExecute)
   }
 
   @Test
@@ -82,6 +95,21 @@ struct NFS2015RwxSwitchTests {
   }
 
   @Test
+  func `with nothing saved the developer override 0 turns the default off, and 1 keeps it`() throws
+  {
+    let off = NFS2015WineExperimentsChoice(
+      preference: .standard,
+      experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_EMULATION": "0"]))
+    #expect(off.environment.isEmpty && !off.emulatesWriteXorExecute)
+    #expect(off.line == "WINE_RWX_WX_EMULATION off (experiment override)")
+    let on = NFS2015WineExperimentsChoice(
+      preference: .standard,
+      experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_EMULATION": "1"]))
+    #expect(on.environment == ["WINE_RWX_WX_EMULATION": "1"])
+    #expect(on.line == "WINE_RWX_WX_EMULATION=1 (experiment override)")
+  }
+
+  @Test
   func `refuses a typo in the developer variables`() {
     for bad in [
       ["NFS2015_AB_WINE_RWX_WX_EMULATION": "yes"], ["NFS2015_AB_WINE_RWX_WX_EMULATION": ""],
@@ -104,8 +132,9 @@ struct NFS2015RwxSwitchTests {
         paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support,
         usesSidecar: false, experiments: choice.environment)
     }
-    let off = try environment(.standard)
+    let off = try environment(.allOff)
     #expect(off["WINE_RWX_WX_EMULATION"] == nil && off["WINE_RWX_WX_HOT_LIMIT"] == nil)
+    #expect(try environment(.standard)["WINE_RWX_WX_EMULATION"] == "1")
     var on = try environment(
       NFS2015WineExperimentsChoice(
         preference: rwx, experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_HOT_LIMIT": "500"])))

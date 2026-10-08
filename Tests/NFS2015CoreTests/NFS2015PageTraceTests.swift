@@ -137,7 +137,7 @@ struct NFS2015PageTraceTests {
 struct NFS2015PageTraceInReportTests {
   private let fault = PageFixtures.realLines[0]
 
-  private func report(_ log: String, switches: NFS2015WineExperimentsChoice = .standard) throws
+  private func report(_ log: String, switches: NFS2015WineExperimentsChoice = .allOff) throws
     -> String
   {
     var context = CrashFixtures.context()
@@ -201,7 +201,8 @@ struct NFS2015PageTraceInReportTests {
     let plain = try report(CrashFixtures.log)
     #expect(!plain.contains("Page trace") && !plain.contains("wine-trace"))
     let switches = NFS2015WineExperimentsChoice(
-      preference: .init(tracePage: true), experiment: NFS2015ExperimentOverrides())
+      preference: .init(tracePage: true, rwxWxEmulation: false),
+      experiment: NFS2015ExperimentOverrides())
     let set = try report(CrashFixtures.log, switches: switches)
     #expect(
       set.contains("WINE_TRACE_PAGE was set for this launch, and the log holds no wine-trace line"))

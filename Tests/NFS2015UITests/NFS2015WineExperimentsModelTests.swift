@@ -73,17 +73,19 @@ struct NFS2015WineExperimentsModelTests {
   func `the workaround toggle changes only its own switch and is sent as chosen`() async {
     let (sut, service) = model()
     await sut.run()
-    #expect(!sut.rwxWxEmulationBinding().wrappedValue)
-    sut.rwxWxEmulationBinding().wrappedValue = true
-    #expect(sut.experiments == .init(rwxWxEmulation: true) && sut.hasPendingExperiments)
+    // A fresh state has the workaround on; the toggle turns it off, and Save sends exactly that.
+    #expect(sut.rwxWxEmulationBinding().wrappedValue && !sut.hasPendingExperiments)
+    sut.rwxWxEmulationBinding().wrappedValue = false
+    #expect(sut.experiments == .init(rwxWxEmulation: false) && sut.hasPendingExperiments)
     sut.saveExperiments()
     await sut.run()
     #expect(
       service.performed.last
         == .configureExperiments(
           NFS2015WineExperimentsRequest(
-            action: .save, preference: NFS2015WineExperimentsPreference(rwxWxEmulation: true))))
-    sut.rwxWxEmulationBinding().wrappedValue = false
+            action: .save, preference: NFS2015WineExperimentsPreference(rwxWxEmulation: false))))
+    // Turning it back on is the default again, so nothing is pending.
+    sut.rwxWxEmulationBinding().wrappedValue = true
     #expect(!sut.hasPendingExperiments)
   }
 
