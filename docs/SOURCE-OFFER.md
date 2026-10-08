@@ -67,11 +67,14 @@ mapped RW and toggled on execute faults (`de9dfb24c`); and no `x87sidecar` looku
 (`89a212b28`). `wow64-cpu` adds `c92ef791e`, which makes `r3wow64.dll` the x86 CPU module of arm64 WoW64
 prefixes. `git log development..arm64-macos` lists them with their full messages.
 
-> **Gap:** the NFS2015 tree `1e98e299ad2900fce2ab4f103cc1f98608fc7bfa` is not published on GitHub. The
-> same four changes are published as part of `development` on a different base, so they are not byte
-> identical, and the full tree is in the app's `wine-nfs2015-source.tar.gz`. Until a branch or tag for
-> `1e98e299` is pushed (owner's decision, see [LICENSING.md](LICENSING.md)) the online route is the four
-> patch files in this repository on top of the tagged base commit.
+> **NFS2015 runtime source, published:** `g-cqd/wine` branch `nfs2015-runtime-0005` holds the base commit
+> `1a7b0c766262276e7e7bb50c80abe5ccd08e292b` plus the NFS patches, with two tags. `nfs2015-runtime-20261008`
+> (`c810543e64b`, git tree `217bbb407f32f54a0d83987784d838b1fca4b1c3`) is the source of the runtime in the
+> Need for Speed (2015) apps built on 2026-10-08 (the original build tree `1e98e299` has the same git tree; only
+> the commit identities differ because author e-mail addresses were replaced by the GitHub noreply address
+> before publication). `nfs2015-runtime-0005-20261008` (`f4fc43f2e04`, tree
+> `9adc5dd4ad152cf9f241e7c3695854bd4d5850b3`) adds the crash-context patch (kernelbase `wine-crash:` log block) and
+> is the source of the `-0005` apps. Both trees were compared byte for byte with the shipped source archives.
 
 ### `r3wow64.dll` and the licences
 
