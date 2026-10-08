@@ -11,8 +11,12 @@ import Foundation
 /// (patch 0008) makes the runtime keep private read-write-execute pages non-writable and let each
 /// store through one instruction at a time, which works around a Rosetta 2 defect with code that
 /// is built by stores right ahead of the instruction pointer; `WINE_RWX_WX_HOT_LIMIT=<n>` tunes
-/// when a page that is written very often is released (0 never). A runtime without a patch
-/// ignores its switches.
+/// when a page that is written very often is released (0 never). Patch 0010 adds
+/// `WINE_RWX_WX_LOG=<hexstart>-<hexend>|all`, which makes the runtime print what the emulation
+/// does with the pages of that window; `WINE_RWX_WX_NEAR_LIMIT=<n>` (stores per second, 0 never),
+/// the limit for a page whose own code stores into it; and `WINE_RWX_WX_TF_RELEASE=1`, which
+/// restores the earlier release of a page that faults under the trap-flag emulation. A runtime
+/// without a patch ignores its switches.
 package enum WineExperimentSwitches {
   package static let flushToggle = "WINE_ROSETTA_FLUSH_TOGGLE"
   package static let protectToggle = "WINE_ROSETTA_PROTECT_TOGGLE"
@@ -20,7 +24,19 @@ package enum WineExperimentSwitches {
   package static let rwxWxEmulation = "WINE_RWX_WX_EMULATION"
   /// Stores per 100 ms after which the runtime stops emulating one page; only a developer sets it.
   package static let rwxHotLimit = "WINE_RWX_WX_HOT_LIMIT"
-  package static let names = [flushToggle, protectToggle, tracePage, rwxWxEmulation, rwxHotLimit]
+  /// The page window whose history the runtime prints (patch 0010); `all` for every page.
+  package static let rwxLog = "WINE_RWX_WX_LOG"
+  /// Stores per second after which a page that patches its own code is released; only a developer.
+  package static let rwxNearLimit = "WINE_RWX_WX_NEAR_LIMIT"
+  /// `1` restores the release of a page that faults under the trap-flag emulation; only a developer.
+  package static let rwxTfRelease = "WINE_RWX_WX_TF_RELEASE"
+  package static let names = [
+    flushToggle, protectToggle, tracePage, rwxWxEmulation, rwxHotLimit, rwxLog, rwxNearLimit,
+    rwxTfRelease,
+  ]
+
+  /// Whether the text is what `WINE_RWX_WX_LOG` reads: `all`, or a hexadecimal window.
+  package static func isLogWindow(_ text: String) -> Bool { text == "all" || isTraceWindow(text) }
 
   /// Whether the text is a decimal count of at most seven digits, the form the hot limit takes.
   package static func isHotLimit(_ text: String) -> Bool {
@@ -52,7 +68,12 @@ package enum WineExperimentSwitches {
         guard isTraceWindow(value) else {
           throw .operation("\(name) must be <hexstart>-<hexend> with the end above the start.")
         }
-      } else if name == rwxHotLimit {
+      } else if name == rwxLog {
+        guard isLogWindow(value) else {
+          throw .operation(
+            "\(name) must be <hexstart>-<hexend> with the end above the start, or all.")
+        }
+      } else if name == rwxHotLimit || name == rwxNearLimit {
         guard isHotLimit(value) else {
           throw .operation("\(name) must be a decimal number of at most seven digits.")
         }

@@ -6,7 +6,9 @@ import LauncherCore
 /// The Rosetta self-modifying-code workaround (`WINE_RWX_WX_EMULATION`) is ON by default: the game
 /// faults at `0x1B30159` because of a defect in Rosetta 2 that the workaround avoids in tests. The
 /// other three (the two page re-toggles and the page trace) are experiments and OFF by default;
-/// nothing is known to show that they help. A missing, damaged or unrecognized saved file means
+/// nothing is known to show that they help. With the workaround on, the session also asks the runtime
+/// to log what happens to the pages of the stub's window (`WINE_RWX_WX_LOG`), so every crash
+/// report carries that page's history. A missing, damaged or unrecognized saved file means
 /// these defaults, and a saved choice of "off" is kept. The file belongs to this app; Wine reads
 /// only the environment variables the choice becomes.
 package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
@@ -159,6 +161,27 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
       environment[WineExperimentSwitches.rwxHotLimit] = limit
       sources[WineExperimentSwitches.rwxHotLimit] = .experiment
     }
+    if let limit = experiment.rwxNearLimit {
+      environment[WineExperimentSwitches.rwxNearLimit] = limit
+      sources[WineExperimentSwitches.rwxNearLimit] = .experiment
+    }
+    if experiment.rwxTfRelease == true {
+      environment[WineExperimentSwitches.rwxTfRelease] = "1"
+      sources[WineExperimentSwitches.rwxTfRelease] = .experiment
+    }
+    // The history of the stub's page is part of every report: set whenever the emulation is on,
+    // for that one window only, unless a developer names another window or turns it off.
+    if let window = experiment.rwxLog {
+      if window != NFS2015ExperimentOverrides.off {
+        environment[WineExperimentSwitches.rwxLog] = window
+        sources[WineExperimentSwitches.rwxLog] = .experiment
+      } else if environment[WineExperimentSwitches.rwxWxEmulation] != nil {
+        off.append("\(WineExperimentSwitches.rwxLog) off (experiment override)")
+      }
+    } else if environment[WineExperimentSwitches.rwxWxEmulation] != nil {
+      environment[WineExperimentSwitches.rwxLog] = WineExperimentSwitches.presetTraceWindow
+      sources[WineExperimentSwitches.rwxLog] = .standard
+    }
     if let window = experiment.tracePage {
       if window == NFS2015ExperimentOverrides.off {
         if preference.tracePage {
@@ -186,6 +209,9 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
   package var emulatesWriteXorExecute: Bool {
     environment[WineExperimentSwitches.rwxWxEmulation] != nil
   }
+
+  /// The window `WINE_RWX_WX_LOG` names (`all` for every page), when it is set.
+  package var rwxLogWindow: String? { environment[WineExperimentSwitches.rwxLog] }
 
   /// Whether the switch that makes the runtime print `wine-trace:` lines is set.
   package var tracesPages: Bool { environment[WineExperimentSwitches.tracePage] != nil }

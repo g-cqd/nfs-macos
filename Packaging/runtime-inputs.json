@@ -167,6 +167,29 @@
         "lib/wine/x86_64-windows/kernelbase.dll": "ec494aca12cac61e4236c27692fc467ce12a24dd4943a6035b873563e5882f66",
         "lib/wine/i386-windows/kernelbase.dll": "15c1001c859753a3f70a1c54292b04ace79a404dfbb8195ac4b959917b52b4a3"
       }
+    },
+    "nfs2015-tf-cx11-rebuild-0010-20261008": {
+      "description": "CX26.3 / Wine11.0 (athei/wine cx-26-patched 1a7b0c76 plus ten patches): the runtime of profile nfs2015-tf-cx11-rebuild-0009-20261008 plus patch 0010, which fixes three faults of the opt-in write-xor-execute emulation (a page that patches its own code was released as busy before its code ran; a released page was never emulated again after a protection change or a decommit; a page touched by a thread under the trap-flag emulation was released for good) and adds a per-page log (WINE_RWX_WX_LOG); the emulation is still off unless WINE_RWX_WX_EMULATION=1",
+      "capabilities": [
+        "trapFlagEmulation",
+        "dxmtDXGI",
+        "x87Sidecar",
+        "crashContextBlock",
+        "crashContextCodeWindows",
+        "rosettaPageExperiments",
+        "rosettaRwxWxEmulation",
+        "rosettaRwxWxPageLog"
+      ],
+      "toolchainNote": "The runtime of profile nfs2015-tf-cx11-rebuild-0009-20261008 with one more patch (source HEAD be47ba54): patch 0010 changes lib/wine/x86_64-unix/ntdll.so only; the other 1790 files are byte-identical to that profile's runtime (compared by this build's own sha256 of both trees, ignoring a Finder .DS_Store the packager removes). Same toolchain as that profile: PE builtins by Homebrew mingw-w64 GCC 16.1.0 rather than llvm-mingw clang, Mach-O by Apple clang 21.0.0. The switches (WINE_RWX_WX_EMULATION=1, WINE_RWX_WX_LOG=<window>|all, optional WINE_RWX_WX_HOT_LIMIT, WINE_RWX_WX_NEAR_LIMIT and WINE_RWX_WX_TF_RELEASE=1) are read by the runtime only when set; the app sets the first two by default from this profile on. Behaviour was checked only on test programs (reproducers of the three faults, the stub's loop, a debug-register thread, allocation paths, a stress of worker threads, the execution-breakpoint fixture), never with NFS16.exe or the EA client.",
+      "files": {
+        "bin/wine": "03985ed96db1781bb38fe7428392929284dce1f37a9b020ba2ce09eb110ff360",
+        "bin/wineserver": "11a0d304e25a5a7b185d49db7331119f3e2b4a8535a55dcc3f0dd7257b5f0529",
+        "lib/wine/x86_64-unix/ntdll.so": "7bf60bdda4a330abe97a4ece0e1cf67b4ba75259383b76cdb1683b93ca542b78",
+        "lib/wine/x86_64-unix/wine": "86283fa89482996e3865a8bc75d8fe4f8ac535699fe5bde0b781e18c2b0a5a1f",
+        "lib/wine/i386-windows/ntdll.dll": "10b33abc5834a630fb9de6a7a33c1abd64ccefbd210fcac4350765bfea456978",
+        "lib/wine/x86_64-windows/kernelbase.dll": "ec494aca12cac61e4236c27692fc467ce12a24dd4943a6035b873563e5882f66",
+        "lib/wine/i386-windows/kernelbase.dll": "15c1001c859753a3f70a1c54292b04ace79a404dfbb8195ac4b959917b52b4a3"
+      }
     }
   }
 }

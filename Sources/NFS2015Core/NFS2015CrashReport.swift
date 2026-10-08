@@ -213,6 +213,12 @@ package struct NFS2015CrashReport: Equatable, Sendable {
           + "released: \(counters.releasedHost) after host-code faults, \(counters.releasedCarrier) "
           + "for kernel writes, \(counters.releasedHot) for being written too often")
     }
+    lines += rwx.pageLog.reportLines
+    if let window = context.wineSwitches.rwxLogWindow, rwx.pageLog.isEmpty {
+      lines.append(
+        "WINE_RWX_WX_LOG was set to \(window) and the log holds no page line: no page of that window "
+          + "was taken over, left alone or released in a process whose lines reached this log")
+    }
     if rwx.activations.count > rwx.counters.count {
       lines.append(
         "\(rwx.activations.count) active and \(rwx.counters.count) exit lines are listed; "

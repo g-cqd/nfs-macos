@@ -55,15 +55,19 @@ struct NFS2015RwxSwitchTests {
   @Test
   func `the saved switch becomes the variable and a line that names where it came from`() {
     let choice = NFS2015WineExperimentsChoice(preference: rwx, experiment: .init())
-    #expect(choice.environment == ["WINE_RWX_WX_EMULATION": "1"])
+    #expect(
+      choice.environment == [
+        "WINE_RWX_WX_EMULATION": "1", "WINE_RWX_WX_LOG": "1B30000-1B31000",
+      ])
     #expect(choice.emulatesWriteXorExecute && choice.isActive && !choice.tracesPages)
-    #expect(choice.line == "WINE_RWX_WX_EMULATION=1 (default)")
+    #expect(
+      choice.line == "WINE_RWX_WX_EMULATION=1 (default), WINE_RWX_WX_LOG=1B30000-1B31000 (default)")
     let everything = NFS2015WineExperimentsChoice(
       preference: .init(
         flushToggle: true, protectToggle: true, tracePage: true, rwxWxEmulation: true),
       experiment: .init())
-    #expect(everything.environment.count == 4)
-    #expect(everything.line.hasSuffix("WINE_RWX_WX_EMULATION=1 (saved setting)"))
+    #expect(everything.environment.count == 5)
+    #expect(everything.line.contains("WINE_RWX_WX_EMULATION=1 (saved setting)"))
     #expect(NFS2015WineExperimentsChoice.standard.emulatesWriteXorExecute)
     #expect(!NFS2015WineExperimentsChoice.allOff.emulatesWriteXorExecute)
   }
@@ -76,10 +80,14 @@ struct NFS2015RwxSwitchTests {
       "NFS2015_AB_WINE_RWX_WX_EMULATION": "1", "NFS2015_AB_WINE_RWX_WX_HOT_LIMIT": "0",
     ])
     let over = NFS2015WineExperimentsChoice(preference: .standard, experiment: force)
-    #expect(over.environment == ["WINE_RWX_WX_EMULATION": "1", "WINE_RWX_WX_HOT_LIMIT": "0"])
+    #expect(
+      over.environment == [
+        "WINE_RWX_WX_EMULATION": "1", "WINE_RWX_WX_HOT_LIMIT": "0",
+        "WINE_RWX_WX_LOG": "1B30000-1B31000",
+      ])
     #expect(
       over.line
-        == "WINE_RWX_WX_EMULATION=1 (experiment override), WINE_RWX_WX_HOT_LIMIT=0 (experiment override)"
+        == "WINE_RWX_WX_EMULATION=1 (experiment override), WINE_RWX_WX_HOT_LIMIT=0 (experiment override), WINE_RWX_WX_LOG=1B30000-1B31000 (default)"
     )
     #expect(force.summary == "WINE_RWX_WX_EMULATION=1, WINE_RWX_WX_HOT_LIMIT=0")
     let off = try overrides(["NFS2015_AB_WINE_RWX_WX_EMULATION": "0"])
@@ -105,8 +113,14 @@ struct NFS2015RwxSwitchTests {
     let on = NFS2015WineExperimentsChoice(
       preference: .standard,
       experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_EMULATION": "1"]))
-    #expect(on.environment == ["WINE_RWX_WX_EMULATION": "1"])
-    #expect(on.line == "WINE_RWX_WX_EMULATION=1 (experiment override)")
+    #expect(
+      on.environment == [
+        "WINE_RWX_WX_EMULATION": "1", "WINE_RWX_WX_LOG": "1B30000-1B31000",
+      ])
+    #expect(
+      on.line
+        == "WINE_RWX_WX_EMULATION=1 (experiment override), WINE_RWX_WX_LOG=1B30000-1B31000 (default)"
+    )
   }
 
   @Test
@@ -160,5 +174,103 @@ struct NFS2015RwxSwitchTests {
       text.contains(
         "wine experiment switches: WINE_TRACE_PAGE=1B30000-1B31000 (saved setting), WINE_RWX_WX_EMULATION=1 (experiment override)"
       ))
+  }
+}
+
+struct NFS2015RwxLogSwitchTests {
+  private func overrides(_ environment: [String: String]) throws -> NFS2015ExperimentOverrides {
+    try NFS2015ExperimentOverrides(environment: environment)
+  }
+
+  @Test
+  func `the default session asks for the stub page's history, and only that window`() throws {
+    let choice = NFS2015WineExperimentsChoice.standard
+    #expect(choice.environment["WINE_RWX_WX_LOG"] == "1B30000-1B31000")
+    #expect(WineExperimentSwitches.isTraceWindow(choice.environment["WINE_RWX_WX_LOG"] ?? ""))
+    #expect(choice.environment["WINE_RWX_WX_NEAR_LIMIT"] == nil)
+    #expect(choice.environment["WINE_RWX_WX_TF_RELEASE"] == nil)
+    #expect(choice.environment["WINE_RWX_WX_HOT_LIMIT"] == nil)
+  }
+
+  @Test
+  func `the developer can name another window, all pages, or turn the log off`() throws {
+    let other = NFS2015WineExperimentsChoice(
+      preference: .standard,
+      experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_LOG": "50000000-50010000"]))
+    #expect(other.environment["WINE_RWX_WX_LOG"] == "50000000-50010000")
+    #expect(other.line.contains("WINE_RWX_WX_LOG=50000000-50010000 (experiment override)"))
+    let all = NFS2015WineExperimentsChoice(
+      preference: .standard, experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_LOG": "all"]))
+    #expect(all.environment["WINE_RWX_WX_LOG"] == "all" && all.rwxLogWindow == "all")
+    let off = NFS2015WineExperimentsChoice(
+      preference: .standard, experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_LOG": "off"]))
+    #expect(off.environment == ["WINE_RWX_WX_EMULATION": "1"] && off.rwxLogWindow == nil)
+    #expect(
+      off.line == "WINE_RWX_WX_EMULATION=1 (default), WINE_RWX_WX_LOG off (experiment override)")
+    // An override of the log when the workaround is saved off is still honoured: it is explicit.
+    let explicit = NFS2015WineExperimentsChoice(
+      preference: .allOff, experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_LOG": "all"]))
+    #expect(explicit.environment == ["WINE_RWX_WX_LOG": "all"])
+  }
+
+  @Test
+  func `the near limit and the trap-flag release come only from the developer`() throws {
+    let force = try overrides([
+      "NFS2015_AB_WINE_RWX_WX_NEAR_LIMIT": "0", "NFS2015_AB_WINE_RWX_WX_TF_RELEASE": "1",
+    ])
+    let choice = NFS2015WineExperimentsChoice(preference: .standard, experiment: force)
+    #expect(choice.environment["WINE_RWX_WX_NEAR_LIMIT"] == "0")
+    #expect(choice.environment["WINE_RWX_WX_TF_RELEASE"] == "1")
+    #expect(force.summary == "WINE_RWX_WX_NEAR_LIMIT=0, WINE_RWX_WX_TF_RELEASE=1")
+    // A TF release of 0 sets nothing.
+    let zero = NFS2015WineExperimentsChoice(
+      preference: .standard,
+      experiment: try overrides(["NFS2015_AB_WINE_RWX_WX_TF_RELEASE": "0"]))
+    #expect(zero.environment["WINE_RWX_WX_TF_RELEASE"] == nil)
+    // Without the prefix the helper's own environment sets nothing.
+    #expect(try !overrides(["WINE_RWX_WX_LOG": "all", "WINE_RWX_WX_NEAR_LIMIT": "5"]).isActive)
+  }
+
+  @Test
+  func
+    `refuses a typo in the new developer variables, and the launch environment refuses bad values`()
+  {
+    for bad in [
+      ["NFS2015_AB_WINE_RWX_WX_LOG": ""], ["NFS2015_AB_WINE_RWX_WX_LOG": "2-1"],
+      ["NFS2015_AB_WINE_RWX_WX_LOG": "ALL"], ["NFS2015_AB_WINE_RWX_WX_LOG": "1B30000"],
+      ["NFS2015_AB_WINE_RWX_WX_NEAR_LIMIT": ""], ["NFS2015_AB_WINE_RWX_WX_NEAR_LIMIT": "-1"],
+      ["NFS2015_AB_WINE_RWX_WX_NEAR_LIMIT": "12345678"],
+      ["NFS2015_AB_WINE_RWX_WX_TF_RELEASE": "yes"], ["NFS2015_AB_WINE_RWX_WX_TF_RELEASE": "2"],
+    ] {
+      #expect(throws: LauncherError.self) { try NFS2015ExperimentOverrides(environment: bad) }
+    }
+    for bad in [
+      ["WINE_RWX_WX_LOG": "ALL"], ["WINE_RWX_WX_LOG": "off"], ["WINE_RWX_WX_NEAR_LIMIT": "x"],
+      ["WINE_RWX_WX_TF_RELEASE": "0"],
+    ] {
+      #expect(throws: LauncherError.self) { try WineExperimentSwitches.validate(bad) }
+    }
+    #expect(throws: Never.self) {
+      try WineExperimentSwitches.validate([
+        "WINE_RWX_WX_LOG": "all", "WINE_RWX_WX_NEAR_LIMIT": "0", "WINE_RWX_WX_TF_RELEASE": "1",
+      ])
+    }
+  }
+
+  @Test
+  func `reaches the launch environment, and only the switches differ`() throws {
+    let paths = try AppPaths(
+      bundle: URL(fileURLWithPath: "/Applications/Need for Speed.app"),
+      support: URL(fileURLWithPath: "/tmp/NFS Player"), game: .nfs2015)
+    func environment(_ choice: NFS2015WineExperimentsChoice) throws -> [String: String] {
+      try LaunchEnvironment.make(
+        paths: paths, prefix: paths.prefix, home: paths.support, temporary: paths.support,
+        usesSidecar: false, experiments: choice.environment)
+    }
+    let plain = try environment(.allOff)
+    var withLog = try environment(.standard)
+    #expect(withLog["WINE_RWX_WX_LOG"] == "1B30000-1B31000")
+    for name in WineExperimentSwitches.names { withLog[name] = nil }
+    #expect(withLog == plain)
   }
 }
