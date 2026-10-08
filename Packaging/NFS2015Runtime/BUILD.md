@@ -1,13 +1,14 @@
 # Rebuilding the Need for Speed (2015) Wine runtime
 
 This directory is the complete description of the modified Wine that the Need for Speed
-(2015) bundle ships: the exact upstream base, the five patches applied to it, the configure
+(2015) bundle ships: the exact upstream base, the seven patches applied to it, the configure
 flags used, and the toolchain that actually produced the delivered binaries.
 
-**This description is of the runtime rebuilt on 2026-10-07/08, with patch 0005** (runtime profile
-`nfs2015-tf-cx11-rebuild-0005-20261008`), built from the patched source tree at commit `ce7b8eaa`
-that `wine-nfs2015-source-0005.tar.gz` archives. The same runtime without patch 0005 (profile
-`nfs2015-tf-cx11-rebuild-20261008`, tree `1e98e299`) differs in two files only: both `kernelbase.dll`. It is not bit-identical to the runtime the earlier
+**This description is of the runtime rebuilt on 2026-10-07/08, with patches 0005 to 0007** (runtime profile
+`nfs2015-tf-cx11-rebuild-0007-20261008`), built from the patched source tree at commit `c2afb959`
+that `wine-nfs2015-source-0007.tar.gz` archives. The same runtime without patches 0005 to 0007 (profile
+`nfs2015-tf-cx11-rebuild-20261008`, tree `1e98e299`) differs in three files only: both `kernelbase.dll` and
+`lib/wine/x86_64-unix/ntdll.so`; the profile of patch 0005 alone (`nfs2015-tf-cx11-rebuild-0005-20261008`) differs from this one in the same three files. It is not bit-identical to the runtime the earlier
 apps shipped; the section "The rebuild of 2026-10-07/08" says exactly how it differs.
 
 ## Upstream base
@@ -21,7 +22,7 @@ apps shipped; the section "The rebuild of 2026-10-07/08" says exactly how it dif
 
 ## Patches
 
-Patches 0001 to 0004 were exported with `git format-patch 1a7b0c76..nfs2015-fix` and patch 0005 from its own commit, applied in numbered order. The commit
+Patches 0001 to 0004 were exported with `git format-patch 1a7b0c76..nfs2015-fix` and patches 0005 to 0007 each from its own commit, applied in numbered order. The commit
 column is the commit the patch file was exported from (the `From` line of the file); applying
 the files with `git am` onto `1a7b0c76` makes new commits with the same content, which are the
 last column and the ones in the source archive:
@@ -33,8 +34,10 @@ last column and the ones in the source archive:
 | `0003-wine-decode-prefixes-on-PUSHF-POPF-in-the-execution-.patch` | `d7c4a19` | `eb40ef7` | Decodes instruction prefixes on `PUSHF`/`POPF` inside the emulator |
 | `0004-tests-add-the-execution-breakpoint-regression-fixtur.patch` | `52582b2` | `1e98e29` | Adds the execution-breakpoint regression fixture |
 | `0005-kernelbase-crash-context-snapshot.patch` | `ed16a3c` | `ce7b8ea` | Prints a `wine-crash:` block (registers, bytes at the program counter, page state and module of the program counter and the fault address, eight stack words, trap-flag emulation counters) from `UnhandledExceptionFilter` before the debugger starts; adds compile-time checks of the three TEB offsets it reads. Changes the two `kernelbase.dll` files and no other binary |
+| `0006-kernelbase-crash-context-code-windows-and-page-history.patch` | `473ffab` | `473ffab` | Extends the `wine-crash:` block: `NtQueryVirtualMemory` of the page of the program counter and its two neighbours, an FNV-1a checksum and zero-group count of that page, the thread count and TEB, up to six return-address candidates as `module+offset`, 512 bytes of code around the program counter and 128 bytes around up to three registers that point within 4 KiB of it, and the registers that point near it. Changes both `kernelbase.dll` files only |
+| `0007-ntdll-rosetta-exec-page-toggles-and-page-trace.patch` | `c2afb95` | `c2afb95` | Three environment switches, all off unless set: `WINE_ROSETTA_FLUSH_TOGGLE=1` (after `NtFlushInstructionCache`, round-trip the protection of the executable regions of the range), `WINE_ROSETTA_PROTECT_TOGGLE=1` (the same after `NtProtectVirtualMemory` gives execute) and `WINE_TRACE_PAGE=<hexstart>-<hexend>` (a numeric `wine-trace:` line on standard error for each allocate, free, protect, write, flush, map and unmap call that touches the window, with the caller's return address). Changes `lib/wine/x86_64-unix/ntdll.so` only; also adds the probe `tests/nfs2015/exec-page-stale.c` |
 
-The archived tree is `1a7b0c76` plus exactly these five commits (`ce7b8eaa908e2cf4f91450f50c4e4694e21a6674`);
+The archived tree is `1a7b0c76` plus exactly these seven commits (`c2afb959160c39e98b4e329d558b05b45da37c42`);
 the content of each commit equals its patch file, apart from the `From` hash line and the
 `git` version trailer that `git format-patch` writes.
 
@@ -90,9 +93,10 @@ reported upstream.
 
 ## The rebuild of 2026-10-07/08
 
-The runtime in this app was rebuilt from the source in `wine-nfs2015-source-0005.tar.gz` because the
+The runtime in this app was rebuilt from the source in `wine-nfs2015-source-0007.tar.gz` because the
 build tree of the earlier apps no longer existed. What is the same and what is not:
 
+- **Patches 0006 and 0007** (2026-10-08, after the first capture of the game's fault): 0006 changes both `kernelbase.dll` again (`14e82c52…56e5` to `ec494aca…2f66`, `09ce21ff…289c2c` to `15c1001c…b4a3`), 0007 changes `lib/wine/x86_64-unix/ntdll.so` (`82cf3d48…7689` to `b1bddee4…0de4`); every other file is byte-identical to the runtime of patch 0005 (the build session's manifest and this build's own sha256 of both trees agree). The switches of 0007 do nothing unless the environment sets them.
 - **Patch 0005** changes `lib/wine/x86_64-windows/kernelbase.dll` (`4cdca0f5…39b6` to `14e82c52…56e5`) and `lib/wine/i386-windows/kernelbase.dll` (`c1efceb5…1a726` to `09ce21ff…289c2c`); `ntdll.so` is unchanged because the patch adds only compile-time offset checks to `signal_x86_64.c`. The other 1790 files are byte-identical to the rebuild without it (the build session's manifest).
 - **Same as the runtime of the earlier apps:** `bin/wine` (`03985ed9…0ff360`) and
   `lib/wine/x86_64-unix/wine` (`86283fa8…5a1f`) are byte-identical, which indicates that the
@@ -132,7 +136,7 @@ build tree of the earlier apps no longer existed. What is the same and what is n
   7. The compatibility library (`compatdb.so`) was built with the official Rust 1.97.1 toolchain,
      not necessarily the original's.
 - **Rebuild recipe:** fetch `athei/wine` at `1a7b0c766262276e7e7bb50c80abe5ccd08e292b`, apply the
-  five patches with `git am`, configure with the flags above and the deviations, run
+  seven patches with `git am`, configure with the flags above and the deviations, run
   `make`, then the bundle script of `athei/wine-build` with `--runtime-only`.
 
 ## Third-party runtime components

@@ -5,7 +5,7 @@
 | mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
 | x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `c3969379750531fb124859ae742ab4f727f54f9c` |
 | NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
-| NFS (2015) Wine, from 2026-10-08 | local patched tree, not published: `athei/wine` `cx-26-patched` `1a7b0c76` plus five patches | HEAD `ce7b8eaa908e2cf4f91450f50c4e4694e21a6674` (profile `nfs2015-tf-cx11-rebuild-0005-20261008`; NFS2015.md §24) |
+| NFS (2015) Wine, from 2026-10-08 | local patched tree, not published: `athei/wine` `cx-26-patched` `1a7b0c76` plus seven patches | HEAD `c2afb959160c39e98b4e329d558b05b45da37c42` (base + 7 commits; profile `nfs2015-tf-cx11-rebuild-0007-20261008`; NFS2015.md §25) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
 
 **Repin of 2026-10-02 (third), the release line.** One integration line, `release-latest`, repins every shipped
@@ -145,4 +145,16 @@ frame rate. The retained CoD4 result and its limits are summarized in [CoD4](COD
 | `lib/wine/x86_64-windows/kernelbase.dll` | `4cdca0f5…39b6` (not pinned before) | `14e82c52ff0494287f3b2e921647a45254d20b7a2cf2b730f17df5f8092356e5` |
 | `lib/wine/i386-windows/kernelbase.dll` | `c1efceb5…1a726` (not pinned before) | `09ce21ffa620c7195dd400f1aa10e10e5451fdcc765ff2b9c651c5dc1d289c2c` |
 | The five earlier pinned files, `sidecarSHA256`, mtld3d, EA client layer | | unchanged |
+
+## Repin of 2026-10-08 (runtime with patches 0006 and 0007), Need for Speed (2015) only
+
+| Pin | Was (profile `nfs2015-tf-cx11-rebuild-0005-20261008`) | Now (profile `nfs2015-tf-cx11-rebuild-0007-20261008`) |
+|---|---|---|
+| Wine source revision | `ce7b8eaa908e2cf4f91450f50c4e4694e21a6674` (base + 5 commits) | `c2afb959160c39e98b4e329d558b05b45da37c42` (base `1a7b0c76` + 7 commits) |
+| Source archive in the app | `wine-nfs2015-source-0005.tar.gz`, `25f91e07…8919` | `wine-nfs2015-source-0007.tar.gz`, `b0d61a3be8a2fff1a20c7c604998824098e683105577d5d70924e12384eb58a6` |
+| `lib/wine/x86_64-windows/kernelbase.dll` | `14e82c52…56e5` | `ec494aca12cac61e4236c27692fc467ce12a24dd4943a6035b873563e5882f66` |
+| `lib/wine/i386-windows/kernelbase.dll` | `09ce21ff…289c2c` | `15c1001c859753a3f70a1c54292b04ace79a404dfbb8195ac4b959917b52b4a3` |
+| `lib/wine/x86_64-unix/ntdll.so` | `82cf3d48…7689` | `b1bddee45bbc61a74486464e842c739f68b489d0da29ef458210985ca6340de4` |
+| Capabilities added | | `crashContextCodeWindows`, `rosettaPageExperiments` |
+| `bin/wine`, `bin/wineserver`, `x86_64-unix/wine`, `i386-windows/ntdll.dll`, sidecar, mtld3d, EA client layer | | unchanged |
 

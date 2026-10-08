@@ -64,6 +64,8 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
   package let traceFlag: (state: UInt32, guestFlags: UInt32, steps: UInt64)?
   /// The `end` line was read. A block cut short by the process dying or by another block is kept.
   package let isComplete: Bool
+  /// What patch 0006 added: page queries, checksum, threads, return candidates, code windows.
+  package let pages: NFS2015CrashPages
 
   /// The registers the runtime prints; any other `name=value` pair is not a register.
   static let registerNames: Set<String> = [
@@ -73,7 +75,7 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
   ]
 
   static let linePrefix = "wine-crash: "
-  static let lineLimit = 24
+  static let lineLimit = 128
   static let stackLimit = 16
 
   package static func == (left: Self, right: Self) -> Bool {
@@ -89,6 +91,7 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
       && left.traceFlag?.state == right.traceFlag?.state
       && left.traceFlag?.guestFlags == right.traceFlag?.guestFlags
       && left.traceFlag?.steps == right.traceFlag?.steps && left.isComplete == right.isComplete
+      && left.pages == right.pages
   }
 
   /// Reads the lines of one block, with or without the closing `end` line.
@@ -108,6 +111,7 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
     var traceFlag: (state: UInt32, guestFlags: UInt32, steps: UInt64)?
     var complete = false
     var arch = Architecture.amd64
+    var pages = NFS2015CrashPages()
     for line in lines.prefix(Self.lineLimit) {
       guard line.hasPrefix(Self.linePrefix) else { continue }
       let body = line.dropFirst(Self.linePrefix.count)
@@ -139,6 +143,8 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
             body[body.index(after: close)...].split(separator: " ")
               .compactMap { Self.hex(String($0)) }.prefix(Self.stackLimit))
         }
+      } else if pages.read(body) {
+        continue
       } else if body.hasPrefix("tf ") {
         let fields = Self.pairs(body.dropFirst(3))
         if let state = fields["state"].flatMap({ UInt32($0, radix: 16) }),
@@ -178,6 +184,7 @@ package struct NFS2015CrashBlock: Equatable, Sendable {
     self.stackAddress = stackAddress
     self.traceFlag = traceFlag
     self.isComplete = complete
+    self.pages = pages
   }
 
   private static func isShortHex(_ text: String) -> Bool {

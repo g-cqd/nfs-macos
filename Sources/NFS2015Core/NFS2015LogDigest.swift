@@ -23,6 +23,8 @@ package struct NFS2015LogDigest: Equatable, Sendable {
   /// The most recent `seh` trace lines, scrubbed, oldest first.
   package private(set) var trace: [String] = []
   private var blockReader = NFS2015CrashBlockReader()
+  /// The `wine-trace:` lines of a session that set `WINE_TRACE_PAGE`.
+  package private(set) var pageTrace = NFS2015PageTrace()
   private var pending = ""
 
   package init() {}
@@ -40,6 +42,7 @@ package struct NFS2015LogDigest: Equatable, Sendable {
       && left.displayModes.map(\.count) == right.displayModes.map(\.count)
       && left.serverCrashes == right.serverCrashes && left.context == right.context
       && left.trace == right.trace && left.crashBlocks == right.crashBlocks
+      && left.pageTrace == right.pageTrace
   }
 
   /// Reads the whole of a log at once.
@@ -86,11 +89,13 @@ package struct NFS2015LogDigest: Equatable, Sendable {
   private mutating func read(_ raw: String) {
     let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
     blockReader.read(line)
+    pageTrace.read(line)
     if line.hasPrefix("compatdb: NFS16.exe [") { launches += 1 }
     if line.hasPrefix("wineserver crashed") { serverCrashes += 1 }
     if let mode = Self.displayMode(in: line) { note(mode) }
     if let fault = NFS2015FaultLine.parse(line), faults.count < Self.faultLimit {
       faults.append(fault)
+      pageTrace.markFault()
     }
     guard NFS2015Redaction.isDiagnostic(line), let clean = NFS2015Redaction.scrub(line) else {
       return

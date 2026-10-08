@@ -10,11 +10,13 @@ package struct WineRuntime {
   private let environments: [ExecutableEnvironment]
   private let debugChannels: String
   private let usesSidecar: Bool
+  private let experiments: [String: String]
   package init(
     paths: AppPaths, output: FileHandle, tuning: RuntimeTuning = RuntimeTuning(),
     renderers: [RendererSelection] = [], managedRuntime: ManagedRuntime? = nil,
     environments: [ExecutableEnvironment] = [],
-    debugChannels: String = LaunchEnvironment.silentDebugChannels, usesSidecar: Bool = true
+    debugChannels: String = LaunchEnvironment.silentDebugChannels, usesSidecar: Bool = true,
+    experiments: [String: String] = [:]
   ) {
     self.paths = paths
     self.output = output
@@ -24,6 +26,7 @@ package struct WineRuntime {
     self.environments = environments
     self.debugChannels = debugChannels
     self.usesSidecar = usesSidecar
+    self.experiments = experiments
   }
 
   /// The environment for a Wine process in this prefix. The managed runtime is enabled exactly
@@ -34,7 +37,8 @@ package struct WineRuntime {
       home: paths.support.appendingPathComponent("RuntimeHome/Player"),
       temporary: paths.support.appendingPathComponent("Temporary"), tuning: tuning,
       renderers: renderers, managedCode: managedRuntime?.isInstalled(in: prefix) ?? false,
-      environments: environments, debugChannels: debugChannels, usesSidecar: usesSidecar)
+      environments: environments, debugChannels: debugChannels, usesSidecar: usesSidecar,
+      experiments: experiments)
   }
 
   /// Puts the pinned managed runtime into the prefix unless it is already there.

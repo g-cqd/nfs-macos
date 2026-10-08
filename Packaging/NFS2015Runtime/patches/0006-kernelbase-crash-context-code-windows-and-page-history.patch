@@ -1,0 +1,334 @@
+From 473ffab9f687a68bb88511e2932c1ec5e842fa1a Mon Sep 17 00:00:00 2001
+From: Gigi <42325924+g-cqd@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 09:08:37 +0200
+Subject: [PATCH] kernelbase: extend the crash block with code windows, page
+ history, a page checksum, thread info and return addresses
+
+The first real capture of an NFS16 fault showed the instruction pointer inside a private RWX page
+executing non-code bytes. Print what is needed to tell an unfilled or stale page from a tamper response
+or a remapped page: 256 bytes either side of pc (and 128 around other registers that point within 4 KiB of
+pc), VirtualQuery history of the page and its neighbours, an FNV-1a checksum and zero-run count of the page,
+the thread count and TEB, and the first return-address-like stack slots as module+offset.
+---
+ dlls/kernelbase/debug.c              | 185 +++++++++++++++++++++++++++
+ tests/nfs2015/README.md              |   8 ++
+ tests/nfs2015/crash-context-check.sh |  27 +++-
+ tests/nfs2015/crash-context.c        |  24 +++-
+ 4 files changed, 238 insertions(+), 6 deletions(-)
+
+diff --git a/dlls/kernelbase/debug.c b/dlls/kernelbase/debug.c
+index 8a0ee8f..1a51d24 100644
+--- a/dlls/kernelbase/debug.c
++++ b/dlls/kernelbase/debug.c
+@@ -552,6 +552,190 @@ static void dump_crash_address( const char *label, const void *addr )
+ }
+ 
+ 
++/* One MemoryBasicInformation line for the page at addr (allocation history of the page and its neighbours). */
++static void dump_crash_vq( const void *addr )
++{
++    MEMORY_BASIC_INFORMATION info;
++    SIZE_T len;
++
++    if (NtQueryVirtualMemory( GetCurrentProcess(), addr, MemoryBasicInformation, &info, sizeof(info), &len ))
++    {
++        MESSAGE( "wine-crash: vq[%p] not queryable\n", addr );
++        return;
++    }
++    MESSAGE( "wine-crash: vq[%p] alloc=%p aprot=%lx base=%p size=%p state=%lx prot=%lx type=%lx\n", addr,
++             info.AllocationBase, info.AllocationProtect, info.BaseAddress, (void *)info.RegionSize,
++             info.State, info.Protect, info.Type );
++}
++
++/* Hex rows of 32 bytes covering [center - before, center + after), aligned to 32; unreadable rows are merged. */
++static void dump_crash_window( const char *label, ULONG_PTR center, SIZE_T before, SIZE_T after )
++{
++    ULONG_PTR start = (center - before) & ~(ULONG_PTR)31, end = (center + after + 31) & ~(ULONG_PTR)31, a, bad = 0;
++    BYTE row[32];
++    SIZE_T n, i;
++    char text[32 * 3 + 1];
++
++    MESSAGE( "wine-crash: window %s=%p span=-%lx..+%lx\n", label, (void *)center, (ULONG)before, (ULONG)after );
++    for (a = start; a < end; a += 32)
++    {
++        n = 0;
++        if (NtReadVirtualMemory( GetCurrentProcess(), (void *)a, row, sizeof(row), &n ) || n != sizeof(row))
++        {
++            if (!bad) bad = a;
++            continue;
++        }
++        if (bad)
++        {
++            MESSAGE( "wine-crash: code[%p..%p]: unreadable\n", (void *)bad, (void *)(a - 1) );
++            bad = 0;
++        }
++        for (i = 0; i < sizeof(row); i++) snprintf( text + i * 3, 4, "%02x ", row[i] );
++        text[sizeof(row) * 3 - 1] = 0;
++        MESSAGE( "wine-crash: code[%p]: %s\n", (void *)a, text );
++    }
++    if (bad) MESSAGE( "wine-crash: code[%p..%p]: unreadable\n", (void *)bad, (void *)(end - 1) );
++}
++
++/* Checksum of the 4 KiB page holding pc, so two crashes can be compared for identical page content. */
++static void dump_crash_page_sum( ULONG_PTR pc )
++{
++    ULONG_PTR page = pc & ~(ULONG_PTR)0xfff;
++    BYTE *buf = NULL;
++    SIZE_T size = 0x1000, n = 0, i, j;
++    UINT64 hash = 0xcbf29ce484222325ull;
++    ULONG zero16 = 0;
++
++    if (NtAllocateVirtualMemory( GetCurrentProcess(), (void **)&buf, 0, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE ))
++        return;
++    if (NtReadVirtualMemory( GetCurrentProcess(), (void *)page, buf, 0x1000, &n ) || n != 0x1000)
++    {
++        MESSAGE( "wine-crash: pagesum %p unreadable\n", (void *)page );
++    }
++    else
++    {
++        for (i = 0; i < 0x1000; i++) hash = (hash ^ buf[i]) * 0x100000001b3ull;
++        for (i = 0; i < 0x1000; i += 16)
++        {
++            for (j = 0; j < 16 && !buf[i + j]; j++) ;
++            if (j == 16) zero16++;
++        }
++        MESSAGE( "wine-crash: pagesum %p fnv1a64=%016I64x zero16=%lu/256\n", (void *)page, hash, zero16 );
++    }
++    size = 0;
++    NtFreeVirtualMemory( GetCurrentProcess(), (void **)&buf, &size, MEM_RELEASE );
++}
++
++/* Thread count of this process and the faulting thread's TEB. */
++static void dump_crash_threads(void)
++{
++    SYSTEM_PROCESS_INFORMATION *cur;
++    SIZE_T size = 0x100000;
++    void *buf = NULL;
++    ULONG len = 0, count = 0;
++    BOOL found = FALSE;
++
++    if (!NtAllocateVirtualMemory( GetCurrentProcess(), &buf, 0, &size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE ))
++    {
++        if (!NtQuerySystemInformation( SystemProcessInformation, buf, size, &len ))
++        {
++            cur = buf;
++            for (;;)
++            {
++                if (cur->UniqueProcessId == ULongToHandle( GetCurrentProcessId() ))
++                {
++                    count = cur->dwThreadCount;
++                    found = TRUE;
++                    break;
++                }
++                if (!cur->NextEntryOffset) break;
++                cur = (SYSTEM_PROCESS_INFORMATION *)((char *)cur + cur->NextEntryOffset);
++            }
++        }
++        size = 0;
++        NtFreeVirtualMemory( GetCurrentProcess(), &buf, &size, MEM_RELEASE );
++    }
++    if (found) MESSAGE( "wine-crash: threads=%lu teb=%p\n", count, NtCurrentTeb() );
++    else MESSAGE( "wine-crash: threads=? teb=%p\n", NtCurrentTeb() );
++}
++
++/* The first few stack slots that look like return addresses: executable memory inside a module. */
++static void dump_crash_returns( const void *sp )
++{
++    ULONG_PTR slots[64];
++    SIZE_T n = 0, i, printed = 0;
++    MEMORY_BASIC_INFORMATION info;
++    WCHAR name[MAX_PATH];
++    HMODULE module;
++    const WCHAR *base;
++    SIZE_T len;
++
++    if (!sp || (NtReadVirtualMemory( GetCurrentProcess(), sp, slots, sizeof(slots), &n ) && !n)) return;
++    for (i = 0; i < n / sizeof(*slots) && printed < 6; i++)
++    {
++        if (NtQueryVirtualMemory( GetCurrentProcess(), (void *)slots[i], MemoryBasicInformation, &info, sizeof(info), &len ) ||
++            info.State != MEM_COMMIT || !(info.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
++                                                          PAGE_EXECUTE_WRITECOPY)))
++            continue;
++        if (!GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++                                 (void *)slots[i], &module ) || !GetModuleFileNameW( module, name, ARRAY_SIZE(name) ))
++            continue;
++        if ((base = wcsrchr( name, '\\' ))) base++;
++        else base = name;
++        MESSAGE( "wine-crash: ret[%lu]=%p %ls+%#lx\n", (ULONG)i, (void *)slots[i], base,
++                 (ULONG)(slots[i] - (ULONG_PTR)module) );
++        printed++;
++    }
++}
++
++/* Code around pc and around every register that points near it, then the page history and checksum. */
++static void dump_crash_pages( const CONTEXT *ctx, ULONG_PTR pc, const void *sp )
++{
++    struct { const char *name; ULONG_PTR value; } regs[16];
++    unsigned int nregs = 0, i, windows = 0, near = 0;
++    char nearbuf[160] = "";
++    MEMORY_BASIC_INFORMATION info;
++    SIZE_T len;
++
++#define REG(n,f) (regs[nregs].name = n, regs[nregs++].value = ctx->f)
++#ifdef __x86_64__
++    REG("rax",Rax); REG("rbx",Rbx); REG("rcx",Rcx); REG("rdx",Rdx); REG("rsi",Rsi); REG("rdi",Rdi); REG("rbp",Rbp);
++    REG("r8",R8); REG("r9",R9); REG("r10",R10); REG("r11",R11); REG("r12",R12); REG("r13",R13); REG("r14",R14); REG("r15",R15);
++#elif defined(__i386__)
++    REG("eax",Eax); REG("ebx",Ebx); REG("ecx",Ecx); REG("edx",Edx); REG("esi",Esi); REG("edi",Edi); REG("ebp",Ebp);
++#endif
++#undef REG
++
++    dump_crash_vq( (void *)(pc & ~(ULONG_PTR)0xfff) );
++    dump_crash_vq( (void *)((pc & ~(ULONG_PTR)0xfff) - 0x1000) );
++    dump_crash_vq( (void *)((pc & ~(ULONG_PTR)0xfff) + 0x1000) );
++    dump_crash_page_sum( pc );
++    dump_crash_threads();
++    dump_crash_returns( sp );
++    dump_crash_window( "pc", pc, 256, 256 );
++
++    for (i = 0; i < nregs; i++)
++    {
++        ULONG_PTR v = regs[i].value, diff = v > pc ? v - pc : pc - v;
++        if (diff >= 0x1000) continue;
++        if (diff <= 256)
++        {
++            size_t used = strlen( nearbuf );
++            snprintf( nearbuf + used, sizeof(nearbuf) - used, " %s=pc%c%#lx", regs[i].name,
++                      v >= pc ? '+' : '-', (ULONG)diff );
++            near++;
++            continue;
++        }
++        if (windows >= 3 || NtQueryVirtualMemory( GetCurrentProcess(), (void *)v, MemoryBasicInformation, &info,
++                                                  sizeof(info), &len ) || info.State != MEM_COMMIT ||
++            (info.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
++            continue;
++        dump_crash_window( regs[i].name, v, 64, 64 );
++        windows++;
++    }
++    if (near) MESSAGE( "wine-crash: near-pc:%s\n", nearbuf );
++}
++
+ /* Print a compact register / memory snapshot of the faulting thread, one "wine-crash:" line each. */
+ static void dump_crash_context( const EXCEPTION_POINTERS *ptr )
+ {
+@@ -624,6 +808,7 @@ static void dump_crash_context( const EXCEPTION_POINTERS *ptr )
+              *(DWORD *)((BYTE *)NtCurrentTeb() + 0x340), *(DWORD *)((BYTE *)NtCurrentTeb() + 0x344),
+              *(UINT64 *)((BYTE *)NtCurrentTeb() + 0x350) );
+ #endif
++    dump_crash_pages( ctx, (ULONG_PTR)pc, sp );
+     MESSAGE( "wine-crash: end\n" );
+ }
+ 
+diff --git a/tests/nfs2015/README.md b/tests/nfs2015/README.md
+index 21eef8c..cb665ec 100644
+--- a/tests/nfs2015/README.md
++++ b/tests/nfs2015/README.md
+@@ -55,3 +55,11 @@ winedbg only reports `Couldn't get first exception`. Build and run:
+ 
+ Expect `ok   crash-context block complete`. winedbg is still started afterwards and may wait for input when
+ stdin is not a terminal; kill it, the child's exit status stays `c0000005`.
++
++`crash-context.exe page` is the second case: the child allocates an executable private page, fills it with junk
++whose bytes at offset 0x159 are the ones seen on `NFS16.exe` (`a2 31 ff 73 01 85 35 bc ...`, a `mov [moffs64],al`
++whose operand is the "bad pointer"), sets `r12` near it and jumps in. `crash-context-check.sh crash-context.exe page`
++passes when the block also carries the page history (`vq[...]`), the page checksum (`pagesum ... fnv1a64=`, compared with
++the value the child prints), the thread count, the code rows (`code[...]`, 32 bytes each, +-256 around pc and +-64 around
++other registers that point within 4 KiB of pc), the registers that sit inside the pc window (`near-pc:`) and the
++return-address-like stack slots (`ret[n]=addr module+offset`).
+diff --git a/tests/nfs2015/crash-context-check.sh b/tests/nfs2015/crash-context-check.sh
+index 240a7f5..cdf9faa 100755
+--- a/tests/nfs2015/crash-context-check.sh
++++ b/tests/nfs2015/crash-context-check.sh
+@@ -1,10 +1,29 @@
+ #!/bin/sh
+-# usage: crash-context-check.sh /path/to/wine crash-context.exe   (WINEPREFIX must be set)
++# usage: crash-context-check.sh /path/to/wine crash-context.exe [page]   (WINEPREFIX must be set)
+ # Passes when the child's unhandled fault produced the whole wine-crash block with the known register values.
+-log=$(mktemp)
+-"$1" "$2" 2> "$log"
++log=$(mktemp); out=$(mktemp)
++"$1" "$2" $3 > "$out" 2> "$log"
+ fail=0
+ need() { grep -q "$1" "$log" || { echo "FAIL missing: $1"; fail=1; }; }
++if [ "$3" = page ]; then
++    need 'wine-crash: begin'
++    need 'access=1 target=85BC35850173FF31'
++    need 'pc-bytes\[[0-9]*\]=a2 31 ff 73 01 85 35 bc 85 e8 ac 52 48 8d 15 ba'
++    need 'type=20000 region='
++    need 'wine-crash: vq\[[0-9A-Fa-f]*\] alloc='
++    need 'wine-crash: threads='
++    need 'wine-crash: window pc='
++    need 'wine-crash: near-pc: .*r12=pc-0x76'
++    need 'wine-crash: code\[[0-9A-Fa-f]*\]: '
++    sum=$(sed -n 's/.*fnv1a64=\([0-9a-f]*\) .*/\1/p' "$out" | head -1)
++    [ -n "$sum" ] && need "pagesum .* fnv1a64=$sum zero16="
++    [ -z "$sum" ] && { echo "FAIL no expected checksum from the child"; fail=1; }
++    need 'wine-crash: end'
++    grep '^wine-crash' "$log"
++    [ $fail = 0 ] && echo "ok   crash-context page block complete"
++    rm -f "$log" "$out"
++    exit $fail
++fi
+ need 'wine-crash: begin'
+ need 'code=c0000005'
+ need 'access=1 target=85BC35850173FF31'
+@@ -20,5 +39,5 @@ need 'wine-crash: tf state='
+ need 'wine-crash: end'
+ grep '^wine-crash' "$log"
+ [ $fail = 0 ] && echo "ok   crash-context block complete"
+-rm -f "$log"
++rm -f "$log" "$out"
+ exit $fail
+diff --git a/tests/nfs2015/crash-context.c b/tests/nfs2015/crash-context.c
+index 28ec822..59fe490 100644
+--- a/tests/nfs2015/crash-context.c
++++ b/tests/nfs2015/crash-context.c
+@@ -2,7 +2,8 @@
+  * Fixture for the "wine-crash:" register dump printed by UnhandledExceptionFilter.
+  *
+  * Build:  x86_64-w64-mingw32-gcc -O1 -o crash-context.exe crash-context.c
+- * Run:    crash-context-check.sh /path/to/wine crash-context.exe
++ * Run:    crash-context-check.sh /path/to/wine crash-context.exe        (register values)
++ *         crash-context-check.sh /path/to/wine crash-context.exe page   (junk executable page, page/code rows)
+  *
+  * With no argument the program starts itself with "fault" and waits.  The child loads
+  * known values into the integer registers and stores through a non-canonical pointer,
+@@ -36,6 +37,24 @@ static void __attribute__((noreturn)) fault( void )
+     __builtin_unreachable();
+ }
+ 
++/* Executable private page whose code is junk, the shape of the NFS16 fault: jump into the middle of it. */
++static void __attribute__((noreturn)) page_fault( void )
++{
++    static const unsigned char junk[16] = { 0xa2, 0x31, 0xff, 0x73, 0x01, 0x85, 0x35, 0xbc,
++                                            0x85, 0xe8, 0xac, 0x52, 0x48, 0x8d, 0x15, 0xba };
++    unsigned char *page = VirtualAlloc( NULL, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE );
++    unsigned long long hash = 0xcbf29ce484222325ull;
++    unsigned int i;
++
++    for (i = 0; i < 0x1000; i++) page[i] = (i % 16 == 0 || i % 7 == 0) ? 0 : (unsigned char)(i * 31 + 7);
++    memcpy( page + 0x159, junk, sizeof(junk) );
++    for (i = 0; i < 0x1000; i++) hash = (hash ^ page[i]) * 0x100000001b3ull;
++    printf( "expect page=%p fnv1a64=%016llx pc=%p\n", page, hash, page + 0x159 );
++    fflush( stdout );
++    __asm__ volatile( "movq %0,%%r12\n\tjmp *%1\n\t" :: "r"(page + 0xe3), "r"(page + 0x159) : "r12" );
++    __builtin_unreachable();
++}
++
+ int main( int argc, char **argv )
+ {
+     STARTUPINFOA si = { sizeof(si) };
+@@ -44,8 +63,9 @@ int main( int argc, char **argv )
+     DWORD status = 0;
+ 
+     if (argc > 1 && !strcmp( argv[1], "fault" )) fault();
++    if (argc > 1 && !strcmp( argv[1], "pagefault" )) page_fault();
+ 
+-    snprintf( cmd, sizeof(cmd), "\"%s\" fault", argv[0] );
++    snprintf( cmd, sizeof(cmd), "\"%s\" %s", argv[0], argc > 1 && !strcmp( argv[1], "page" ) ? "pagefault" : "fault" );
+     if (!CreateProcessA( NULL, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi ))
+     {
+         printf( "FAIL CreateProcess %lu\n", GetLastError() );
+-- 
+2.55.0
+

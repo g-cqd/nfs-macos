@@ -45,10 +45,41 @@ extension NFS2015CrashBlock {
       found.append("the instruction pointer is in module \(region.module)")
     case nil: break
     }
+    found.append(contentsOf: pageObservations)
     if pcBytesUnreadable { found.append("the bytes at the instruction pointer could not be read") }
     if let traceFlag, traceFlag.state != 0 || traceFlag.steps > 0 {
       found.append(
         "the trap-flag emulation was active (state \(traceFlag.state), \(traceFlag.steps) steps)")
+    }
+    return found
+  }
+
+  /// Facts from the patch 0006 lines; nothing here says why the program faulted.
+  private var pageObservations: [String] {
+    var found: [String] = []
+    if case .region(let region)? = pc, region.type == 0x2_0000, region.isExecutable,
+      region.isWritable
+    {
+      found.append(
+        "the instruction pointer is in private memory that is both writable and executable "
+          + "(protect 0x\(String(region.protect, radix: 16, uppercase: true)))")
+    }
+    if let zero = pages.checksum?.zeroGroups {
+      found.append(
+        "\(zero) of 256 groups of 16 bytes in the instruction pointer's page are all zero")
+    }
+    for near in pages.near.prefix(3) {
+      let distance = "0x" + String(near.delta.magnitude, radix: 16, uppercase: true)
+      found.append(
+        "register \(near.register) is \(distance) "
+          + (near.delta < 0 ? "below" : near.delta > 0 ? "above" : "at")
+          + " the instruction pointer")
+    }
+    if let first = pages.returns.first {
+      found.append("the first return address candidate is in \(first.module)")
+    }
+    if let threads = pages.threads, threads > 0 {
+      found.append("the process had \(threads) thread\(threads == 1 ? "" : "s")")
     }
     return found
   }
@@ -130,7 +161,64 @@ extension NFS2015CrashBlock {
           + "0x\(String(traceFlag.guestFlags, radix: 16, uppercase: true)), steps \(traceFlag.steps)"
       )
     }
+    lines += pageLines
     for observation in observations { lines.append("  - \(observation)") }
+    return lines
+  }
+
+  /// The patch 0006 lines as report lines: code windows as plain hex, no decoding.
+  private var pageLines: [String] {
+    var lines: [String] = []
+    func hex(_ value: UInt64) -> String { "0x" + String(value, radix: 16, uppercase: true) }
+    for query in pages.queries {
+      guard let info = query.info else {
+        lines.append("  page \(text(query.page)): not queryable")
+        continue
+      }
+      lines.append(
+        "  page \(text(query.page)): allocation \(text(info.allocationBase)) (first protect "
+          + "\(hex(UInt64(info.allocationProtect)))), region \(text(info.base))+\(hex(info.size)), "
+          + "state \(hex(UInt64(info.state))) protect \(hex(UInt64(info.protect))) "
+          + "type \(hex(UInt64(info.type)))")
+    }
+    if let sum = pages.checksum {
+      if let fnv = sum.fnv1a64, let zero = sum.zeroGroups {
+        lines.append(
+          "  page checksum \(text(sum.page)): FNV-1a 64 \(Self.hex(fnv, width: 16)), "
+            + "all-zero 16-byte groups \(zero) of 256")
+      } else {
+        lines.append("  page checksum \(text(sum.page)): the page could not be read")
+      }
+    }
+    if pages.hasThreadLine {
+      lines.append(
+        "  threads: \(pages.threads.map(String.init) ?? "unknown")"
+          + (pages.teb.map { ", TEB \(text($0))" } ?? ""))
+    }
+    for candidate in pages.returns {
+      lines.append(
+        "  return address candidate [\(candidate.slot)]: \(text(candidate.address)) "
+          + "\(candidate.module)+\(hex(candidate.offset))")
+    }
+    if !pages.near.isEmpty {
+      lines.append(
+        "  registers near the instruction pointer: "
+          + pages.near.map {
+            "\($0.register)=pc" + ($0.delta < 0 ? "-" : "+") + hex($0.delta.magnitude)
+          }.joined(separator: " "))
+    }
+    for window in pages.windows {
+      lines.append(
+        "  code window \(window.label) \(text(window.center)), -\(hex(window.before)) to "
+          + "+\(hex(window.after)) (bytes, not decoded):")
+      for row in window.rows {
+        lines.append(
+          "    \(text(row.address)): " + row.bytes.map { Self.hex(UInt64($0), width: 2) }.joined())
+      }
+      for range in window.unreadable {
+        lines.append("    \(text(range.start))..\(text(range.end)): unreadable")
+      }
+    }
     return lines
   }
 }

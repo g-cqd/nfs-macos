@@ -59,6 +59,7 @@ actor NFS2015SessionClient: NFS2015Serving {
     case .configureMetalFX: "--configure-metalfx"
     case .configureDiagnostics: "--configure-diagnostics"
     case .configureSidecar: "--configure-sidecar"
+    case .configureExperiments: "--configure-experiments"
     case .configure: "--configure"
     }
   }
@@ -101,6 +102,9 @@ actor NFS2015SessionClient: NFS2015Serving {
       try choice.validate()
       draft = try writeRequest(choice)
     case .configureSidecar(let choice):
+      try choice.validate()
+      draft = try writeRequest(choice)
+    case .configureExperiments(let choice):
       try choice.validate()
       draft = try writeRequest(choice)
     case .configure(let settings):

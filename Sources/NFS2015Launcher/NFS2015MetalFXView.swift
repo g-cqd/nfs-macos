@@ -9,8 +9,11 @@ struct NFS2015MetalFXView: View {
   @Bindable var model: NFS2015Model
 
   var body: some View {
-    Section(NFS2015MetalFX.title) {
-      Toggle("Upscale with MetalFX (spatial)", isOn: model.metalFXEnabledBinding())
+    Section(NFS2015MetalFX.heading) {
+      Toggle(
+        "Upscale with MetalFX (spatial), \(NFS2015MetalFX.statusLabel)",
+        isOn: model.metalFXEnabledBinding())
+      Text(NFS2015MetalFX.crashWarning).font(.callout)
       Picker("Scale factor", selection: model.metalFXFactorBinding()) {
         ForEach(NFS2015UpscaleFactor.allCases, id: \.self) { Text($0.title).tag($0) }
       }
@@ -23,7 +26,8 @@ struct NFS2015MetalFXView: View {
         resolution, menus and mouse stay as they are. The size shown is the game's resolution \
         times the factor, so this can only help when the game runs below what the display can \
         show. It applies to the game from its next start and never to the EA app. It is off \
-        unless you turn it on, and DXMT has no quality setting for it.
+        unless you turn it on, and DXMT has no quality setting for it. It is experimental and \
+        known to crash NFS16, as the note above the factor says.
         """
       ).font(.caption).foregroundStyle(.secondary)
       Text(
