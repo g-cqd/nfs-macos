@@ -70,6 +70,17 @@ for change in invalid:
     change(altered)
     rejected(altered, 'Invalid winehost block was accepted')
 
+# The helper inputs resolve through the same placeholders as every other input, including {store}.
+import os
+from recipes import resolve_inputs
+stored = with_winehost()
+stored['inputs'].update(winehostBuild='{store}/winehost-build', winehostProfile='{store}/winehost.provisionprofile')
+validate_recipe(stored)
+os.environ['NFS_MACOS_STORE'] = '/stores/games'
+resolved = resolve_inputs(stored)
+assert resolved['winehostBuild'] == Path('/stores/games/winehost-build'), resolved['winehostBuild']
+assert resolve_inputs(stored, ['winehostProfile=/elsewhere/p.provisionprofile'])['winehostProfile'] == Path('/elsewhere/p.provisionprofile')
+
 # Mach-O check: only a thin arm64 executable can be the host.
 with TemporaryDirectory() as temporary:
     root = Path(temporary)
