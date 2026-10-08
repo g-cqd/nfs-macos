@@ -24,6 +24,10 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
   package var flushToggle: Bool?
   /// Forces `WINE_ROSETTA_PROTECT_TOGGLE` on or off; nil leaves the saved setting.
   package var protectToggle: Bool?
+  /// Forces `WINE_RWX_WX_EMULATION` on or off; nil leaves the saved setting.
+  package var rwxWxEmulation: Bool?
+  /// `WINE_RWX_WX_HOT_LIMIT`, a decimal count; only a developer can set it.
+  package var rwxHotLimit: String?
   /// `WINE_TRACE_PAGE` window as `<hexstart>-<hexend>`, or `off`; nil leaves the saved setting.
   package var tracePage: String?
 
@@ -34,7 +38,7 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
 
   package var isActive: Bool {
     sidecar != nil || !tuning.isEmpty || flushToggle != nil || protectToggle != nil
-      || tracePage != nil
+      || tracePage != nil || rwxWxEmulation != nil || rwxHotLimit != nil
   }
 
   /// - Throws: A failure for a value that is not accepted, so a typo never runs as a different
@@ -48,6 +52,15 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
     }
     flushToggle = try Self.toggle(environment, WineExperimentSwitches.flushToggle)
     protectToggle = try Self.toggle(environment, WineExperimentSwitches.protectToggle)
+    rwxWxEmulation = try Self.toggle(environment, WineExperimentSwitches.rwxWxEmulation)
+    if let limit = environment[Self.tuningPrefix + WineExperimentSwitches.rwxHotLimit] {
+      guard WineExperimentSwitches.isHotLimit(limit) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxHotLimit) must be a decimal number "
+            + "of at most seven digits.")
+      }
+      rwxHotLimit = limit
+    }
     if let window = environment[Self.tuningPrefix + WineExperimentSwitches.tracePage] {
       guard window == Self.off || WineExperimentSwitches.isTraceWindow(window) else {
         throw .operation(
@@ -94,6 +107,10 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
       parts.append("\(WineExperimentSwitches.protectToggle)=\(protectToggle ? 1 : 0)")
     }
     if let tracePage { parts.append("\(WineExperimentSwitches.tracePage)=\(tracePage)") }
+    if let rwxWxEmulation {
+      parts.append("\(WineExperimentSwitches.rwxWxEmulation)=\(rwxWxEmulation ? 1 : 0)")
+    }
+    if let rwxHotLimit { parts.append("\(WineExperimentSwitches.rwxHotLimit)=\(rwxHotLimit)") }
     if let sidecar { parts.insert("x87 sidecar \(sidecar ? "on" : "off")", at: 0) }
     return parts.joined(separator: ", ")
   }

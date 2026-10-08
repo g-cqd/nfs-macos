@@ -16,15 +16,21 @@ package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
   package var protectToggle: Bool
   /// `WINE_TRACE_PAGE` with `WineExperimentSwitches.presetTraceWindow`.
   package var tracePage: Bool
+  /// `WINE_RWX_WX_EMULATION=1`, the workaround for the Rosetta 2 late-resume defect.
+  package var rwxWxEmulation: Bool
 
-  package init(flushToggle: Bool = false, protectToggle: Bool = false, tracePage: Bool = false) {
+  package init(
+    flushToggle: Bool = false, protectToggle: Bool = false, tracePage: Bool = false,
+    rwxWxEmulation: Bool = false
+  ) {
     self.flushToggle = flushToggle
     self.protectToggle = protectToggle
     self.tracePage = tracePage
+    self.rwxWxEmulation = rwxWxEmulation
   }
 
   private enum CodingKeys: String, CodingKey {
-    case version, flushToggle, protectToggle, tracePage
+    case version, flushToggle, protectToggle, tracePage, rwxWxEmulation
   }
 
   package init(from decoder: any Decoder) throws {
@@ -37,6 +43,8 @@ package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
     flushToggle = try container.decode(Bool.self, forKey: .flushToggle)
     protectToggle = try container.decode(Bool.self, forKey: .protectToggle)
     tracePage = try container.decode(Bool.self, forKey: .tracePage)
+    // A file the -0007 apps wrote has no such key: that is off, not a damaged file.
+    rwxWxEmulation = try container.decodeIfPresent(Bool.self, forKey: .rwxWxEmulation) ?? false
   }
 
   package func encode(to encoder: any Encoder) throws {
@@ -45,6 +53,7 @@ package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
     try container.encode(flushToggle, forKey: .flushToggle)
     try container.encode(protectToggle, forKey: .protectToggle)
     try container.encode(tracePage, forKey: .tracePage)
+    try container.encode(rwxWxEmulation, forKey: .rwxWxEmulation)
   }
 }
 
@@ -133,6 +142,13 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
     toggle(
       WineExperimentSwitches.protectToggle, saved: preference.protectToggle,
       forced: experiment.protectToggle)
+    toggle(
+      WineExperimentSwitches.rwxWxEmulation, saved: preference.rwxWxEmulation,
+      forced: experiment.rwxWxEmulation)
+    if let limit = experiment.rwxHotLimit {
+      environment[WineExperimentSwitches.rwxHotLimit] = limit
+      sources[WineExperimentSwitches.rwxHotLimit] = .experiment
+    }
     if let window = experiment.tracePage {
       if window == NFS2015ExperimentOverrides.off {
         if preference.tracePage { off.append(WineExperimentSwitches.tracePage) }
@@ -153,6 +169,11 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
     preference: .standard, experiment: NFS2015ExperimentOverrides())
 
   package var isActive: Bool { !environment.isEmpty }
+
+  /// Whether `WINE_RWX_WX_EMULATION` is set, so the runtime prints `wine-rwx:` lines.
+  package var emulatesWriteXorExecute: Bool {
+    environment[WineExperimentSwitches.rwxWxEmulation] != nil
+  }
 
   /// Whether the switch that makes the runtime print `wine-trace:` lines is set.
   package var tracesPages: Bool { environment[WineExperimentSwitches.tracePage] != nil }

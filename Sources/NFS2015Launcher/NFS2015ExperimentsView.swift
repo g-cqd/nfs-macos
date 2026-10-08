@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The Wine experiments group of the settings page.
 ///
-/// None of it is a game option. It keeps this app's own choice of three switches that Wine's
+/// None of it is a game option. It keeps this app's own choice of four switches that Wine's
 /// executable-page experiments read (`WineExperimentSwitches`), all off by default, for the next
 /// Play. The text says what they are for and that nothing is known to help.
 struct NFS2015ExperimentsView: View {
@@ -22,14 +22,26 @@ struct NFS2015ExperimentsView: View {
         "Trace memory calls in the window 0x1B30000-0x1B31000 "
           + "(\(WineExperimentSwitches.tracePage)=\(WineExperimentSwitches.presetTraceWindow))",
         isOn: model.tracePageBinding())
+      Toggle(
+        "Rosetta self-modifying-code workaround, experimental "
+          + "(\(WineExperimentSwitches.rwxWxEmulation)=1)", isOn: model.rwxWxEmulationBinding())
       Text(
         """
-        These test a guess about why the game faults at 0x1B30159: that Rosetta runs a stale \
-        translation of a code page the game rewrote. Nothing has shown that either re-toggle \
-        helps; the trace only records, as numbers, what the game did with that page, and the \
-        crash report prints the last 200 calls. All three are off by default. They apply to \
-        the whole Windows session and take effect when Play starts the EA app: quit a running \
-        EA app, then press Play.
+        The game faults when Rosetta 2 resumes one byte late after code that the game builds by two \
+        stores right ahead of itself. This workaround keeps the game's read-write-execute pages \
+        non-writable and lets each store through one instruction at a time, which removed the fault \
+        in a test program; it has not been tried in the game, it costs time on every store to \
+        such a page, and it is off by default.
+        """
+      ).font(.caption).foregroundStyle(.secondary)
+      Text(
+        """
+        The two re-toggles test an earlier guess (that Rosetta runs a stale translation of a \
+        page the game rewrote through the Windows memory calls); nothing has shown that they \
+        help. The trace only records, as numbers, what the game did with the page at 0x1B30000, \
+        and the crash report prints the last 200 calls. All four are off by default. They apply \
+        to the whole Windows session and take effect when Play starts the EA app: quit a \
+        running EA app, then press Play.
         """
       ).font(.caption).foregroundStyle(.secondary)
       HStack {

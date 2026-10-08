@@ -126,6 +126,7 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       lines.append("== Last exception trace lines (diagnostic Wine log) ==")
       lines += digest.trace
     }
+    lines += Self.rwxSection(digest: digest, context: context)
     lines += Self.pageTraceSection(digest: digest, context: context)
     var body = NFS2015Redaction.scrubReport(lines.joined(separator: "\n"))
     if body.utf8.count > Self.sizeLimit {
@@ -182,6 +183,40 @@ package struct NFS2015CrashReport: Equatable, Sendable {
     for (index, block) in blocks.enumerated() where shown.contains(index) {
       lines.append("block \(index + 1) of \(blocks.count): " + block.reportLines[0])
       lines += block.reportLines.dropFirst()
+    }
+    return lines
+  }
+
+  /// The `wine-rwx:` lines of a session that set `WINE_RWX_WX_EMULATION`, as numbers. Nothing for
+  /// a session without the switch and without lines.
+  private static func rwxSection(digest: NFS2015LogDigest, context: NFS2015CrashContext)
+    -> [String]
+  {
+    let rwx = digest.rwx
+    guard !rwx.isEmpty || context.wineSwitches.emulatesWriteXorExecute else { return [] }
+    var lines = ["", "== RWX W^X emulation (wine-rwx lines) =="]
+    if rwx.isEmpty {
+      lines.append(
+        "WINE_RWX_WX_EMULATION was set for this launch, and the log holds no wine-rwx line "
+          + "(a process prints its counters when it exits, so a process that was killed prints none)"
+      )
+      return lines
+    }
+    for activation in rwx.activations {
+      lines.append(
+        "process \(activation.process) had its first page under the emulation at "
+          + "0x\(String(activation.firstPage, radix: 16))")
+    }
+    for counters in rwx.counters {
+      lines.append(
+        "process \(counters.process) at exit: \(counters.stores) stores let through; pages "
+          + "released: \(counters.releasedHost) after host-code faults, \(counters.releasedCarrier) "
+          + "for kernel writes, \(counters.releasedHot) for being written too often")
+    }
+    if rwx.activations.count > rwx.counters.count {
+      lines.append(
+        "\(rwx.activations.count) active and \(rwx.counters.count) exit lines are listed; "
+          + "a process that died does not print an exit line")
     }
     return lines
   }

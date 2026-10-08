@@ -228,6 +228,26 @@ struct NFS2015CrashMonitorTests {
   }
 
   @Test
+  func `summarizes the wine-rwx lines for the session log, and says nothing without them`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture)
+    #expect(sut.rwxSummary == nil)
+    try fixture.append("compatdb: NFS16.exe [x86_64]\ninfo:  Setting display mode: 1920x1200@60\n")
+    sut.scan()
+    #expect(sut.rwxSummary == nil)
+    try fixture.append(
+      "wine-rwx: active pid=80026 first page 0x1B30000\n"
+        + "wine-rwx: pid=80026 stores=750 released(host=1 carrier=0 hot=0)\n")
+    sut.scan()
+    #expect(
+      sut.rwxSummary
+        == "RWX W^X emulation: 1 process reported active, 1 reported counters: 750 stores through, 1 pages released."
+    )
+    #expect(fixture.reportFiles().isEmpty)
+  }
+
+  @Test
   func `keeps credentials out of the report`() throws {
     let fixture = try Fixture()
     defer { fixture.remove() }

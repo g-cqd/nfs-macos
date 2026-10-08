@@ -1,11 +1,45 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
-Newest, for the MetalFX experiments:
-  Need for Speed Bundled 20261008-5864653-0007.app    (the complete app: game and EA app inside)
-  Need for Speed Import 20261008-5864653-0007.app     (no game, no EA app: uses your own Windows folder)
-Earlier, still here: the "-0005" apps (8b9bcba) and the "-rebuilt" apps (da146a2).
+Newest, with the workaround for the crash to test:
+  Need for Speed Bundled 20261008-<commit>-0008.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-<commit>-0008.app     (no game, no EA app: uses your own Windows folder)
+Earlier, still here: the "-0007" apps (5864653), the "-0005" apps (8b9bcba) and the "-rebuilt" apps (da146a2).
 
-WHAT IS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; use these for the MetalFX experiments)
+WHAT IS DIFFERENT IN THE "-0008" APPS (added 2026-10-08)
+They are the "-0007" apps with:
+ 1. A Wine runtime with one more patch (0008); only one Wine file differs (ntdll.so). Why: the crash at 0x1B30159 turned out to be a
+    defect of Rosetta 2 itself, reproduced in a small program with and without Wine: the game's protection code builds an instruction
+    with two stores right ahead of itself, and Rosetta then resumes one byte late and executes garbage. The patch can work around that:
+    with the new switch on, Wine keeps the game's read-write-execute pages non-writable and lets each store through one instruction at
+    a time, so Rosetta looks at the page again between the stores. In the test program it removed the crash in every round. It has NOT
+    been tried in the game, and it makes every store to such a page slower (about 60 microseconds); a page written very often is
+    released again after 300 stores in 100 milliseconds.
+ 2. A fourth toggle in Settings > "Wine experiments": "Rosetta self-modifying-code workaround, experimental
+    (WINE_RWX_WX_EMULATION=1)". OFF by default; same Save / Play rules as the other three (quit a running EA app first).
+ 3. The crash report has a section "RWX W^X emulation" with the counters Wine printed, and the session log (Open Log) gets a line
+    "RWX W^X emulation: ..." at the end of a Play when the switch was on, whether or not the game crashed. The report's line
+    "wine experiment switches:" lists the switch.
+Defaults did not change: MetalFX off, x87 sidecar off, all experiments off. Same app identity and same folder as the earlier apps.
+NOT checked: that the workaround helps in the game, what it costs there, whether the game keeps running with it for longer than a few
+minutes, a 32-bit program (the workaround is for 64-bit programs only). The EA app's update-restart problem is not fixed.
+
+THE TEST FOR THE "-0008" APPS (several launches; quit the app and the EA app between runs)
+ (E) MetalFX ON at 1.33 or 1.5, the new workaround ON, the page trace OFF:
+     Settings > MetalFX group: switch on, choose 1.5 (or 1.33), press "Save MetalFX".
+     Settings > "Wine experiments" group: press "Reset" first (all four off), then switch on ONLY the toggle
+     "Rosetta self-modifying-code workaround, experimental (WINE_RWX_WX_EMULATION=1)" and press "Save".
+     Quit the EA app if it is running, press Play, play until it crashes or for the same time each run. Repeat at least five times.
+     Optionally repeat with the page trace toggle (WINE_TRACE_PAGE=1B30000-1B31000) also on, to see what the game does with the page.
+ For comparison (the baseline that crashed before): the same with the workaround toggle OFF.
+ What to send back, per run: the crash report (the Play tab shows it with "Reveal in Finder"; folder
+ ~/Library/Application Support/NFS2015Mac/Logs) if there was a crash, and from the session log (Open Log, or the newest
+ session-*.log in that folder) the lines that start with "wine-rwx:" and the line "RWX W^X emulation:". Also say whether the game
+ ran normally, and how long. The "wine-rwx: pid=... stores=..." line is printed when a Wine process EXITS: after a crash
+ there may be none for the crashed process. Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=1 (or 0) and, only for a developer,
+ NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release) in front of the session helper command (docs/NFS2015.md section 20.5).
+ To turn everything off again: "Reset" in the Wine experiments group.
+
+WHAT WAS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; the page trace and two re-toggle experiments)
 Need for Speed Bundled 20261008-5864653-0007.app and Need for Speed Import 20261008-5864653-0007.app are the "-0005" apps with:
  1. A Wine runtime with two more patches. 0006 makes the "wine-crash:" block much fuller: the memory state of the crashing page and
     its neighbours, a checksum of that page, the thread count, return addresses, and 512 bytes of code around the crashing

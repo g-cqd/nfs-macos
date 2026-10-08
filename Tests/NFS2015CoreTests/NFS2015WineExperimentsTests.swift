@@ -27,12 +27,16 @@ struct NFS2015WineExperimentsTests {
     try WineExperimentSwitches.validate([:])
     try WineExperimentSwitches.validate([
       "WINE_ROSETTA_FLUSH_TOGGLE": "1", "WINE_ROSETTA_PROTECT_TOGGLE": "1",
-      "WINE_TRACE_PAGE": "1B30000-1B31000",
+      "WINE_TRACE_PAGE": "1B30000-1B31000", "WINE_RWX_WX_EMULATION": "1",
+      "WINE_RWX_WX_HOT_LIMIT": "300",
     ])
     for bad in [
       ["WINE_ROSETTA_FLUSH_TOGGLE": "0"], ["WINE_ROSETTA_FLUSH_TOGGLE": "true"],
       ["WINE_ROSETTA_PROTECT_TOGGLE": ""], ["WINE_TRACE_PAGE": "1"],
       ["WINE_TRACE_PAGE": "2-1"], ["DYLD_INSERT_LIBRARIES": "/x"], ["WINEDEBUG": "+all"],
+      ["WINE_RWX_WX_EMULATION": "0"], ["WINE_RWX_WX_EMULATION": "true"],
+      ["WINE_RWX_WX_HOT_LIMIT": ""], ["WINE_RWX_WX_HOT_LIMIT": "-1"],
+      ["WINE_RWX_WX_HOT_LIMIT": "12345678"], ["WINE_RWX_WX_HOT_LIMIT": "3e2"],
     ] {
       #expect(throws: LauncherError.self) { try WineExperimentSwitches.validate(bad) }
     }

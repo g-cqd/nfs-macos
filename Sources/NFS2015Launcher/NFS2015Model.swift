@@ -503,6 +503,12 @@ final class NFS2015Model {
       set: { value in self.setExperiments { $0.tracePage = value } })
   }
 
+  func rwxWxEmulationBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.experiments.rwxWxEmulation },
+      set: { value in self.setExperiments { $0.rwxWxEmulation = value } })
+  }
+
   func discardExperiments() {
     experimentsEdit = nil
     experimentsOutcome = nil
