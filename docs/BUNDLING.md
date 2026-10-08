@@ -113,7 +113,10 @@ omitting original game bytes. See [CoD4](COD4.md) for its payload and first-run 
 
 1. Add a recipe JSON with a unique `gameID`, bundle identifier, app name, and existing
    launcher/session executable targets. Use `--recipe /path/game.json` while developing it.
-2. Declare input roots with `{home}`, `{games}`, `{tools}` or `{project}` placeholders.
+2. Declare input roots with `{home}`, `{games}`, `{store}`, `{tools}` or `{project}` placeholders. Game files
+   belong under `{store}` (default `{games}/Store`, override with `NFS_MACOS_STORE`): one read-only copy per game,
+   ids `nfs-2015`, `nfs-mw`, `cod4`, `morrowind`, `farcry2`. Recipes read from it and never copy game files
+   into build or scratch trees except as APFS clones.
    List original files and directory suffix filters explicitly. An empty suffix list
    selects all files in that directory. Linked files, traversal paths, duplicate or
    overlapping selections and payloads above 20 GiB are rejected.
