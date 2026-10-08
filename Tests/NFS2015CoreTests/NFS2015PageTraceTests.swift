@@ -28,6 +28,22 @@ struct NFS2015PageTraceTests {
   }
 
   @Test
+  func `reads lines captured from the app's own first start with the switch set`() throws {
+    // From the helper of the -0007 Bundled app, first start in a private folder, 2026-10-08:
+    // once with the saved trace window 1B30000-1B31000, once with WINE_TRACE_PAGE=7FFE0000-7FFF0000.
+    let large =
+      "wine-trace: op=alloc tid=44 addr=d40000 size=fd0000 prot=4 old=2000 status=0 ret=6ffffff7700c"
+    let early = "wine-trace: op=alloc tid=0 addr=7ffe0000 size=1000 prot=2 old=3000 status=0 ret=0"
+    let first = try #require(NFS2015PageTraceEvent.parse(large))
+    #expect(first.thread == 0x44 && first.address == 0xD4_0000 && first.size == 0xFD_0000)
+    #expect(first.caller == 0x6FFF_FFF7_700C)
+    let second = try #require(NFS2015PageTraceEvent.parse(early))
+    #expect(second.thread == 0 && second.caller == 0 && second.protect == 2)
+    #expect(
+      NFS2015PageTraceWindow.parse("wine-trace: window=7ffe0000-7fff0000 pid=28")?.process == "28")
+  }
+
+  @Test
   func `accepts every operation the runtime names, and no other`() {
     for operation in NFS2015PageTraceEvent.Operation.allCases {
       let line =
