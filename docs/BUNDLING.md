@@ -65,7 +65,7 @@ The current inputs are retained local artifacts:
 | Renderer source evidence | `~/Games/release-build/renderer-20261002-7d108a4/source-sha256.json` |
 | Latest sidecar / corresponding forks | `~/Games/release-build/sidecar-c396937/x87sidecar`, `~/Games/release-build/src/{mtld3d,x87sidecar}` |
 | Need for Speed (2015) game payload | `~/Games/NFS2015-game`, a standalone APFS clone of exactly the 144 pinned files |
-| Need for Speed (2015) Wine runtime and its source tree | `~/Games/wine-rebuild/runtime/wine` and `~/Games/wine-rebuild/src/wine` (the rebuild of 2026-10-07/08; read only, never the prefix). The earlier `NFS2015-debug` tree no longer exists |
+| Need for Speed (2015) Wine runtime and its source tree | `~/Games/wine-rebuild/runtime/wine-0005` and `~/Games/wine-rebuild/src/wine` (the rebuild of 2026-10-07/08 plus patch 0005, from 2026-10-08 on; `runtime/wine` is the same runtime without it; read only, never the prefix). The earlier `NFS2015-debug` tree no longer exists |
 | Need for Speed (2015) sidecar, Wine Mono, EA client layer | `{tools}/inputs/{x87sidecar, x87sidecar-src, wine-mono, client-layer}`, where `{tools}` is the folder that holds the checkout; rebuilt from source, `dl.winehq.org` and EA's installer (NFS2015.md §22) |
 
 The mtld3d inputs apply only to the Direct3D 9 recipes. The renderer was rebuilt at

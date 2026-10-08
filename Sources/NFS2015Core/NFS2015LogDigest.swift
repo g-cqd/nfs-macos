@@ -22,16 +22,24 @@ package struct NFS2015LogDigest: Equatable, Sendable {
   package private(set) var context: [String] = []
   /// The most recent `seh` trace lines, scrubbed, oldest first.
   package private(set) var trace: [String] = []
+  private var blockReader = NFS2015CrashBlockReader()
   private var pending = ""
 
   package init() {}
+
+  /// The `wine-crash:` blocks of a runtime that prints them, oldest first; empty for a runtime
+  /// that does not.
+  package var crashBlocks: [NFS2015CrashBlock] { blockReader.blocks }
+
+  /// Whether a `wine-crash:` block has begun and its last line has not been read yet.
+  package var hasOpenCrashBlock: Bool { blockReader.isOpen }
 
   package static func == (left: Self, right: Self) -> Bool {
     left.launches == right.launches && left.faults == right.faults
       && left.displayModes.map(\.mode) == right.displayModes.map(\.mode)
       && left.displayModes.map(\.count) == right.displayModes.map(\.count)
       && left.serverCrashes == right.serverCrashes && left.context == right.context
-      && left.trace == right.trace
+      && left.trace == right.trace && left.crashBlocks == right.crashBlocks
   }
 
   /// Reads the whole of a log at once.
@@ -61,9 +69,11 @@ package struct NFS2015LogDigest: Equatable, Sendable {
 
   /// Reads a last line the log ended without a line feed.
   package mutating func finish() {
-    guard !pending.isEmpty else { return }
-    read(pending)
-    pending = ""
+    if !pending.isEmpty {
+      read(pending)
+      pending = ""
+    }
+    blockReader.finish()
   }
 
   /// Takes the exception trace from the end of a diagnostic debug file instead of from the
@@ -75,6 +85,7 @@ package struct NFS2015LogDigest: Equatable, Sendable {
 
   private mutating func read(_ raw: String) {
     let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
+    blockReader.read(line)
     if line.hasPrefix("compatdb: NFS16.exe [") { launches += 1 }
     if line.hasPrefix("wineserver crashed") { serverCrashes += 1 }
     if let mode = Self.displayMode(in: line) { note(mode) }
