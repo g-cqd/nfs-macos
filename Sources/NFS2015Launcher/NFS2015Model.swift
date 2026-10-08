@@ -55,6 +55,10 @@ final class NFS2015Model {
   private(set) var sidecarEdit: NFS2015SidecarPreference?
   /// What the last sidecar request did.
   private(set) var sidecarOutcome: NFS2015SidecarOutcome?
+  /// The Wine experiment choice the player made and has not saved.
+  private(set) var experimentsEdit: NFS2015WineExperimentsPreference?
+  /// What the last experiment request did.
+  private(set) var experimentsOutcome: NFS2015WineExperimentsOutcome?
   /// The newest crash report of this run of the starter; it stays until the next Play begins.
   private(set) var crashNotice: NFS2015CrashNotice?
   var tab = "Play"
@@ -447,6 +451,81 @@ final class NFS2015Model {
     enqueue(.configureSidecar(NFS2015SidecarRequest(action: .reset)))
   }
 
+  // MARK: Wine experiments
+
+  /// The choice the next Play will use, as saved.
+  var savedExperiments: NFS2015WineExperimentsPreference {
+    snapshot.experiments?.preference ?? .standard
+  }
+  /// The choice shown: the player's unsaved one, else the saved one.
+  var experiments: NFS2015WineExperimentsPreference { experimentsEdit ?? savedExperiments }
+  var hasPendingExperiments: Bool { experimentsEdit != nil }
+  /// Why a saved experiments file was not used, if it was not.
+  var experimentsNotice: String? { snapshot.experiments?.notice }
+  var canEditExperiments: Bool { !isBusy }
+  var canResetExperiments: Bool {
+    canEditExperiments && (savedExperiments != .standard || experimentsNotice != nil)
+  }
+  var experimentsRefusal: String? { experimentsOutcome?.refusal }
+
+  var experimentsOutcomeLine: String? {
+    switch experimentsOutcome {
+    case .saved: "Saved. It applies the next time you press Play."
+    case .reset: "Cleared. The defaults apply: the Rosetta workaround on, the experiments off."
+    case .unchanged: "That was already saved."
+    case .refused, nil: nil
+    }
+  }
+
+  func setExperiments(_ change: (inout NFS2015WineExperimentsPreference) -> Void) {
+    guard canEditExperiments else { return }
+    experimentsOutcome = nil
+    var choice = experiments
+    change(&choice)
+    experimentsEdit = choice == savedExperiments ? nil : choice
+  }
+
+  func flushToggleBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.experiments.flushToggle },
+      set: { value in self.setExperiments { $0.flushToggle = value } })
+  }
+
+  func protectToggleBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.experiments.protectToggle },
+      set: { value in self.setExperiments { $0.protectToggle = value } })
+  }
+
+  func tracePageBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.experiments.tracePage },
+      set: { value in self.setExperiments { $0.tracePage = value } })
+  }
+
+  func rwxWxEmulationBinding() -> Binding<Bool> {
+    Binding(
+      get: { self.experiments.rwxWxEmulation },
+      set: { value in self.setExperiments { $0.rwxWxEmulation = value } })
+  }
+
+  func discardExperiments() {
+    experimentsEdit = nil
+    experimentsOutcome = nil
+  }
+
+  /// Keeps the shown choice for the next Play.
+  func saveExperiments() {
+    guard canEditExperiments, let choice = experimentsEdit else { return }
+    enqueue(.configureExperiments(NFS2015WineExperimentsRequest(action: .save, preference: choice)))
+  }
+
+  /// Forgets what is saved, which means the defaults: the workaround on, the experiments off.
+  func resetExperiments() {
+    guard canEditExperiments else { return }
+    enqueue(.configureExperiments(NFS2015WineExperimentsRequest(action: .reset)))
+  }
+
   /// Shows the crash report in Finder.
   func revealCrashReport() {
     guard let notice = crashNotice else { return }
@@ -612,6 +691,13 @@ final class NFS2015Model {
       sidecarOutcome = nil
     }
     if sidecarEdit == (result.sidecar?.preference ?? .standard) { sidecarEdit = nil }
+    if case .configureExperiments = operation {
+      experimentsOutcome = result.experiments?.outcome
+      if result.experiments?.outcome?.refusal == nil { experimentsEdit = nil }
+    } else if operation != .prepare {
+      experimentsOutcome = nil
+    }
+    if experimentsEdit == (result.experiments?.preference ?? .standard) { experimentsEdit = nil }
     if let report = result.crashReport { crashNotice = report }
     if operation != .prepare, result.outcome?.refusal == nil { edits = [:] }
     edits = edits.filter { id, chosen in

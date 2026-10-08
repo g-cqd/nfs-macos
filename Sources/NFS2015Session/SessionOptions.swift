@@ -10,7 +10,7 @@ struct SessionOptions {
   static let actions = [
     "--prepare", "--play", "--configure", "--choose-installation", "--enable-controller",
     "--install-client", "--open-client", "--configure-metalfx", "--configure-diagnostics",
-    "--configure-sidecar",
+    "--configure-sidecar", "--configure-experiments",
   ]
 
   init(arguments: [String]) throws {
@@ -43,6 +43,7 @@ struct SessionOptions {
     if [
       "--configure", "--choose-installation", "--install-client", "--configure-metalfx",
       "--configure-diagnostics", "--configure-sidecar",
+      "--configure-experiments",
     ].contains(action), options["--request"] == nil {
       throw LauncherError.operation("This operation requires a request.")
     }

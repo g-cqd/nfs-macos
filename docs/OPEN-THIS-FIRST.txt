@@ -1,7 +1,198 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
-Need for Speed Bundled <date>-<commit>-rebuilt.app    (the complete app: game and EA app inside)
-Need for Speed Import <date>-<commit>-rebuilt.app     (no game, no EA app: uses your own Windows folder)
+Newest (the Rosetta workaround is ON by default, and every report carries the history of the game's code page):
+  Need for Speed Bundled 20261008-13d1f4f-0010.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-13d1f4f-0010.app     (no game, no EA app: uses your own Windows folder)
+Earlier, still here: the "-0009" apps (2f65bd4), the "-0008" apps (dcf3a4d) and the "-0007" apps (5864653).
+
+WHAT IS DIFFERENT IN THE "-0010" APPS (added 2026-10-08)
+They are the "-0009" apps with:
+ 1. A Wine runtime with one more patch (0010); only one Wine file differs (ntdll.so). It fixes three bugs found in the workaround of "-0009":
+    - The game's code page, which is run over and over, was released as "busy" after about 2000 runs, and after that most runs crashed. A
+      page whose own code writes into it is now never released for being busy (slow instead of crashing); a page that other code writes
+      thousands of times a second is still released.
+    - A released page was never protected again after the game changed its protection or freed and re-created it. Fixed.
+    - A page touched by a thread that uses the CPU's debug registers (the game's protection does) was released for good. Fixed.
+    It has NOT been tried in the game, and a page written very often by other code is still released.
+ 2. The workaround stays ON by default (Settings > "Wine: Rosetta workaround and experiments", first toggle; turn it off and press "Save" to
+    compare). New: the app also asks Wine, by default and with the workaround on, to LOG what happens to the one page the game crashes
+    in (0x1B30000-0x1B31000): whether Wine protected it, why it left it alone, the first stores into it with the instruction that made
+    each one, and whether and why it released it. No new setting.
+ 3. Every crash report has these lines in its section "RWX W^X emulation" under "page history", and the session log (Open Log) has a line
+    "RWX W^X emulation: ... Page log: N lines ..." at the end of a Play. If the report says that no page of the window reached the
+    log, Wine never protected that page in any process: that is itself the answer to send back.
+Defaults: MetalFX off, x87 sidecar off, the workaround ON (with the page log), the three experiments off. Same app identity and same folder as
+the earlier apps; a choice saved by an earlier app is kept ("off" stays off; if you saved the experiments, press "Reset").
+NOT checked: that the game now runs (the test below), what the workaround costs in the game, the page log from the game itself, that the
+EA app is fine with it for longer than a first start, a 32-bit program. The EA app's update-restart problem is not fixed.
+
+THE TEST FOR THE "-0010" APPS (several launches; quit the app and the EA app between runs)
+ (G) MetalFX ON at 1.33 or 1.5 (Settings > MetalFX group: switch on, choose the factor, press "Save MetalFX"), everything else as shipped (the
+     workaround ON, which "Reset" in the experiments group makes sure of). Press Play. Play until it crashes or for the same time each run,
+     at least five runs. For comparison, the same with the workaround turned OFF and saved.
+ What to send back, per run: the crash report if there was a crash (Play tab > "Reveal in Finder"; folder
+ ~/Library/Application Support/NFS2015Mac/Logs), and from the newest session-*.log the lines "wine-rwx:" and "RWX W^X emulation:". The
+ report's "page history" shows whether 0x1B30000 was protected (and by which path), whether it was released (and why: "hot-smc" means it was
+ written too often by its own code, "host", "host-kernel" and "cross" are other causes) and which instructions stored into it. Say whether the
+ game ran normally and for how long, and whether the EA app window behaved. After a crash the "pid=... stores=..." line may be missing for the
+ crashed process.
+ Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=0|1, NFS2015_AB_WINE_RWX_WX_LOG=<hex-hex>|all|off, and, only for a developer,
+ NFS2015_AB_WINE_RWX_WX_HOT_LIMIT / _NEAR_LIMIT=<n> (0 = never release) and NFS2015_AB_WINE_RWX_WX_TF_RELEASE=1, in front of the session
+ helper command (docs/NFS2015.md section 20.5).
+
+WHAT WAS CHECKED ON THE "-0010" BUILD (on the Mac that built it)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's files,
+Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account, session or machine
+file and no D3DMetal files are inside; the Swift tests (937), the build with warnings as errors and 19 packaging checks; a clean-room first
+start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the owner's own folders unreadable): it
+finished and everything was in place byte for byte (47 checks passed); and that a fresh first start has the workaround ON and the page log
+asked for, without anything saved. NOT checked: the page lines from the game itself (only from a test program), a saved "off" and the
+developer overrides live (unit tests only), anything with the game, the end-of-Play summary line, the Settings page on screen, a second Mac,
+EA sign-in, activation, Gatekeeper, the Import app in a Windows folder of your own.
+
+WHAT WAS DIFFERENT IN THE "-0009" APPS (added 2026-10-08; kept as it was)
+They are the "-0008" apps with:
+ 1. A Wine runtime with one more patch (0009); only one Wine file differs (ntdll.so). It fixes what your tests of "-0008" found:
+    - With all four switches on, EA's own browser process died of an unexpected single-step exception: the workaround left the CPU's
+      single-step flag set. Fixed (also for threads that Wine suspends and reads).
+    - With only the workaround on, the game still crashed at 0x1B30159 because the workaround gave up on the very page it was meant to
+      guard (a limit of 300 stores in 100 milliseconds released it while it was only being filled). The limit is now 4096 stores per
+      second, and a store across two pages now works.
+    It has NOT been tried in the game since, and a page written thousands of times a second is still released again.
+ 2. The workaround is now ON by default, as you asked: a new or reset installation starts with it on, and nothing needs to be saved.
+    Settings > "Wine: Rosetta workaround and experiments": the first toggle, "Rosetta 2 self-modifying-code workaround, on by default
+    (WINE_RWX_WX_EMULATION=1)", turns it off (then press "Save"; the next Play uses that; an "off" you saved stays off). The text there says it
+    is a workaround for a bug in Rosetta 2 and can be turned off if the game or the EA app misbehaves.
+ 3. The other three toggles (two page re-toggles and the page trace) stay OFF and are marked "Experiment, not needed" or "only records".
+ 4. Every crash report has the section "RWX W^X emulation", and the line "wine experiment switches:" says whether the workaround was the
+    default, saved, or overridden, or off. The session log (Open Log) gets "RWX W^X emulation: ..." at the end of a Play.
+Defaults: MetalFX off, x87 sidecar off, the workaround ON, the three experiments off. Same app identity and same folder as the earlier apps,
+so a Windows folder an earlier app made is reused, and an experiments choice saved by "-0008" is kept (a saved "off" stays off; if you saved
+the three experiments, press "Reset" to go back to the defaults).
+NOT checked: that the game now runs (that is the test below), what the workaround costs in the game, that the EA app is fine with it for
+longer than a first start, a 32-bit program (the workaround is for 64-bit programs only). The EA app's update-restart problem is not fixed.
+
+THE TEST FOR THE "-0009" APPS (several launches; quit the app and the EA app between runs)
+ (F) MetalFX ON at 1.33 or 1.5 (Settings > MetalFX group: switch on, choose the factor, press "Save MetalFX"), everything else as shipped:
+     press Play with the workaround ON (the default; "Reset" in the experiments group makes sure). Play until it crashes or for the same
+     time each run, at least five runs. Then, for comparison, the same with the workaround turned OFF and saved.
+ What to send back, per run: the crash report if there was a crash (Play tab > "Reveal in Finder"; folder
+ ~/Library/Application Support/NFS2015Mac/Logs), and from the newest session-*.log the lines "wine-rwx:" and "RWX W^X emulation:". Say
+ whether the game ran normally and for how long, and whether the EA app window behaved. The "wine-rwx: pid=... stores=..." line is printed when
+ a Wine process EXITS; after a crash there may be none for the crashed process.
+ Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=0 (or 1) and, only for a developer, NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release)
+ in front of the session helper command (docs/NFS2015.md section 20.5).
+
+WHAT WAS CHECKED ON THE "-0009" BUILD (on the Mac that built it; kept as it was)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's files,
+Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account, session or machine
+file and no D3DMetal files are inside; the Swift tests (920), the build with warnings as errors and 19 packaging checks; a clean-room first
+start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the owner's own folders unreadable): it
+finished and everything was in place byte for byte (47 checks passed); and that a fresh first start has the workaround ON without anything
+saved (Wine's own processes printed "wine-rwx:" lines). NOT checked live: a saved "off" and the developer override 0 (unit tests only), anything
+with the game itself, the "RWX W^X emulation" summary line (it needs a Play), the Settings page on screen, a second Mac, EA sign-in, activation,
+Gatekeeper, the Import app in a Windows folder of your own.
+
+WHAT WAS DIFFERENT IN THE "-0008" APPS (added 2026-10-08; kept as it was: where it says the workaround is OFF by default, the "-0009" apps differ, they have it ON)
+They are the "-0007" apps with:
+ 1. A Wine runtime with one more patch (0008); only one Wine file differs (ntdll.so). Why: the crash at 0x1B30159 turned out to be a
+    defect of Rosetta 2 itself, reproduced in a small program with and without Wine: the game's protection code builds an instruction
+    with two stores right ahead of itself, and Rosetta then resumes one byte late and executes garbage. The patch can work around that:
+    with the new switch on, Wine keeps the game's read-write-execute pages non-writable and lets each store through one instruction at
+    a time, so Rosetta looks at the page again between the stores. In the test program it removed the crash in every round. It has NOT
+    been tried in the game, and it makes every store to such a page slower (about 60 microseconds); a page written very often is
+    released again after 300 stores in 100 milliseconds.
+ 2. A fourth toggle in Settings > "Wine experiments": "Rosetta self-modifying-code workaround, experimental
+    (WINE_RWX_WX_EMULATION=1)". OFF by default; same Save / Play rules as the other three (quit a running EA app first).
+ 3. The crash report has a section "RWX W^X emulation" with the counters Wine printed, and the session log (Open Log) gets a line
+    "RWX W^X emulation: ..." at the end of a Play when the switch was on, whether or not the game crashed. The report's line
+    "wine experiment switches:" lists the switch.
+Defaults did not change: MetalFX off, x87 sidecar off, all experiments off. Same app identity and same folder as the earlier apps.
+NOT checked: that the workaround helps in the game, what it costs there, whether the game keeps running with it for longer than a few
+minutes, a 32-bit program (the workaround is for 64-bit programs only). The EA app's update-restart problem is not fixed.
+
+THE TEST FOR THE "-0008" APPS (several launches; quit the app and the EA app between runs)
+ (E) MetalFX ON at 1.33 or 1.5, the new workaround ON, the page trace OFF:
+     Settings > MetalFX group: switch on, choose 1.5 (or 1.33), press "Save MetalFX".
+     Settings > "Wine experiments" group: press "Reset" first (all four off), then switch on ONLY the toggle
+     "Rosetta self-modifying-code workaround, experimental (WINE_RWX_WX_EMULATION=1)" and press "Save".
+     Quit the EA app if it is running, press Play, play until it crashes or for the same time each run. Repeat at least five times.
+     Optionally repeat with the page trace toggle (WINE_TRACE_PAGE=1B30000-1B31000) also on, to see what the game does with the page.
+ For comparison (the baseline that crashed before): the same with the workaround toggle OFF.
+ What to send back, per run: the crash report (the Play tab shows it with "Reveal in Finder"; folder
+ ~/Library/Application Support/NFS2015Mac/Logs) if there was a crash, and from the session log (Open Log, or the newest
+ session-*.log in that folder) the lines that start with "wine-rwx:" and the line "RWX W^X emulation:". Also say whether the game
+ ran normally, and how long. The "wine-rwx: pid=... stores=..." line is printed when a Wine process EXITS: after a crash
+ there may be none for the crashed process. Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=1 (or 0) and, only for a developer,
+ NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release) in front of the session helper command (docs/NFS2015.md section 20.5).
+ To turn everything off again: "Reset" in the Wine experiments group.
+
+WHAT WAS CHECKED ON THE "-0008" BUILD (on the Mac that built it; kept as it was)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's
+files, Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account,
+session or machine file and no D3DMetal files are inside; the Swift tests (917), the build with warnings as errors and 19 packaging
+checks; a clean-room first start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the
+owner's own folders unreadable): it finished and everything was in place byte for byte (47 checks passed); and that the new switch
+reaches Wine through the app: with it saved on, Wine's own processes printed "wine-rwx:" lines in the first start, with nothing saved
+they printed none. NOT checked: anything with the game itself (whether it then runs and for how long, the cost), the "RWX W^X emulation"
+summary line at the end of a Play (it needs a Play), the Settings page on screen, a second Mac, EA sign-in, activation, Gatekeeper,
+the Import app in a Windows folder of your own.
+
+WHAT WAS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; the page trace and two re-toggle experiments)
+Need for Speed Bundled 20261008-5864653-0007.app and Need for Speed Import 20261008-5864653-0007.app are the "-0005" apps with:
+ 1. A Wine runtime with two more patches. 0006 makes the "wine-crash:" block much fuller: the memory state of the crashing page and
+    its neighbours, a checksum of that page, the thread count, return addresses, and 512 bytes of code around the crashing
+    instruction. 0007 adds three EXPERIMENT SWITCHES, all OFF unless you turn them on (below), and a trace of memory calls.
+    Three Wine files differ from "-0005" (both kernelbase.dll and ntdll.so); the rest is the same.
+ 2. The crash report (Logs/crash-report-*.txt) shows the fuller block ("Crash context") and, when you switched the trace on, a
+    "Page trace" section: the last 200 memory calls on the traced page before the crash, as numbers. It also lists which
+    experiment switches were set ("wine experiment switches: ...").
+ 3. A "Wine experiments" group in Settings (three switches, off by default; Save, Discard, Reset) and, in the MetalFX group,
+    the words "experimental, known to crash NFS16": with MetalFX on, the game faulted at the same place (0x1B30159) in 2 of 2 launches
+    that got as far as a display-mode change, on two Macs, and in none of 17 launches with it off. Why is not known.
+Defaults did not change: MetalFX off, x87 sidecar off, all experiments off. Same app identity and same folder as the earlier apps.
+NOT checked: that any switch changes anything in the game (the guess behind them, that Rosetta runs a stale copy of a code page the
+game rewrote, could not be reproduced with a small test program), the full block and the trace from the game itself, a 32-bit program.
+The EA app's update-restart problem is not fixed.
+
+HOW TO RUN THE FOUR VARIANTS (quit the app and the EA app between runs; each Save applies at the next Play)
+Where: Settings tab. MetalFX group = "MetalFX"; experiments group = "Wine experiments (for finding the NFS16 crash)".
+ (i) Baseline, MetalFX ON, no experiment: MetalFX group: switch on, factor 1.5, press "Save MetalFX". Wine experiments group: press
+     "Reset" (all three off). Quit the EA app if it is running, press Play, play until it crashes or for the same time each run.
+ (ii) FLUSH: as (i), and in Wine experiments switch on the FIRST toggle (WINE_ROSETTA_FLUSH_TOGGLE=1), press "Save", then Play.
+ (iii) PROTECT: as (i), and switch on the SECOND toggle (WINE_ROSETTA_PROTECT_TOGGLE=1), press "Save", then Play.
+ (iv) BOTH: as (i), and switch on the first and the second toggle, press "Save", then Play.
+ Trace (add to any of the four): also switch on the THIRD toggle (WINE_TRACE_PAGE=1B30000-1B31000), press "Save", then Play.
+ After a crash: the Play tab shows the crash report with "Reveal in Finder" (folder ~/Library/Application Support/NFS2015Mac/Logs).
+ The report's line "wine experiment switches:" says which variant it was. Send the report for each run. Run each variant several
+ times: one run per variant says nothing. To turn everything off again: "Reset" in both groups.
+ For a developer without the Settings page: set NFS2015_AB_WINE_ROSETTA_FLUSH_TOGGLE=1, NFS2015_AB_WINE_ROSETTA_PROTECT_TOGGLE=1
+ and NFS2015_AB_WINE_TRACE_PAGE=1B30000-1B31000 (or "off") in front of the session helper command (docs/NFS2015.md section 20.5).
+
+WHAT WAS CHECKED ON THE "-0007" BUILD (on the Mac that built it)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's
+files, Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account,
+session or machine file and no D3DMetal files are inside; the Swift tests (897), the build with warnings as errors and 19 packaging
+checks; a clean-room first start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the
+owner's own folders unreadable): it finished and everything was in place byte for byte (47 checks passed); and that the experiment
+switches reach Wine through the app: with the third toggle saved on, Wine's processes printed "wine-trace:" lines in the first start,
+and with nothing saved they printed none (a control). NOT checked: anything with the game itself (whether a switch changes the crash,
+what the fuller block or the trace show), the Settings page on screen, a second Mac, EA sign-in, activation, Gatekeeper, the Import app
+in a Windows folder of your own.
+
+WHAT IS DIFFERENT IN THE "-0005" APPS (added 2026-10-08, they sit next to the "-rebuilt" ones)
+Need for Speed Bundled 20261008-8b9bcba-0005.app and Need for Speed Import 20261008-8b9bcba-0005.app are the "-rebuilt" apps
+with exactly two changes, and nothing else:
+ 1. The Wine runtime has one more patch (0005). When a Windows program dies of an unhandled exception, Wine now also prints a
+    short block of lines starting "wine-crash:" (the CPU registers, the bytes at the crashing instruction, what Wine knows about
+    the crashing address, some stack words). Only two Wine files differ (the two kernelbase.dll); all other runtime files are the same.
+ 2. The app's crash report (Logs/crash-report-*.txt) reads that block and adds a section "Crash context (wine-crash block)". A crash
+    report from a log without the block is unchanged. The block holds no names, paths or account data.
+Defaults did not change: MetalFX is off, the x87 sidecar is off, the EA app inside is still 13.805.2.6319. The "-0005" apps use the
+same app identity and the same folder ~/Library/Application Support/NFS2015Mac as the "-rebuilt" apps, so a Windows folder that an
+earlier app made is reused, with whatever EA app it has since updated itself to. NOT checked: that the block appears for the game's
+own crash (it was produced by a small test program only), that the 32-bit form of the block appears for a 32-bit program, and
+anything in the game. The EA app's update-restart problem seen on the second Mac is not fixed here.
 
 WHAT IT IS
 A Mac app that runs Need for Speed (2015) through Wine. It carries your own licensed game files and EA's own
@@ -80,14 +271,16 @@ Save, quit the EA app if it is running, and press Play. The setting covers the w
 and an EA app that is already running keeps the setting it was started with. If the EA app or EA's one-time activation
 prompt misbehaves, try the toggle on. "Reset" returns to off.
 
-METALFX UPSCALING (OFF BY DEFAULT)
-The Settings page has a MetalFX group. It is off, and while it is off the app changes nothing. When you switch it on
-and choose a factor (1.25 to 2.0) and press Save MetalFX, Apple's MetalFX enlarges the game's finished picture by that factor, for the game's
-program only, not for the EA app. Caveat: this app runs the game with Retina mode, so the game's picture is already at
-your screen's pixel size. With the game at that size a factor above 1 only gives the GPU more work and adds no detail;
-it can only pay off when the game itself is set to a resolution below your screen's, so that the enlarged picture
-lands near your screen's size. The page shows the sizes. "Reset MetalFX" turns it off again. It was tried only with a
-small test program, never with the game, so whether it looks or runs better in the game is not known.
+METALFX UPSCALING (OFF BY DEFAULT; EXPERIMENTAL, KNOWN TO CRASH NFS16)
+The Settings page has a MetalFX group, labelled "experimental, known to crash NFS16". It is off, and while it is off the app changes
+nothing. With it on, the game faulted at the same place in every launch that got as far as a display-mode change (2 launches, 2 Macs,
+2026-10-07 and 2026-10-08), and it did not in 17 launches with it off; why is not known, and the factor is not known to matter. Leave
+it off to play; turn it on only to help find the cause (see the variants above). When you switch it on and choose a factor (1.25 to
+2.0) and press Save MetalFX, Apple's MetalFX enlarges the game's finished picture by that factor, for the game's program only, not for
+the EA app. Caveat: this app runs the game with Retina mode, so the game's picture is already at your screen's pixel size. With the
+game at that size a factor above 1 only gives the GPU more work and adds no detail; it can only pay off when the game itself is set to
+a resolution below your screen's. The page shows the sizes. "Reset MetalFX" turns it off again. Whether it looks or runs better in the
+game is not known.
 
 IF SOMETHING IS WRONG
 - "Open Log" in the app shows what the helper did.

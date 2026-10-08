@@ -52,20 +52,24 @@ struct NFS2015CrashMonitorTests {
     }
   }
 
-  private func context() -> NFS2015CrashContext {
-    NFS2015CrashContext(
-      pins: NFS2015BuildPins(), host: FixedHost().host(), display: nil,
+  private func context(expectsBlock: Bool = false) -> NFS2015CrashContext {
+    var pins = NFS2015BuildPins()
+    if expectsBlock { pins.runtimeCapabilities = ["crashContextBlock"] }
+    return NFS2015CrashContext(
+      pins: pins, host: FixedHost().host(), display: nil,
       displayPlan: NFS2015DisplaySafety.plan(
         facts: nil, hasOptionsFile: nil, preference: .standard),
       seed: nil, metalFX: .off, diagnostics: .standard, diagnosticLog: false,
       settings: NFS2015Settings(), tuning: [:], experiment: NFS2015ExperimentOverrides())
   }
 
-  private func monitor(_ fixture: Fixture, debugFiles: @escaping @Sendable () -> [URL] = { [] })
-    -> NFS2015CrashMonitor
-  {
+  private func monitor(
+    _ fixture: Fixture, expectsBlock: Bool = false,
+    debugFiles: @escaping @Sendable () -> [URL] = { [] }
+  ) -> NFS2015CrashMonitor {
     NFS2015CrashMonitor(
-      log: fixture.log, store: NFS2015CrashReportStore(folder: fixture.reports), context: context(),
+      log: fixture.log, store: NFS2015CrashReportStore(folder: fixture.reports),
+      context: context(expectsBlock: expectsBlock),
       host: FixedHost(), debugFiles: debugFiles, now: { Date(timeIntervalSince1970: 1_791_000_000) }
     )
   }
@@ -135,6 +139,112 @@ struct NFS2015CrashMonitorTests {
     #expect(sut.scan() == nil)
     try fixture.append(String(Self.fault[cut...]))
     #expect(sut.scan() != nil)
+  }
+
+  /// The fault line and `wine-crash:` block the real patched runtime printed for its own test
+  /// program (the same text as `CrashBlockFixtures` in the core tests, which this target cannot see).
+  private static let realLines = """
+    wine: Unhandled page fault on write access to 85BC35850173FF31 at address 000000014000166F (thread 016c), starting debugger...
+    wine-crash: begin pid=0168 tid=016c code=c0000005 flags=00000000 address=000000014000166F
+    wine-crash: access=1 target=85BC35850173FF31
+    wine-crash: rip=000000014000166F rsp=000000000031FC60 rbp=0000000000000002 eflags=00000246 mxcsr=00001f80
+    wine-crash: rax=1111111111111111 rbx=2222222222222222 rcx=85BC35850173FF31 rdx=3333333333333333
+    wine-crash: rsi=4444444444444444 rdi=5555555555555555 r8=0808080808080808 r9=0909090909090909
+    wine-crash: r10=1010101010101010 r11=1111000011110000 r12=1212121212121212 r13=1313131313131313
+    wine-crash: r14=1414141414141414 r15=1515151515151515 cs=002b ss=0023 ds=0023 es=0023 fs=0000 gs=0023
+    wine-crash: pc 000000014000166F state=1000 protect=20 type=1000000 region=0000000140001000+0000000000002000 module=crash-context.exe
+    wine-crash: pc-bytes[16]=48 89 01 ff 15 28 6c 00 00 89 c2 48 8d 0d 90 29 
+    wine-crash: target 85BC35850173FF31 not queryable (non-canonical or outside the address space)
+    wine-crash: stack[000000000031FC60]: 0000000000000000 0000000000000000 0000000000000000 0000000000000000 000000000031FCF0 0000000000000000 000000000003BD98 0000000000000000
+    wine-crash: tf state=0 guest_flags=0 steps=0
+    wine-crash: end
+    """.split(separator: "\n").map(String.init)
+  private static let blockLines = realLines.joined(separator: "\n") + "\n"
+
+  @Test
+  func
+    `a runtime with the crash block gets the block in the report, with no wait when it is whole`()
+    throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture, expectsBlock: true)
+    try fixture.append("compatdb: NFS16.exe [x86_64]\n" + Self.blockLines)
+    let notice = try #require(sut.scan())
+    let text = try String(contentsOfFile: notice.path, encoding: .utf8)
+    #expect(text.contains("block 1 of 1: process 0168 thread 016c"))
+    #expect(text.contains("  target page: not queryable"))
+  }
+
+  @Test
+  func `waits one scan for a block that is split from its fault line, then writes once with it`()
+    throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture, expectsBlock: true)
+    let lines = Self.realLines
+    try fixture.append(lines.prefix(4).joined(separator: "\n") + "\n")
+    #expect(sut.scan() == nil)
+    try fixture.append(lines.dropFirst(4).joined(separator: "\n") + "\n")
+    let notice = try #require(sut.scan())
+    #expect(fixture.reportFiles().count == 1)
+    let text = try String(contentsOfFile: notice.path, encoding: .utf8)
+    #expect(text.contains("block 1 of 1") && text.contains("trap-flag emulation: state 0"))
+    #expect(sut.scan() == nil)
+  }
+
+  @Test
+  func `waits one scan for a block that never comes, then reports without it and says so`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture, expectsBlock: true)
+    try fixture.append(Self.fault)
+    #expect(sut.scan() == nil)
+    let notice = try #require(sut.scan())
+    let text = try String(contentsOfFile: notice.path, encoding: .utf8)
+    #expect(text.contains("none was found in the log"))
+    #expect(fixture.reportFiles().count == 1)
+  }
+
+  @Test
+  func `stopping does not wait for a block`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture, expectsBlock: true)
+    try fixture.append(Self.fault)
+    #expect(sut.stop() != nil && fixture.reportFiles().count == 1)
+  }
+
+  @Test
+  func `a runtime without the crash block is never made to wait`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture, expectsBlock: false)
+    try fixture.append(Self.fault)
+    let notice = try #require(sut.scan())
+    let text = try String(contentsOfFile: notice.path, encoding: .utf8)
+    #expect(!text.contains("Crash context") && !text.contains("wine-crash"))
+  }
+
+  @Test
+  func `summarizes the wine-rwx lines for the session log, and says nothing without them`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sut = monitor(fixture)
+    #expect(sut.rwxSummary == nil)
+    try fixture.append("compatdb: NFS16.exe [x86_64]\ninfo:  Setting display mode: 1920x1200@60\n")
+    sut.scan()
+    #expect(sut.rwxSummary == nil)
+    try fixture.append(
+      "wine-rwx: active pid=80026 first page 0x1B30000\n"
+        + "wine-rwx: pid=80026 stores=750 released(host=1 carrier=0 hot=0)\n")
+    sut.scan()
+    #expect(
+      sut.rwxSummary
+        == "RWX W^X emulation: 1 process reported active, 1 reported counters: 750 stores through, 1 pages released."
+    )
+    #expect(fixture.reportFiles().isEmpty)
   }
 
   @Test

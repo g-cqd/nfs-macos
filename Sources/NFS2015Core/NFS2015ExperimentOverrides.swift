@@ -20,10 +20,33 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
   package var sidecar: Bool?
   /// `WINE_TF_*` values that replace the recipe's.
   package var tuning: [String: String] = [:]
+  /// Forces `WINE_ROSETTA_FLUSH_TOGGLE` on or off whatever the saved setting says; nil leaves it.
+  package var flushToggle: Bool?
+  /// Forces `WINE_ROSETTA_PROTECT_TOGGLE` on or off; nil leaves the saved setting.
+  package var protectToggle: Bool?
+  /// Forces `WINE_RWX_WX_EMULATION` on or off; nil leaves the saved setting.
+  package var rwxWxEmulation: Bool?
+  /// `WINE_RWX_WX_HOT_LIMIT`, a decimal count; only a developer can set it.
+  package var rwxHotLimit: String?
+  /// `WINE_RWX_WX_LOG` window as `<hexstart>-<hexend>` or `all`, or `off`; nil leaves the default.
+  package var rwxLog: String?
+  /// `WINE_RWX_WX_NEAR_LIMIT`, a decimal count; only a developer can set it.
+  package var rwxNearLimit: String?
+  /// Forces `WINE_RWX_WX_TF_RELEASE=1` on (true); false and nil set nothing.
+  package var rwxTfRelease: Bool?
+  /// `WINE_TRACE_PAGE` window as `<hexstart>-<hexend>`, or `off`; nil leaves the saved setting.
+  package var tracePage: String?
+
+  /// The value that turns the page trace off.
+  static let off = "off"
 
   package init() {}
 
-  package var isActive: Bool { sidecar != nil || !tuning.isEmpty }
+  package var isActive: Bool {
+    sidecar != nil || !tuning.isEmpty || flushToggle != nil || protectToggle != nil
+      || tracePage != nil || rwxWxEmulation != nil || rwxHotLimit != nil || rwxLog != nil
+      || rwxNearLimit != nil || rwxTfRelease != nil
+  }
 
   /// - Throws: A failure for a value that is not accepted, so a typo never runs as a different
   ///   experiment than the one intended.
@@ -34,11 +57,57 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
       }
       self.sidecar = sidecar == "on"
     }
+    flushToggle = try Self.toggle(environment, WineExperimentSwitches.flushToggle)
+    protectToggle = try Self.toggle(environment, WineExperimentSwitches.protectToggle)
+    rwxWxEmulation = try Self.toggle(environment, WineExperimentSwitches.rwxWxEmulation)
+    rwxTfRelease = try Self.toggle(environment, WineExperimentSwitches.rwxTfRelease)
+    if let window = environment[Self.tuningPrefix + WineExperimentSwitches.rwxLog] {
+      guard window == Self.off || WineExperimentSwitches.isLogWindow(window) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxLog) must be <hexstart>-<hexend> with "
+            + "the end above the start, all, or off.")
+      }
+      rwxLog = window
+    }
+    if let limit = environment[Self.tuningPrefix + WineExperimentSwitches.rwxNearLimit] {
+      guard WineExperimentSwitches.isHotLimit(limit) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxNearLimit) must be a decimal number "
+            + "of at most seven digits.")
+      }
+      rwxNearLimit = limit
+    }
+    if let limit = environment[Self.tuningPrefix + WineExperimentSwitches.rwxHotLimit] {
+      guard WineExperimentSwitches.isHotLimit(limit) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.rwxHotLimit) must be a decimal number "
+            + "of at most seven digits.")
+      }
+      rwxHotLimit = limit
+    }
+    if let window = environment[Self.tuningPrefix + WineExperimentSwitches.tracePage] {
+      guard window == Self.off || WineExperimentSwitches.isTraceWindow(window) else {
+        throw .operation(
+          "\(Self.tuningPrefix + WineExperimentSwitches.tracePage) must be <hexstart>-<hexend> "
+            + "with the end above the start, or off.")
+      }
+      tracePage = window
+    }
     for name in RuntimeTuning.supportedNames {
       guard let value = environment[Self.tuningPrefix + name] else { continue }
       tuning[name] = value
     }
     try RuntimeTuning(tuning).validate()
+  }
+
+  private static func toggle(_ environment: [String: String], _ name: String)
+    throws(LauncherError) -> Bool?
+  {
+    guard let value = environment[tuningPrefix + name] else { return nil }
+    guard value == "0" || value == "1" else {
+      throw .operation("\(tuningPrefix + name) must be 0 or 1.")
+    }
+    return value == "1"
   }
 
   /// The recipe's switches with these applied over them.
@@ -55,6 +124,24 @@ package struct NFS2015ExperimentOverrides: Equatable, Sendable {
   package var summary: String {
     guard isActive else { return "none" }
     var parts = tuning.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    if let flushToggle {
+      parts.append("\(WineExperimentSwitches.flushToggle)=\(flushToggle ? 1 : 0)")
+    }
+    if let protectToggle {
+      parts.append("\(WineExperimentSwitches.protectToggle)=\(protectToggle ? 1 : 0)")
+    }
+    if let tracePage { parts.append("\(WineExperimentSwitches.tracePage)=\(tracePage)") }
+    if let rwxWxEmulation {
+      parts.append("\(WineExperimentSwitches.rwxWxEmulation)=\(rwxWxEmulation ? 1 : 0)")
+    }
+    if let rwxHotLimit { parts.append("\(WineExperimentSwitches.rwxHotLimit)=\(rwxHotLimit)") }
+    if let rwxLog { parts.append("\(WineExperimentSwitches.rwxLog)=\(rwxLog)") }
+    if let rwxNearLimit {
+      parts.append("\(WineExperimentSwitches.rwxNearLimit)=\(rwxNearLimit)")
+    }
+    if let rwxTfRelease {
+      parts.append("\(WineExperimentSwitches.rwxTfRelease)=\(rwxTfRelease ? 1 : 0)")
+    }
     if let sidecar { parts.insert("x87 sidecar \(sidecar ? "on" : "off")", at: 0) }
     return parts.joined(separator: ", ")
   }

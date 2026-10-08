@@ -75,6 +75,12 @@ prefixes. `git log development..arm64-macos` lists them with their full messages
 > before publication). `nfs2015-runtime-0005-20261008` (`f4fc43f2e04`, tree
 > `9adc5dd4ad152cf9f241e7c3695854bd4d5850b3`) adds the crash-context patch (kernelbase `wine-crash:` log block) and
 > is the source of the `-0005` apps. Both trees were compared byte for byte with the shipped source archives.
+>
+> The later runtimes (patches 0006 to 0010, see [ROSETTA-SMC.md](ROSETTA-SMC.md)) are published as the tags
+> `nfs2015-runtime-0007-20261008` (`8f9700351c48`), `nfs2015-runtime-0008-20261008` (`581eafadc35f`),
+> `nfs2015-runtime-0009-20261008` (`3f203054cb86`) and `nfs2015-runtime-0010-20261008` (`7550ccae4d0b`) of `g-cqd/wine`,
+> and the branch `nfs2015-runtime-0010` holds the newest. Each tree includes every earlier patch; the patch 0006 is in
+> every tree from 0007 on, and all ten patch files are in [`Packaging/NFS2015Runtime/patches/`](../Packaging/NFS2015Runtime/patches/).
 
 ### `r3wow64.dll` and the licences
 
