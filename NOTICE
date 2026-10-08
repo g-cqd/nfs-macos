@@ -1,0 +1,117 @@
+NOTICE
+
+This project builds unofficial local macOS packages that run Windows games with
+Wine. It contains, or runs, the third-party software listed below. Each
+component remains under its own licence and the copyright of its authors. The
+full inventory, with versions, pins and the apps that carry each component, is
+in THIRD_PARTY.md. The written offer of source code for the Wine runtime and the
+other copyleft components is in docs/SOURCE-OFFER.md. Licence texts are in the
+Licenses/ directory and, for the apps, in Contents/Resources/Licenses.
+
+No licence is stated here for this project's own code: that decision is open
+(see docs/LICENSING.md). Nothing in this file grants rights beyond those the
+licences of the components below grant.
+
+----------------------------------------------------------------------
+Wine - GNU Lesser General Public License, version 2.1 or (at your option) any
+later version
+
+  Copyright (c) 1993-2026 the Wine project authors (see the file AUTHORS in the
+  Wine source for a complete list).
+
+The runtime in the apps is a modified Wine, derived from the WineHQ project
+(https://gitlab.winehq.org/wine/wine) through the CrossOver-based tree
+https://github.com/athei/wine, branch cx-26-patched, and the modifications in
+https://github.com/g-cqd/wine and Packaging/NFS2015Runtime/patches. The
+modifications are licensed under the same terms as Wine. Texts: Licenses/
+Wine-LICENSE.txt and Licenses/Wine-COPYING.LIB.txt. Source and how to obtain it:
+docs/SOURCE-OFFER.md.
+
+Wine also contains, and these apps are built with, libraries under their own
+licences (zlib, libpng, libjpeg, libtiff, Little CMS, libxml2, libxslt,
+FAudio, FluidSynth, mpg123, OpenLDAP, musl, Capstone, vkd3d and others); see
+THIRD_PARTY.md and the licence files in the Wine source.
+
+----------------------------------------------------------------------
+rosetta3 (x86 to AArch64 translator and the r3wow64 module) - MIT
+
+  Copyright (c) 2026 g-cqd
+
+r3wow64.dll is a separate module that Wine loads through its public WoW64 CPU
+interface. It is not part of Wine and is not licensed under the LGPL. The Wine
+patches that load it (branch wow64-cpu of https://github.com/g-cqd/wine) are
+part of Wine and remain LGPL-2.1-or-later. Text: Licenses/rosetta3.txt.
+
+----------------------------------------------------------------------
+mtld3d (Direct3D 9 to Metal) - zlib licence
+
+  Copyright (c) 2026 Alexander Theissen
+
+Used through the fork https://github.com/g-cqd/mtld3d. Altered source versions
+must be plainly marked as such. Text: Licenses/mtld3d.txt. mtld3d statically
+links Rust crates under MIT, Apache-2.0, Zlib, ISC, BSL-1.0, BSD-3-Clause,
+Unlicense and Unicode-3.0 terms; they are listed in THIRD_PARTY.md. Their
+copyright notices are those of the crates' authors, published with each crate
+on https://crates.io.
+
+----------------------------------------------------------------------
+x87sidecar - MIT
+
+  Copyright (c) 2025 Lifeisawful
+
+Used through the fork https://github.com/g-cqd/x87sidecar. Text:
+Licenses/x87sidecar.txt.
+
+----------------------------------------------------------------------
+DXMT, v0.80 (Direct3D 11 to Metal; Need for Speed 2015 only) - MIT
+
+  Copyright (c) 2023 Feifan He
+
+Used unmodified as the published v0.80 release build. The text is in
+Packaging/Licenses/dxmt-v0.80-LICENSE.txt. That build includes code derived
+from DXVK (zlib licence: Copyright (c) 2017 Philip Rebohle, (c) 2019 Joshua
+Ashton), a DXBC parser by Microsoft (MIT) and LLVM libraries (Apache-2.0 with
+LLVM exceptions).
+
+----------------------------------------------------------------------
+Wine Mono 10.4.1 (Need for Speed 2015 bundled edition only)
+
+Installed unchanged from the published installer into the app's own prefix.
+It is a collection of projects under several free licences; the complete
+corresponding source and the licence texts are in
+https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-src.tar.xz.
+
+----------------------------------------------------------------------
+Game modifications copied into the Need for Speed Most Wanted app (MIT)
+
+  Ultimate ASI Loader     Copyright (c) 2023 ThirteenAG
+  WidescreenFixesPack     Copyright (c) 2018 ThirteenAG
+  XtendedInput            Copyright (c) 2022-2023 Lovro Pleše
+                          Copyright (c) 2023 Berkay Yiğit
+
+Texts: Licenses/Ultimate-ASI-Loader.txt, Licenses/WidescreenFixesPack.txt,
+Licenses/XtendedInput.txt. Our changes to WidescreenFixesPack are the patch
+Packaging/widescreen-light-streaks.patch.
+
+----------------------------------------------------------------------
+Libraries loaded by Wine
+
+  GnuTLS 3.8.13 (LGPL-2.1-or-later), Nettle 4.0 (GPL-2.0-or-later OR
+  LGPL-3.0-or-later), GMP 6.3.0 (LGPL-3.0-or-later OR GPL-2.0-or-later),
+  libtasn1 4.21.0 (LGPL-2.1-or-later), libidn2 2.3.8 (GPL-2.0-or-later OR
+  LGPL-3.0-or-later), libunistring 1.4.2, GNU gettext libintl 1.0
+  (LGPL-2.1-or-later), p11-kit 0.26.5 (BSD-3-Clause), libpng 1.6.58
+  (libpng-2.0), SDL3 3.4.14 and sdl2-compat 2.32.70 (Zlib).
+
+  FreeType 2.14.3: Portions of this software are copyright (c) The FreeType
+  Project (www.freetype.org). All rights reserved. FreeType is used under the
+  FreeType Licence (FTL).
+
+The exact source tarballs and checksums are in Packaging/dependency-sources.json;
+the apps carry the sources and the licence files of these libraries.
+
+----------------------------------------------------------------------
+Not included
+
+Game data, EA's client, Apple's Game Porting Toolkit / D3DMetal, MoltenVK and
+the Vulkan loader are not part of this project or of its source.
