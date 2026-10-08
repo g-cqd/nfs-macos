@@ -1,10 +1,12 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
-Need for Speed Bundled <date>-<commit>-rebuilt.app    (the complete app: game and EA app inside)
-Need for Speed Import <date>-<commit>-rebuilt.app     (no game, no EA app: uses your own Windows folder)
+Newest, for the MetalFX experiments:
+  Need for Speed Bundled 20261008-5864653-0007.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-5864653-0007.app     (no game, no EA app: uses your own Windows folder)
+Earlier, still here: the "-0005" apps (8b9bcba) and the "-rebuilt" apps (da146a2).
 
 WHAT IS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; use these for the MetalFX experiments)
-Need for Speed Bundled 20261008-<commit>-0007.app and Need for Speed Import 20261008-<commit>-0007.app are the "-0005" apps with:
+Need for Speed Bundled 20261008-5864653-0007.app and Need for Speed Import 20261008-5864653-0007.app are the "-0005" apps with:
  1. A Wine runtime with two more patches. 0006 makes the "wine-crash:" block much fuller: the memory state of the crashing page and
     its neighbours, a checksum of that page, the thread count, return addresses, and 512 bytes of code around the crashing
     instruction. 0007 adds three EXPERIMENT SWITCHES, all OFF unless you turn them on (below), and a trace of memory calls.
@@ -33,6 +35,17 @@ Where: Settings tab. MetalFX group = "MetalFX"; experiments group = "Wine experi
  times: one run per variant says nothing. To turn everything off again: "Reset" in both groups.
  For a developer without the Settings page: set NFS2015_AB_WINE_ROSETTA_FLUSH_TOGGLE=1, NFS2015_AB_WINE_ROSETTA_PROTECT_TOGGLE=1
  and NFS2015_AB_WINE_TRACE_PAGE=1B30000-1B31000 (or "off") in front of the session helper command (docs/NFS2015.md section 20.5).
+
+WHAT WAS CHECKED ON THE "-0007" BUILD (on the Mac that built it)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's
+files, Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account,
+session or machine file and no D3DMetal files are inside; the Swift tests (897), the build with warnings as errors and 19 packaging
+checks; a clean-room first start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the
+owner's own folders unreadable): it finished and everything was in place byte for byte (47 checks passed); and that the experiment
+switches reach Wine through the app: with the third toggle saved on, Wine's processes printed "wine-trace:" lines in the first start,
+and with nothing saved they printed none (a control). NOT checked: anything with the game itself (whether a switch changes the crash,
+what the fuller block or the trace show), the Settings page on screen, a second Mac, EA sign-in, activation, Gatekeeper, the Import app
+in a Windows folder of your own.
 
 WHAT IS DIFFERENT IN THE "-0005" APPS (added 2026-10-08, they sit next to the "-rebuilt" ones)
 Need for Speed Bundled 20261008-8b9bcba-0005.app and Need for Speed Import 20261008-8b9bcba-0005.app are the "-rebuilt" apps

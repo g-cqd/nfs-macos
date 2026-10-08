@@ -202,6 +202,9 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--forbid', action='append', default=[])
     parser.add_argument('--no-network', action='store_true', help='deny every IP connection during the first start')
+    parser.add_argument('--free-first-run', action='store_true',
+                        help='delete the first run\'s support folder once it is verified, so the second run does not need '
+                             'the space of both (the verification of the first run is already done by then)')
     options = parser.parse_args()
     app, work = options.app.resolve(), options.work.resolve()
     work.mkdir(parents=True)
@@ -232,6 +235,9 @@ def main():
     verify_seed(app, support, 'original-location', forbid_text)
     leftover = subprocess.run(['/usr/bin/pgrep', '-f', str(support)], capture_output=True, text=True).stdout.split()
     check(not leftover, 'original-location: no process of the private prefix is left running', ' '.join(leftover))
+    if options.free_first_run:
+        shutil.rmtree(support, ignore_errors=True)
+        print('# freed the support folder of original-location after verifying it')
 
     # (c) a COPY at a different path with a different name, the original app also banned.
     destination = options.copy_to / 'Moved Elsewhere' / 'Racing Copy.app'
