@@ -64,6 +64,33 @@ struct NFS2015RwxLogTests {
   }
 
   @Test
+  func `reads lines from a first start of the -0009 app with the workaround on by default`() {
+    // Captured 2026-10-08 from the Bundled app's own session helper: first start, private folder,
+    // nothing saved. The default put the workaround on; nine Wine processes printed lines.
+    let log = read([
+      "wine-rwx: active pid=50871 first page 0x800000",
+      "wine-rwx: active pid=52158 first page 0x800000",
+      "wine-rwx: pid=52158 stores=457 released(host=1 carrier=0 hot=0)",
+      "wine-rwx: active pid=52191 first page 0x800000",
+      "wine-rwx: active pid=52568 first page 0x800000",
+      "wine-rwx: active pid=52925 first page 0x800000",
+      "wine-rwx: active pid=53004 first page 0x800000",
+      "wine-rwx: active pid=53177 first page 0x800000",
+      "wine-rwx: active pid=53257 first page 0x800000",
+    ])
+    #expect(log.activations.count == 8 && log.counters.count == 1)
+    #expect(
+      log.counters == [
+        .init(process: 52158, stores: 457, releasedHost: 1, releasedCarrier: 0, releasedHot: 0)
+      ])
+    #expect(log.totalStores == 457 && log.totalReleased == 1 && log.hotReleasedProcesses == 0)
+    #expect(
+      log.summary
+        == "RWX W^X emulation: 8 processes reported active, 1 reported counters: 457 stores through, 1 pages released."
+    )
+  }
+
+  @Test
   func `reads the address with or without the 0x the runtime prints`() {
     #expect(
       read(["wine-rwx: active pid=1 first page 1b30000"]).activations
