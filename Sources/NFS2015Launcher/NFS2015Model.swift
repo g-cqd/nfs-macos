@@ -51,6 +51,10 @@ final class NFS2015Model {
   private(set) var diagnosticsEdit: NFS2015DiagnosticsPreference?
   /// What the last diagnostics request did.
   private(set) var diagnosticsOutcome: NFS2015DiagnosticsOutcome?
+  /// The x87 sidecar choice the player made and has not saved.
+  private(set) var sidecarEdit: NFS2015SidecarPreference?
+  /// What the last sidecar request did.
+  private(set) var sidecarOutcome: NFS2015SidecarOutcome?
   /// The newest crash report of this run of the starter; it stays until the next Play begins.
   private(set) var crashNotice: NFS2015CrashNotice?
   var tab = "Play"
@@ -391,6 +395,58 @@ final class NFS2015Model {
     enqueue(.configureDiagnostics(NFS2015DiagnosticsRequest(action: .reset)))
   }
 
+  // MARK: x87 sidecar (experimental)
+
+  /// The choice the next Play will use, as saved.
+  var savedSidecar: NFS2015SidecarPreference { snapshot.sidecar?.preference ?? .standard }
+  /// The choice shown: the player's unsaved one, else the saved one.
+  var sidecar: NFS2015SidecarPreference { sidecarEdit ?? savedSidecar }
+  var hasPendingSidecar: Bool { sidecarEdit != nil }
+  /// Why a saved sidecar file was not used, if it was not.
+  var sidecarNotice: String? { snapshot.sidecar?.notice }
+  var canEditSidecar: Bool { !isBusy }
+  var canResetSidecar: Bool {
+    canEditSidecar && (savedSidecar != .standard || sidecarNotice != nil)
+  }
+  var sidecarRefusal: String? { sidecarOutcome?.refusal }
+
+  var sidecarOutcomeLine: String? {
+    switch sidecarOutcome {
+    case .saved: "Saved. It applies the next time you press Play."
+    case .reset: "Cleared. The x87 sidecar is off."
+    case .unchanged: "That was already saved."
+    case .refused, nil: nil
+    }
+  }
+
+  func setSidecarEnabled(_ on: Bool) {
+    guard canEditSidecar else { return }
+    sidecarOutcome = nil
+    let choice = NFS2015SidecarPreference(enabled: on)
+    sidecarEdit = choice == savedSidecar ? nil : choice
+  }
+
+  func sidecarBinding() -> Binding<Bool> {
+    Binding(get: { self.sidecar.enabled }, set: { self.setSidecarEnabled($0) })
+  }
+
+  func discardSidecar() {
+    sidecarEdit = nil
+    sidecarOutcome = nil
+  }
+
+  /// Keeps the shown choice for the next Play.
+  func saveSidecar() {
+    guard canEditSidecar, let choice = sidecarEdit else { return }
+    enqueue(.configureSidecar(NFS2015SidecarRequest(action: .save, preference: choice)))
+  }
+
+  /// Forgets what is saved, which means the sidecar off.
+  func resetSidecar() {
+    guard canEditSidecar else { return }
+    enqueue(.configureSidecar(NFS2015SidecarRequest(action: .reset)))
+  }
+
   /// Shows the crash report in Finder.
   func revealCrashReport() {
     guard let notice = crashNotice else { return }
@@ -549,6 +605,13 @@ final class NFS2015Model {
       diagnosticsOutcome = nil
     }
     if diagnosticsEdit == (result.diagnostics?.preference ?? .standard) { diagnosticsEdit = nil }
+    if case .configureSidecar = operation {
+      sidecarOutcome = result.sidecar?.outcome
+      if result.sidecar?.outcome?.refusal == nil { sidecarEdit = nil }
+    } else if operation != .prepare {
+      sidecarOutcome = nil
+    }
+    if sidecarEdit == (result.sidecar?.preference ?? .standard) { sidecarEdit = nil }
     if let report = result.crashReport { crashNotice = report }
     if operation != .prepare, result.outcome?.refusal == nil { edits = [:] }
     edits = edits.filter { id, chosen in

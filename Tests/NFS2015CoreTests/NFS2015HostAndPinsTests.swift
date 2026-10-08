@@ -106,7 +106,7 @@ struct NFS2015ExperimentOverridesTests {
     let overrides = try NFS2015ExperimentOverrides(environment: [
       "NFS2015_AB_SIDECAR": "off", "NFS2015_AB_WINE_TF_MAX_STEPS": "250000",
     ])
-    #expect(overrides.isActive && overrides.sidecarOff)
+    #expect(overrides.isActive && overrides.sidecar == false)
     #expect(overrides.summary == "x87 sidecar off, WINE_TF_MAX_STEPS=250000")
     let applied = try overrides.applied(
       to: RuntimeTuning(["WINE_TF_EMULATION": "1", "WINE_TF_MAX_STEPS": "0", "WINE_TF_MAX_NS": "0"])
@@ -117,9 +117,11 @@ struct NFS2015ExperimentOverridesTests {
   }
 
   @Test
-  func `sidecar on is the shipped state`() throws {
+  func `forces the sidecar on, which is no longer the default, and says so`() throws {
     let on = try NFS2015ExperimentOverrides(environment: ["NFS2015_AB_SIDECAR": "on"])
-    #expect(!on.sidecarOff && !on.isActive)
+    #expect(on.sidecar == true && on.isActive && on.summary == "x87 sidecar on")
+    let unset = try NFS2015ExperimentOverrides(environment: [:])
+    #expect(unset.sidecar == nil && !unset.isActive)
   }
 
   @Test(arguments: [

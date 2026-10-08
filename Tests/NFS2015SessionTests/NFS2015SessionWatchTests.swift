@@ -45,6 +45,8 @@ struct NFS2015SessionWatchTests {
         plan: NFS2015DisplaySafety.plan(facts: nil, hasOptionsFile: nil, preference: .standard),
         seeded: nil, metalFX: NFS2015MetalFXState(), diagnostics: .standard,
         tuning: RuntimeTuning(), experiment: NFS2015ExperimentOverrides(),
+        sidecar: NFS2015SidecarChoice(
+          preference: .standard, experiment: NFS2015ExperimentOverrides()),
         settings: NFS2015Settings())
     }
   }
@@ -246,6 +248,37 @@ struct NFS2015SessionWatchTests {
     let answer = fixture.session.diagnosticsState(for: request, store: fixture.store)
     #expect(answer.outcome == .saved && answer.preference.limitRetinaDesktop == false)
     #expect(fixture.store.load().preference.limitRetinaDesktop == false)
+  }
+
+  @Test
+  func `carries out a sidecar request and reads the choice the next Play will use`() throws {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    let sidecarOptions = { (request: String) throws -> (SessionOptions, URL) in
+      let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+      try Data(request.utf8).write(to: url)
+      return (
+        try SessionOptions(arguments: [
+          "/A.app", "--support", "/tmp/p", "--configure-sidecar", "--request", url.path,
+        ]), url
+      )
+    }
+    let plain = try SessionOptions(arguments: ["/A.app", "--support", "/tmp/p", "--play"])
+    #expect(fixture.session.readSidecarState(for: plain) == NFS2015SidecarState())
+    let body = String(
+      decoding: try JSONEncoder().encode(
+        NFS2015SidecarRequest(action: .save, preference: NFS2015SidecarPreference(enabled: true))),
+      as: UTF8.self)
+    let (save, url) = try sidecarOptions(body)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let saved = fixture.session.readSidecarState(for: save)
+    #expect(saved.outcome == .saved && saved.preference.enabled)
+    // A later Play reads the saved choice and reports no outcome of its own.
+    let later = fixture.session.readSidecarState(for: plain)
+    #expect(later.preference.enabled && later.outcome == nil && later.notice == nil)
+    let (broken, brokenURL) = try sidecarOptions("not json")
+    defer { try? FileManager.default.removeItem(at: brokenURL) }
+    #expect(fixture.session.readSidecarState(for: broken).outcome?.refusal != nil)
   }
 
   @Test

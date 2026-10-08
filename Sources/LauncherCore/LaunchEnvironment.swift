@@ -57,8 +57,9 @@ package enum LaunchEnvironment {
 
   /// - Parameters:
   ///   - debugChannels: The `WINEDEBUG` value; silent by default.
-  ///   - usesSidecar: Whether `ROSETTA_X87_PATH` names the x87 sidecar. Only an experiment turns
-  ///     it off.
+  ///   - usesSidecar: Whether `ROSETTA_X87_PATH` names the x87 sidecar for the whole Wine session.
+  ///     The other games always pass true; Need for Speed (2015) passes the player's choice, off
+  ///     unless they turned it on or a developer override forces it.
   package static func make(
     paths: AppPaths, prefix: URL, home: URL, temporary: URL,
     tuning: RuntimeTuning = RuntimeTuning(), renderers: [RendererSelection] = [],

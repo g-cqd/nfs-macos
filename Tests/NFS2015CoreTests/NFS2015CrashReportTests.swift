@@ -73,21 +73,21 @@ struct NFS2015CrashReportTests {
   @Test
   func `names the renderer and runtime settings in force, and any experiment`() throws {
     var experiment = NFS2015ExperimentOverrides()
-    experiment.sidecarOff = true
+    experiment.sidecar = false
     experiment.tuning = ["WINE_TF_MAX_STEPS": "250000"]
     let text = try report(context: CrashFixtures.context(experiment: experiment, logging: true))
       .text
     for part in [
       "MetalFX: on, 1.5x for NFS16.exe",
       "diagnostic Wine log for this launch: err+all,fixme-all,+seh",
-      "x87 sidecar: OFF (experiment)",
+      "x87 sidecar: off (experiment override)",
       "runtime switches in force: WINE_TF_EMULATION=1 WINE_TF_MAX_NS=0 WINE_TF_MAX_STEPS=0",
       "experiment overrides: x87 sidecar off, WINE_TF_MAX_STEPS=250000",
     ] { #expect(text.contains(part), "missing: \(part)") }
     let plain = try report().text
     #expect(plain.contains("diagnostic Wine log for this launch: off"))
     #expect(
-      plain.contains("x87 sidecar: on (as shipped)") && plain.contains("experiment overrides: none")
+      plain.contains("x87 sidecar: off (default)") && plain.contains("experiment overrides: none")
     )
   }
 
