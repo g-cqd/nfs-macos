@@ -244,7 +244,7 @@ struct NFS2015Session {
 
   /// Carries out a Wine experiment request, if this is one, and reads the choice the launch will use.
   ///
-  /// A choice that cannot be read is every experiment off with a notice, never a failure.
+  /// A choice that cannot be read is the defaults with a notice, never a failure.
   func readExperimentsState(for options: SessionOptions) -> NFS2015WineExperimentsState {
     let store = NFS2015WineExperimentsStore(support: paths.support)
     var outcome: NFS2015WineExperimentsOutcome?

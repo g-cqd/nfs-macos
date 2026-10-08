@@ -5,9 +5,10 @@ import Testing
 @testable import NFS2015Core
 
 struct NFS2015WineExperimentsTests {
-  private let flush = NFS2015WineExperimentsPreference(flushToggle: true)
+  // The three experiments, with the workaround saved off so these tests see only them.
+  private let flush = NFS2015WineExperimentsPreference(flushToggle: true, rwxWxEmulation: false)
   private let all = NFS2015WineExperimentsPreference(
-    flushToggle: true, protectToggle: true, tracePage: true)
+    flushToggle: true, protectToggle: true, tracePage: true, rwxWxEmulation: false)
 
   // MARK: The switch names and values
 
@@ -46,15 +47,36 @@ struct NFS2015WineExperimentsTests {
   // MARK: The saved file
 
   @Test
-  func `is off unless the player turned it on`() throws {
+  func `by default only the workaround is on, and the three experiments are off`() throws {
     #expect(NFS2015WineExperimentsPreference.standard == .init())
+    let standard = NFS2015WineExperimentsPreference.standard
+    #expect(standard.rwxWxEmulation && !standard.flushToggle && !standard.protectToggle)
+    #expect(!standard.tracePage)
     let scratch = try Scratch()
     defer { scratch.remove() }
     let loaded = NFS2015WineExperimentsStore(support: scratch.root).load()
     #expect(loaded.preference == .standard && loaded.notice == nil)
     let choice = NFS2015WineExperimentsChoice.standard
-    #expect(choice.environment.isEmpty && !choice.isActive && !choice.tracesPages)
-    #expect(choice.line == "none (all off, the default)")
+    #expect(choice.environment == ["WINE_RWX_WX_EMULATION": "1"])
+    #expect(choice.isActive && !choice.tracesPages && choice.emulatesWriteXorExecute)
+    #expect(choice.line == "WINE_RWX_WX_EMULATION=1 (default)")
+  }
+
+  @Test
+  func `a fresh state has the workaround on, and a saved off is respected`() throws {
+    let scratch = try Scratch()
+    defer { scratch.remove() }
+    let store = NFS2015WineExperimentsStore(support: scratch.root)
+    #expect(store.load().preference.rwxWxEmulation)
+    #expect(try store.save(.allOff))
+    let reloaded = store.load()
+    #expect(!reloaded.preference.rwxWxEmulation && reloaded.notice == nil)
+    let choice = NFS2015WineExperimentsChoice(
+      preference: reloaded.preference, experiment: NFS2015ExperimentOverrides())
+    #expect(choice.environment.isEmpty && !choice.isActive)
+    #expect(choice.line == "WINE_RWX_WX_EMULATION off (saved setting)")
+    #expect(try store.reset())
+    #expect(store.load().preference.rwxWxEmulation)
   }
 
   @Test
@@ -84,7 +106,7 @@ struct NFS2015WineExperimentsTests {
     #"{"version":1,"flushToggle":true,"protectToggle":true,"tracePage":true,"pad":""#
       + String(repeating: "x", count: 5000) + #""}"#,
   ])
-  func `a damaged, foreign or oversized file means every switch is off, and says why`(text: String)
+  func `a damaged, foreign or oversized file means the defaults, and says why`(text: String)
     throws
   {
     let scratch = try Scratch()
@@ -93,7 +115,8 @@ struct NFS2015WineExperimentsTests {
     let loaded = NFS2015WineExperimentsStore(support: scratch.root).load()
     #expect(loaded.preference == .standard)
     #expect(loaded.notice?.contains("could not be used") == true)
-    #expect(loaded.notice?.contains("every experiment is off") == true)
+    #expect(loaded.notice?.contains("the defaults apply") == true)
+    #expect(loaded.preference.rwxWxEmulation)
   }
 
   @Test
@@ -135,10 +158,10 @@ struct NFS2015WineExperimentsTests {
     #expect(choice.isActive && choice.tracesPages)
     #expect(
       choice.line
-        == "WINE_ROSETTA_FLUSH_TOGGLE=1 (saved setting), WINE_ROSETTA_PROTECT_TOGGLE=1 (saved setting), WINE_TRACE_PAGE=1B30000-1B31000 (saved setting)"
+        == "WINE_ROSETTA_FLUSH_TOGGLE=1 (saved setting), WINE_ROSETTA_PROTECT_TOGGLE=1 (saved setting), WINE_TRACE_PAGE=1B30000-1B31000 (saved setting), WINE_RWX_WX_EMULATION off (saved setting)"
     )
     let one = NFS2015WineExperimentsChoice(
-      preference: .init(protectToggle: true), experiment: .init())
+      preference: .init(protectToggle: true, rwxWxEmulation: false), experiment: .init())
     #expect(one.environment == ["WINE_ROSETTA_PROTECT_TOGGLE": "1"] && !one.tracesPages)
     #expect(
       (try WineExperimentSwitches.validate(choice.environment)) == ())
@@ -167,10 +190,11 @@ struct NFS2015WineExperimentsTests {
     #expect(silenced.environment.isEmpty && !silenced.isActive)
     #expect(
       silenced.line
-        == "WINE_ROSETTA_FLUSH_TOGGLE off (experiment override), WINE_ROSETTA_PROTECT_TOGGLE off (experiment override), WINE_TRACE_PAGE off (experiment override)"
+        == "WINE_ROSETTA_FLUSH_TOGGLE off (experiment override), WINE_ROSETTA_PROTECT_TOGGLE off (experiment override), WINE_RWX_WX_EMULATION off (saved setting), WINE_TRACE_PAGE off (experiment override)"
     )
-    let untouched = NFS2015WineExperimentsChoice(preference: .standard, experiment: off)
-    #expect(untouched.line == "none (all off, the default)")
+    // An override that names a switch which is already off changes nothing.
+    let untouched = NFS2015WineExperimentsChoice(preference: .allOff, experiment: off)
+    #expect(untouched.line == "WINE_RWX_WX_EMULATION off (saved setting)")
   }
 
   @Test
@@ -214,16 +238,19 @@ struct NFS2015WineExperimentsTests {
   }
 
   @Test
-  func `the default session carries none of the three switches`() throws {
+  func `the default session carries the workaround and none of the three experiments`() throws {
     let environment = try environment(.standard)
-    for name in WineExperimentSwitches.names { #expect(environment[name] == nil, "\(name)") }
+    #expect(environment["WINE_RWX_WX_EMULATION"] == "1")
+    for name in WineExperimentSwitches.names where name != "WINE_RWX_WX_EMULATION" {
+      #expect(environment[name] == nil, "\(name)")
+    }
     #expect(environment["ROSETTA_X87_PATH"] == nil)
     #expect(environment.keys.allSatisfy { !$0.hasPrefix("DXMT_") })
   }
 
   @Test
   func `a chosen switch reaches the session, and only the switches differ`() throws {
-    let off = try environment(.standard)
+    let off = try environment(.allOff)
     var on = try environment(NFS2015WineExperimentsChoice(preference: all, experiment: .init()))
     #expect(on["WINE_ROSETTA_FLUSH_TOGGLE"] == "1" && on["WINE_ROSETTA_PROTECT_TOGGLE"] == "1")
     #expect(on["WINE_TRACE_PAGE"] == "1B30000-1B31000")
@@ -273,14 +300,18 @@ struct NFS2015WineExperimentsTests {
     }
     let plain = try text(.standard, .init())
     #expect(plain.contains("experiment overrides: none"))
-    #expect(plain.contains("wine experiment switches: none (all off, the default)"))
+    #expect(plain.contains("wine experiment switches: WINE_RWX_WX_EMULATION=1 (default)"))
+    #expect(
+      try text(.allOff, .init()).contains(
+        "wine experiment switches: WINE_RWX_WX_EMULATION off (saved setting)"))
     let force = try overrides(["NFS2015_AB_WINE_ROSETTA_FLUSH_TOGGLE": "1"])
     let set = try text(
-      NFS2015WineExperimentsChoice(preference: .init(tracePage: true), experiment: force), force)
+      NFS2015WineExperimentsChoice(
+        preference: .init(tracePage: true, rwxWxEmulation: false), experiment: force), force)
     #expect(set.contains("experiment overrides: WINE_ROSETTA_FLUSH_TOGGLE=1"))
     #expect(
       set.contains(
-        "wine experiment switches: WINE_ROSETTA_FLUSH_TOGGLE=1 (experiment override), WINE_TRACE_PAGE=1B30000-1B31000 (saved setting)"
+        "wine experiment switches: WINE_ROSETTA_FLUSH_TOGGLE=1 (experiment override), WINE_TRACE_PAGE=1B30000-1B31000 (saved setting), WINE_RWX_WX_EMULATION off (saved setting)"
       ))
     // Without a context choice the report derives it from the experiment, so an older caller is right too.
     let derived = NFS2015CrashContext(
@@ -289,7 +320,10 @@ struct NFS2015WineExperimentsTests {
         facts: nil, hasOptionsFile: nil, preference: .standard),
       seed: nil, metalFX: .off, diagnostics: .standard, diagnosticLog: false,
       settings: NFS2015Settings(), tuning: [:], experiment: force)
-    #expect(derived.wineSwitches.environment == ["WINE_ROSETTA_FLUSH_TOGGLE": "1"])
+    #expect(
+      derived.wineSwitches.environment == [
+        "WINE_ROSETTA_FLUSH_TOGGLE": "1", "WINE_RWX_WX_EMULATION": "1",
+      ])
   }
 
   @Test

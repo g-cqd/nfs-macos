@@ -1,0 +1,187 @@
+From b5ac45cf36e57d12cd916b6ef9ad57945d8e7f63 Mon Sep 17 00:00:00 2001
+From: Gigi <42325924+g-cqd@users.noreply.github.com>
+Date: Thu, 8 Oct 2026 14:12:01 +0200
+Subject: [PATCH] ntdll: keep the W^X emulation's trap flag out of
+ guest-visible contexts, handle straddling stores, raise the busy-page limit
+
+Four fixes for WINE_RWX_WX_EMULATION (still default off), found with a Chromium-like stress (threads
+storing into adjacent RWX pages while another thread suspends and reads/writes their contexts) after
+EA's own process (libcef) died with an unhandled EXCEPTION_SINGLE_STEP, and from NFS16 still faulting
+with the switch on:
+
+- Rosetta takes the step trap on the flags sigreturn has just restored while the thread is still
+  inside the signal return trampoline, before the store has run. The trap handler then closed the
+  window and cleared the flag in the trampoline's frame, not the guest's, so the guest resumed with
+  the trap flag still set and no window and took a stray single-step. A step trap that arrives on
+  the signal stack is now left alone.
+- A context captured while a window is open (suspend, GetThreadContext, an exception raised by
+  another signal) carried the injected trap flag; SetThreadContext made it the guest's own and the
+  trap-flag emulation delivered a single-step. save_context() now closes the window first, takes
+  the flag out and remembers a step trap that is already in flight.
+- A store that straddles two protected pages could never complete with one page open at a time and
+  faulted back and forth between them (a livelock until the busy-page limit); the open page is now
+  released for good when the next fault is on another page (counted with the busy pages).
+- The busy-page limit of 300 stores per 100 ms released a page that was merely being filled (512
+  eight-byte stores) before the code on it ran, which defeated the emulation for NFS16's stub page.
+  The default is now 4096 stores per second (a store costs ~70 us, so a second allows ~14000).
+---
+ dlls/ntdll/unix/signal_x86_64.c | 48 +++++++++++++++++++++++++++++++--
+ dlls/ntdll/unix/unix_private.h  |  3 +++
+ dlls/ntdll/unix/virtual.c       | 29 ++++++++++++++++++--
+ 3 files changed, 76 insertions(+), 4 deletions(-)
+
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index 7370c1b..a2a0a38 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -1025,10 +1025,33 @@ static inline void leave_handler( ucontext_t *sigcontext )
+  *
+  * Set the register values from a sigcontext.
+  */
++#ifdef __APPLE__
++/* WINE_RWX_WX_EMULATION sets the trap flag for the one store a page is open for. A context captured in that
++ * window (suspend, GetThreadContext, an exception raised by another signal) must not carry the flag: the guest
++ * would be handed a single-step it never asked for, and the trap-flag emulation would take it for the guest's own
++ * after SetThreadContext. Close the page and take our flag out. If the store has not run yet (the thread is
++ * still at the instruction that faulted) it runs again, faults again and opens a new window after the resume.
++ * If it has run, its step trap may already be pending: remember to swallow it. */
++static void wx_abandon_window( ucontext_t *ucontext )
++{
++    struct ntdll_thread_data *td = ntdll_get_thread_data();
++
++    if (!td->wx_page) return;
++    td->wx_swallow = ((void *)RIP_sig(ucontext) != td->wx_rip);
++    virtual_wx_step();
++    if (td->wx_tf) EFL_sig(ucontext) &= ~0x100;
++    td->wx_tf = FALSE;
++}
++#else
++#define wx_abandon_window(c) ((void)0)
++#endif
++
+ static void save_context( struct xcontext *xcontext, const ucontext_t *sigcontext )
+ {
+     CONTEXT *context = &xcontext->c;
+ 
++    wx_abandon_window( (ucontext_t *)sigcontext );
++
+     context->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | CONTEXT_DEBUG_REGISTERS;
+     context->Rax    = RAX_sig(sigcontext);
+     context->Rcx    = RCX_sig(sigcontext);
+@@ -2803,8 +2826,10 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+         struct ntdll_thread_data *wx_data = ntdll_get_thread_data();
+         if (wx_data->wx_page)
+         {
+-            /* another fault while a page is open for one store: close it, keep our trap flag out of the guest */
+-            virtual_wx_step();
++            /* another fault while a page is open for one store: close it (or release it for good when the
++             * instruction straddles two protected pages), keep our trap flag out of the guest */
++            if (TRAP_sig(ucontext) == TRAP_x86_PAGEFLT) virtual_wx_cross( siginfo->si_addr );
++            else virtual_wx_step();
+             if (wx_data->wx_tf) EFL_sig(ucontext) &= ~0x100;
+             wx_data->wx_tf = FALSE;
+         }
+@@ -2817,6 +2842,8 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+                 if (step)
+                 {
+                     wx_data->wx_tf = !(EFL_sig(ucontext) & 0x100);
++                    wx_data->wx_rip = (void *)RIP_sig(ucontext);
++                    wx_data->wx_swallow = FALSE;
+                     EFL_sig(ucontext) |= 0x100;
+                 }
+                 leave_handler( ucontext );
+@@ -2925,6 +2952,23 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     struct xcontext context;
+ 
+ #ifdef __APPLE__
++    if (TRAP_sig(ucontext) == TRAP_x86_TRCTRAP && !ntdll_get_thread_data()->wx_page && ntdll_get_thread_data()->wx_swallow)
++    {
++        /* the step trap of a store whose window a context capture closed while the trap was in flight */
++        ntdll_get_thread_data()->wx_swallow = FALSE;
++        EFL_sig(ucontext) &= ~0x100;
++        leave_handler( ucontext );
++        return;
++    }
++    if (TRAP_sig(ucontext) == TRAP_x86_TRCTRAP && ntdll_get_thread_data()->wx_page &&
++        is_inside_signal_stack( (void *)RSP_sig(ucontext) ))
++    {
++        /* Rosetta takes the step trap on the flags sigreturn has just restored while the thread is still inside
++         * the signal return trampoline, before the store has run. The trap flag and the open page belong to the
++         * guest context that sigreturn is restoring: leave both alone, the real step trap follows the store. */
++        leave_handler( ucontext );
++        return;
++    }
+     if (TRAP_sig(ucontext) == TRAP_x86_TRCTRAP && ntdll_get_thread_data()->wx_page)
+     {
+         struct ntdll_thread_data *wx_data = ntdll_get_thread_data();
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index 1ccbb18..4e74bd3 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -118,6 +118,8 @@ struct ntdll_thread_data
+     void                     *jmp_buf;       /* setjmp buffer for exception handling */
+     void                     *wx_page;       /* page opened for one store by WINE_RWX_WX_EMULATION */
+     BOOL                      wx_tf;         /* the trap flag was set by that emulation */
++    BOOL                      wx_swallow;    /* the window was closed after its store ran: one step trap is still in flight */
++    void                     *wx_rip;        /* instruction the open window is for */
+ };
+ 
+ C_ASSERT( sizeof(struct ntdll_thread_data) <= sizeof(((TEB *)0)->GdiTebBatch) );
+@@ -133,6 +135,7 @@ C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct ntdll_thread_data, sys
+ 
+ extern BOOL virtual_wx_fault( void *addr, BOOL in_syscall, BOOL carrier, BOOL *step );
+ extern void virtual_wx_step(void);
++extern void virtual_wx_cross( void *addr );
+ 
+ static inline struct ntdll_thread_data *ntdll_get_thread_data(void)
+ {
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 98111f8..6c269ab 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -1953,8 +1953,11 @@ static int is_apple_silicon(void);
+  * freed, which is the behaviour without the switch. Image sections and file views are never touched. */
+ #define WX_RELEASED_MAX   16
+ #define WX_HOT_MAX        8
+-#define WX_HOT_LIMIT      300         /* default: this many faults on one page ... */
+-#define WX_HOT_WINDOW_NS  100000000ULL /* ... within this time release the page (WINE_RWX_WX_HOT_LIMIT, 0 = never) */
++/* A store costs about 70 us while a page is protected, so one second allows at most ~14000 of them. Filling a
++ * whole page with 8-byte stores takes 512 (one NFS16 stub page is filled that way, and a page that is released
++ * early defeats the emulation): only a page that is written thousands of times within a second counts as busy. */
++#define WX_HOT_LIMIT      4096        /* default: this many faults on one page ... */
++#define WX_HOT_WINDOW_NS  1000000000ULL /* ... within this time release the page (WINE_RWX_WX_HOT_LIMIT, 0 = never) */
+ 
+ static struct { char *page; BYTE vprot; } wx_released[WX_RELEASED_MAX];
+ static struct { char *page; unsigned int count; unsigned long long start; } wx_hot[WX_HOT_MAX];
+@@ -2088,6 +2091,28 @@ BOOL virtual_wx_fault( void *addr, BOOL in_syscall, BOOL carrier, BOOL *step )
+     return handled;
+ }
+ 
++/* a second page fault while a page is open for one store: the instruction touches two protected pages (a
++ * store that straddles a page boundary, a string instruction, a vector store) and could never complete with one
++ * page open at a time, it would fault between the two pages forever. Release the open page for good (counted
++ * with the busy pages), the new fault is then handled on its own. A fault on the same page just closes it. */
++void virtual_wx_cross( void *addr )
++{
++    struct ntdll_thread_data *td = ntdll_get_thread_data();
++    char *page = td->wx_page;
++
++    if (!page) return;
++    if (page == ROUND_ADDR( addr, host_page_mask ))
++    {
++        virtual_wx_step();
++        return;
++    }
++    td->wx_page = NULL;
++    mutex_lock( &virtual_mutex );
++    wx_stats.hot++;
++    wx_release( page, get_host_page_vprot( page ) );
++    mutex_unlock( &virtual_mutex );
++}
++
+ /* the single-step trap after the store: close the page again */
+ void virtual_wx_step(void)
+ {
+-- 
+2.55.0
+

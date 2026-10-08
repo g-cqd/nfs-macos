@@ -4,7 +4,8 @@ import LauncherCore
 /// Keeps the Wine experiment switches in one small file of this app's own folder.
 ///
 /// A file that is missing, oversized, not valid, of another version or holding a value this app
-/// does not offer is never an error: every switch is off and the player is told why.
+/// does not offer is never an error: the defaults apply (the workaround on, the rest off) and the
+/// player is told why.
 package struct NFS2015WineExperimentsStore: Sendable {
   package static let fileName = "experiments.json"
   static let sizeLimit = 4096
@@ -21,7 +22,7 @@ package struct NFS2015WineExperimentsStore: Sendable {
 
   package var location: URL { support.appendingPathComponent(Self.fileName) }
 
-  /// The saved choice, or every switch off, never throwing.
+  /// The saved choice, or the defaults, never throwing.
   package func load() -> Loaded {
     let url = location
     guard FileManager.default.fileExists(atPath: url.path) else {
@@ -37,7 +38,8 @@ package struct NFS2015WineExperimentsStore: Sendable {
         preference: .standard,
         notice: """
           The saved Wine experiment choice could not be used (\(error.localizedDescription)), so \
-          every experiment is off. Press Reset to clear it, or choose again and save.
+          the defaults apply: the Rosetta workaround on, the experiments off. Press Reset to clear \
+          it, or choose again and save.
           """)
     }
   }
@@ -64,7 +66,7 @@ package struct NFS2015WineExperimentsStore: Sendable {
     return true
   }
 
-  /// Forgets the saved choice, which means every switch off, including a file that could not be
+  /// Forgets the saved choice, which means the defaults, including a file that could not be
   /// used.
   /// - Returns: Whether a file was removed.
   package func reset() throws(LauncherError) -> Bool {

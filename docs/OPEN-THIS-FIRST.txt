@@ -1,11 +1,44 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
-Newest, with the workaround for the crash to test:
-  Need for Speed Bundled 20261008-dcf3a4d-0008.app    (the complete app: game and EA app inside)
-  Need for Speed Import 20261008-dcf3a4d-0008.app     (no game, no EA app: uses your own Windows folder)
-Earlier, still here: the "-0007" apps (5864653), the "-0005" apps (8b9bcba) and the "-rebuilt" apps (da146a2).
+Newest (the Rosetta workaround is ON by default):
+  Need for Speed Bundled 20261008-<commit>-0009.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-<commit>-0009.app     (no game, no EA app: uses your own Windows folder)
+Earlier, still here: the "-0008" apps (dcf3a4d) and the "-0007" apps (5864653).
 
-WHAT IS DIFFERENT IN THE "-0008" APPS (added 2026-10-08)
+WHAT IS DIFFERENT IN THE "-0009" APPS (added 2026-10-08)
+They are the "-0008" apps with:
+ 1. A Wine runtime with one more patch (0009); only one Wine file differs (ntdll.so). It fixes what your tests of "-0008" found:
+    - With all four switches on, EA's own browser process died of an unexpected single-step exception: the workaround left the CPU's
+      single-step flag set. Fixed (also for threads that Wine suspends and reads).
+    - With only the workaround on, the game still crashed at 0x1B30159 because the workaround gave up on the very page it was meant to
+      guard (a limit of 300 stores in 100 milliseconds released it while it was only being filled). The limit is now 4096 stores per
+      second, and a store across two pages now works.
+    It has NOT been tried in the game since, and a page written thousands of times a second is still released again.
+ 2. The workaround is now ON by default, as you asked: a new or reset installation starts with it on, and nothing needs to be saved.
+    Settings > "Wine: Rosetta workaround and experiments": the first toggle, "Rosetta 2 self-modifying-code workaround, on by default
+    (WINE_RWX_WX_EMULATION=1)", turns it off (then press "Save"; the next Play uses that; an "off" you saved stays off). The text there says it
+    is a workaround for a bug in Rosetta 2 and can be turned off if the game or the EA app misbehaves.
+ 3. The other three toggles (two page re-toggles and the page trace) stay OFF and are marked "Experiment, not needed" or "only records".
+ 4. Every crash report has the section "RWX W^X emulation", and the line "wine experiment switches:" says whether the workaround was the
+    default, saved, or overridden, or off. The session log (Open Log) gets "RWX W^X emulation: ..." at the end of a Play.
+Defaults: MetalFX off, x87 sidecar off, the workaround ON, the three experiments off. Same app identity and same folder as the earlier apps,
+so a Windows folder an earlier app made is reused, and an experiments choice saved by "-0008" is kept (a saved "off" stays off; if you saved
+the three experiments, press "Reset" to go back to the defaults).
+NOT checked: that the game now runs (that is the test below), what the workaround costs in the game, that the EA app is fine with it for
+longer than a first start, a 32-bit program (the workaround is for 64-bit programs only). The EA app's update-restart problem is not fixed.
+
+THE TEST FOR THE "-0009" APPS (several launches; quit the app and the EA app between runs)
+ (F) MetalFX ON at 1.33 or 1.5 (Settings > MetalFX group: switch on, choose the factor, press "Save MetalFX"), everything else as shipped:
+     press Play with the workaround ON (the default; "Reset" in the experiments group makes sure). Play until it crashes or for the same
+     time each run, at least five runs. Then, for comparison, the same with the workaround turned OFF and saved.
+ What to send back, per run: the crash report if there was a crash (Play tab > "Reveal in Finder"; folder
+ ~/Library/Application Support/NFS2015Mac/Logs), and from the newest session-*.log the lines "wine-rwx:" and "RWX W^X emulation:". Say
+ whether the game ran normally and for how long, and whether the EA app window behaved. The "wine-rwx: pid=... stores=..." line is printed when
+ a Wine process EXITS; after a crash there may be none for the crashed process.
+ Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=0 (or 1) and, only for a developer, NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release)
+ in front of the session helper command (docs/NFS2015.md section 20.5).
+
+WHAT WAS DIFFERENT IN THE "-0008" APPS (added 2026-10-08; kept as it was: where it says the workaround is OFF by default, the "-0009" apps differ, they have it ON)
 They are the "-0007" apps with:
  1. A Wine runtime with one more patch (0008); only one Wine file differs (ntdll.so). Why: the crash at 0x1B30159 turned out to be a
     defect of Rosetta 2 itself, reproduced in a small program with and without Wine: the game's protection code builds an instruction
@@ -39,7 +72,7 @@ THE TEST FOR THE "-0008" APPS (several launches; quit the app and the EA app bet
  NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release) in front of the session helper command (docs/NFS2015.md section 20.5).
  To turn everything off again: "Reset" in the Wine experiments group.
 
-WHAT WAS CHECKED ON THE "-0008" BUILD (on the Mac that built it)
+WHAT WAS CHECKED ON THE "-0008" BUILD (on the Mac that built it; the "-0009" check is in docs/NFS2015.md section 27.6)
 Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's
 files, Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account,
 session or machine file and no D3DMetal files are inside; the Swift tests (917), the build with warnings as errors and 19 packaging

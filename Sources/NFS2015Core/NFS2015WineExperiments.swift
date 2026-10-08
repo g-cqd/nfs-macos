@@ -3,9 +3,12 @@ import LauncherCore
 
 /// Which of the Wine experiment switches the next Play sets (`WineExperimentSwitches`).
 ///
-/// All three are off by default, and a missing, damaged or unrecognized saved file means off. They
-/// exist to find out why `NFS16.exe` faults at `0x1B30159`; nothing about them is known to help.
-/// The file belongs to this app; Wine reads only the environment variables the choice becomes.
+/// The Rosetta self-modifying-code workaround (`WINE_RWX_WX_EMULATION`) is ON by default: the game
+/// faults at `0x1B30159` because of a defect in Rosetta 2 that the workaround avoids in tests. The
+/// other three (the two page re-toggles and the page trace) are experiments and OFF by default;
+/// nothing is known to show that they help. A missing, damaged or unrecognized saved file means
+/// these defaults, and a saved choice of "off" is kept. The file belongs to this app; Wine reads
+/// only the environment variables the choice becomes.
 package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
   package static let current = 1
   package static let standard = Self()
@@ -21,7 +24,7 @@ package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
 
   package init(
     flushToggle: Bool = false, protectToggle: Bool = false, tracePage: Bool = false,
-    rwxWxEmulation: Bool = false
+    rwxWxEmulation: Bool = true
   ) {
     self.flushToggle = flushToggle
     self.protectToggle = protectToggle
@@ -43,8 +46,9 @@ package struct NFS2015WineExperimentsPreference: Codable, Equatable, Sendable {
     flushToggle = try container.decode(Bool.self, forKey: .flushToggle)
     protectToggle = try container.decode(Bool.self, forKey: .protectToggle)
     tracePage = try container.decode(Bool.self, forKey: .tracePage)
-    // A file the -0007 apps wrote has no such key: that is off, not a damaged file.
-    rwxWxEmulation = try container.decodeIfPresent(Bool.self, forKey: .rwxWxEmulation) ?? false
+    // A file the -0007 apps wrote has no such key: the player never chose, so the default
+    // applies (on), and the file is not damaged. A saved `false` is the player's choice.
+    rwxWxEmulation = try container.decodeIfPresent(Bool.self, forKey: .rwxWxEmulation) ?? true
   }
 
   package func encode(to encoder: any Encoder) throws {
@@ -62,7 +66,7 @@ package struct NFS2015WineExperimentsRequest: Codable, Equatable, Sendable {
   package enum Action: String, Codable, Sendable {
     /// Keep `preference`.
     case save
-    /// Forget the saved preference, which means every switch off.
+    /// Forget the saved preference, which means the defaults: the workaround on, the rest off.
     case reset
   }
 
@@ -90,7 +94,7 @@ package typealias NFS2015WineExperimentsOutcome = NFS2015MetalFXOutcome
 package struct NFS2015WineExperimentsState: Codable, Equatable, Sendable {
   /// What the next Play will use, before any developer override.
   package var preference: NFS2015WineExperimentsPreference
-  /// Set when the saved file could not be used, so every switch is off.
+  /// Set when the saved file could not be used, so the defaults apply.
   package var notice: String?
   package var outcome: NFS2015WineExperimentsOutcome?
 
@@ -108,6 +112,8 @@ package struct NFS2015WineExperimentsState: Codable, Equatable, Sendable {
 /// developer's `NFS2015_AB_WINE_*` overrides. A switch an override names wins, on or off.
 package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
   package enum Source: Equatable, Sendable {
+    /// Nothing was chosen: the shipped default.
+    case standard
     case preference
     case experiment
   }
@@ -115,7 +121,8 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
   /// The environment variables to set; empty when every switch is off.
   package let environment: [String: String]
   private let sources: [String: Source]
-  /// Switches an override turned off that the saved preference had on.
+  /// Switches that are off although the default or the saved choice had them on, or that the
+  /// player saved off, each with its reason.
   private let overriddenOff: [String]
 
   package init(preference: NFS2015WineExperimentsPreference, experiment: NFS2015ExperimentOverrides)
@@ -123,17 +130,20 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
     var environment: [String: String] = [:]
     var sources: [String: Source] = [:]
     var off: [String] = []
-    func toggle(_ name: String, saved: Bool, forced: Bool?) {
+    let isDefault = preference == .standard
+    func toggle(_ name: String, saved: Bool, forced: Bool?, defaultOn: Bool = false) {
       if let forced {
         if forced {
           environment[name] = "1"
           sources[name] = .experiment
         } else if saved {
-          off.append(name)
+          off.append("\(name) off (experiment override)")
         }
       } else if saved {
         environment[name] = "1"
-        sources[name] = .preference
+        sources[name] = isDefault ? .standard : .preference
+      } else if defaultOn {
+        off.append("\(name) off (saved setting)")
       }
     }
     toggle(
@@ -144,14 +154,16 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
       forced: experiment.protectToggle)
     toggle(
       WineExperimentSwitches.rwxWxEmulation, saved: preference.rwxWxEmulation,
-      forced: experiment.rwxWxEmulation)
+      forced: experiment.rwxWxEmulation, defaultOn: true)
     if let limit = experiment.rwxHotLimit {
       environment[WineExperimentSwitches.rwxHotLimit] = limit
       sources[WineExperimentSwitches.rwxHotLimit] = .experiment
     }
     if let window = experiment.tracePage {
       if window == NFS2015ExperimentOverrides.off {
-        if preference.tracePage { off.append(WineExperimentSwitches.tracePage) }
+        if preference.tracePage {
+          off.append("\(WineExperimentSwitches.tracePage) off (experiment override)")
+        }
       } else {
         environment[WineExperimentSwitches.tracePage] = window
         sources[WineExperimentSwitches.tracePage] = .experiment
@@ -182,9 +194,15 @@ package struct NFS2015WineExperimentsChoice: Equatable, Sendable {
   package var line: String {
     var parts = WineExperimentSwitches.names.compactMap { name -> String? in
       guard let value = environment[name], let source = sources[name] else { return nil }
-      return "\(name)=\(value) (\(source == .preference ? "saved setting" : "experiment override"))"
+      let why =
+        switch source {
+        case .standard: "default"
+        case .preference: "saved setting"
+        case .experiment: "experiment override"
+        }
+      return "\(name)=\(value) (\(why))"
     }
-    parts += overriddenOff.sorted().map { "\($0) off (experiment override)" }
-    return parts.isEmpty ? "none (all off, the default)" : parts.joined(separator: ", ")
+    parts += overriddenOff.sorted()
+    return parts.isEmpty ? "none (all off)" : parts.joined(separator: ", ")
   }
 }

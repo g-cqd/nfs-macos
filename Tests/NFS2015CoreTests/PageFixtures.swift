@@ -93,3 +93,14 @@ enum PageFixtures {
     return lines
   }
 }
+
+extension NFS2015WineExperimentsPreference {
+  /// Every switch off, the workaround too: what the apps before `-0009` shipped as the default.
+  static let allOff = Self(rwxWxEmulation: false)
+}
+
+extension NFS2015WineExperimentsChoice {
+  /// No switch set at all: the saved workaround off, no override.
+  static let allOff = NFS2015WineExperimentsChoice(
+    preference: .allOff, experiment: NFS2015ExperimentOverrides())
+}
