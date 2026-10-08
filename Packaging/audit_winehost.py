@@ -134,7 +134,7 @@ def audit_winehost(app, now=None, tool=run_tool, expiry=certificate_expiry):
     except (OSError, ValueError) as error:
         return report, problems + ['The helper signature cannot be read: ' + str(error)]
     report['signature'] = 'ad-hoc' if ad_hoc else 'Developer ID'
-    expected = signing_entitlements(WINEHOST_APP, ad_hoc)
+    expected = signing_entitlements(WINEHOST_APP, '-' if ad_hoc else 'Developer ID')
     if signed != expected:
         missing = sorted(set(expected) - set(signed))
         extra = sorted(set(signed) - set(expected))

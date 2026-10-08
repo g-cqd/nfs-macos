@@ -80,7 +80,7 @@ with TemporaryDirectory() as temporary:
     assert decoded['Entitlements']['com.apple.developer.cross-architecture-support'] is True
 
     # An ad-hoc helper signed by the project's policy passes, and says what it leaves out.
-    ad_hoc = signing_entitlements(APP_RELATIVE, ad_hoc=True)
+    ad_hoc = signing_entitlements(APP_RELATIVE, '-')
     assert 'com.apple.developer.cross-architecture-support' not in ad_hoc
     (root / 'a').mkdir()
     app = make_app(root / 'a', profile, ad_hoc)
@@ -89,7 +89,7 @@ with TemporaryDirectory() as temporary:
     assert report['signature'] == 'ad-hoc' and 'omitted' in report['note']
 
     # An ad-hoc helper that claims the restricted entitlement is rejected: it would be killed.
-    claimed = signing_entitlements(APP_RELATIVE, ad_hoc=False)
+    claimed = signing_entitlements(APP_RELATIVE, 'Developer ID')
     (root / 'b').mkdir()
     _, problems = audit_winehost(make_app(root / 'b', profile, claimed), NOW)
     assert any('extra' in text and 'cross-architecture-support' in text for text in problems), problems
@@ -116,7 +116,7 @@ with TemporaryDirectory() as temporary:
     assert any('cannot be decoded' in text for text in problems), problems
 
     # Developer ID: the audit expects the full set and the profile's certificate to match.
-    full = signing_entitlements(APP_RELATIVE, ad_hoc=False)
+    full = signing_entitlements(APP_RELATIVE, 'Developer ID')
     fingerprint = hashlib.sha1(certificate[2]).hexdigest()
     assert profile_problems(body, full, NOW, fingerprint) == []
     cases = {
