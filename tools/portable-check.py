@@ -120,8 +120,7 @@ def verify_client_layer(app, support, name, forbidden_text):
     user = (prefix / 'user.reg').read_text(errors='replace')
     for key, what in [('System\\ControlSet001\\Services\\EABackgroundService', 'the EABackgroundService registration'),
                       ('Software\\Electronic Arts\\EA Desktop', 'the EA Desktop install record'),
-                      ('Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{b3468fcd-fa10-4a55-8d82-bed839e8189e}',
-                       'the EA app uninstall entry'),
+                      (uninstall_key(app), 'the EA app uninstall entry'),
                       ('Software\\Classes\\origin2\\shell\\open\\command', 'the origin2 protocol handler')]:
         check(has_key(system, key), name + ': the prefix registry holds ' + what)
     check(has_key(user, 'Software\\Wine\\Mac Driver'), name + ': the display setting is still in the user hive')
@@ -149,9 +148,17 @@ def verify_client_layer(app, support, name, forbidden_text):
     check(not quarantine, name + ': no file of the client carries a quarantine mark', ', '.join(quarantine[:3]))
 
 
+def uninstall_key(app):
+    """The EA app's uninstall key as the layer carries it: its MSI product code changes with each client version."""
+    part = (app / 'Contents/Resources/ClientLayer/registry/system.reg.part').read_text(errors='replace')
+    prefix = '[Software\\\\Wow6432Node\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall\\\\'
+    keys = [line[1:line.index(']')].replace('\\\\', '\\') for line in part.splitlines() if line.startswith(prefix)]
+    return keys[0] if len(keys) == 1 else 'Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\<exactly one expected, found %d>' % len(keys)
+
+
 def has_key(hive_text, key):
     """Whether a Wine hive file has the key; Wine writes each backslash of a key path doubled."""
-    return '[' + key.replace('\\', '\\\\') + '] ' in hive_text
+    return ('[' + key.replace('\\', '\\\\') + '] ').lower() in hive_text.lower()
 
 
 def verify_seed(app, support, name, forbidden_text):
