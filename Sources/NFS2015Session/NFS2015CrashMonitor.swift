@@ -19,6 +19,9 @@ final class NFS2015CrashMonitor: Sendable {
     var offset: UInt64 = 0
     var reportedFaults = 0
     var reports = 0
+    /// The fault count a report was last put off for, to give the runtime's crash block one
+    /// more scan to arrive.
+    var deferredFaults = 0
     var notice: NFS2015CrashNotice?
     var started = false
     var stopped = false
@@ -59,6 +62,9 @@ final class NFS2015CrashMonitor: Sendable {
     }
   }
 
+  /// One line about the `wine-rwx:` lines the log held so far, or nil when it held none.
+  var rwxSummary: String? { state.withLock { $0.digest.rwx.summary } }
+
   /// The newest report this monitor wrote.
   var notice: NFS2015CrashNotice? { state.withLock { $0.notice } }
 
@@ -75,6 +81,15 @@ final class NFS2015CrashMonitor: Sendable {
       if final { state.digest.finish() }
       let faults = state.digest.faults.count
       guard faults > state.reportedFaults, state.reports < Self.reportLimit else { return nil }
+      // A runtime with patch 0005 prints its block right after the fault line, and a scan can
+      // fall between the two. Wait one scan for the block rather than write a report without it;
+      // a runtime without the patch is never made to wait.
+      if context.pins.expectsCrashBlock, !final, state.deferredFaults != faults,
+        state.digest.hasOpenCrashBlock || state.digest.crashBlocks.count < faults
+      {
+        state.deferredFaults = faults
+        return nil
+      }
       var digest = state.digest
       if let newest = debugFiles().last, let tail = NFS2015LogFile.tail(newest, bytes: 262_144) {
         digest.setTrace(fromText: tail)

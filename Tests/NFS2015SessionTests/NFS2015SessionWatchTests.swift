@@ -282,6 +282,52 @@ struct NFS2015SessionWatchTests {
   }
 
   @Test
+  func `carries out a Wine experiment request and reads the choice the next Play will use`() throws
+  {
+    let fixture = try Fixture()
+    defer { fixture.remove() }
+    func options(_ request: String) throws -> (SessionOptions, URL) {
+      let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+      try Data(request.utf8).write(to: url)
+      return (
+        try SessionOptions(arguments: [
+          "/A.app", "--support", "/tmp/p", "--configure-experiments", "--request", url.path,
+        ]), url
+      )
+    }
+    let plain = try SessionOptions(arguments: ["/A.app", "--support", "/tmp/p", "--play"])
+    #expect(fixture.session.readExperimentsState(for: plain) == NFS2015WineExperimentsState())
+    // A fresh support folder starts with the workaround on and no notice.
+    #expect(fixture.session.readExperimentsState(for: plain).preference.rwxWxEmulation)
+    #expect(fixture.session.readExperimentsState(for: plain).notice == nil)
+    let body = String(
+      decoding: try JSONEncoder().encode(
+        NFS2015WineExperimentsRequest(
+          action: .save,
+          preference: NFS2015WineExperimentsPreference(flushToggle: true, tracePage: true))),
+      as: UTF8.self)
+    let (save, url) = try options(body)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let saved = fixture.session.readExperimentsState(for: save)
+    #expect(saved.outcome == .saved && saved.preference.flushToggle && saved.preference.tracePage)
+    let later = fixture.session.readExperimentsState(for: plain)
+    #expect(later.preference.flushToggle && later.outcome == nil && later.notice == nil)
+    let (broken, brokenURL) = try options("not json")
+    defer { try? FileManager.default.removeItem(at: brokenURL) }
+    #expect(fixture.session.readExperimentsState(for: broken).outcome?.refusal != nil)
+    // A saved off is respected by a later Play.
+    let offBody = String(
+      decoding: try JSONEncoder().encode(
+        NFS2015WineExperimentsRequest(
+          action: .save, preference: NFS2015WineExperimentsPreference(rwxWxEmulation: false))),
+      as: UTF8.self)
+    let (off, offURL) = try options(offBody)
+    defer { try? FileManager.default.removeItem(at: offURL) }
+    #expect(fixture.session.readExperimentsState(for: off).outcome == .saved)
+    #expect(!fixture.session.readExperimentsState(for: plain).preference.rwxWxEmulation)
+  }
+
+  @Test
   func `a request that cannot be read is refused, not a failure`() throws {
     let fixture = try Fixture()
     defer { fixture.remove() }

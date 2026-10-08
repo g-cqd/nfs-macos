@@ -16,6 +16,8 @@ enum NFS2015Operation: Sendable, Equatable {
   /// Keeps, or forgets, the x87 sidecar choice in this app's own folder; see
   /// `NFS2015SidecarRequest`.
   case configureSidecar(NFS2015SidecarRequest)
+  /// Keeps, or forgets, the Wine experiment switches; see `NFS2015WineExperimentsRequest`.
+  case configureExperiments(NFS2015WineExperimentsRequest)
   case chooseInstallation(URL)
   case enableController
   /// Runs the EA app installer the player downloaded, in the app's own Windows folder.

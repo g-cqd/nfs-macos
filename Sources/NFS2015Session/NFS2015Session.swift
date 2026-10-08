@@ -38,6 +38,9 @@ struct NFS2015Session {
       let sidecarState = readSidecarState(for: options)
       let sidecar = NFS2015SidecarChoice(
         preference: sidecarState.preference, experiment: experiment)
+      let experimentsState = readExperimentsState(for: options)
+      let wineSwitches = NFS2015WineExperimentsChoice(
+        preference: experimentsState.preference, experiment: experiment)
       let diagnosticsStore = NFS2015DiagnosticsStore(support: paths.support)
       var diagnostics = diagnosticsState(for: options, store: diagnosticsStore)
       let manifest = try BundleManifest.read(
@@ -59,6 +62,8 @@ struct NFS2015Session {
         for reason in retinaPlan.reasons { print("Display safety: \(reason)") }
         print("x87 sidecar: \(sidecar.line).")
         if let notice = sidecarState.notice { print(notice) }
+        print("Wine experiment switches: \(wineSwitches.line).")
+        if let notice = experimentsState.notice { print(notice) }
       }
       func makeRuntime(debugChannels: String = LaunchEnvironment.silentDebugChannels) -> WineRuntime
       {
@@ -66,7 +71,8 @@ struct NFS2015Session {
           paths: paths, output: output, tuning: tuning, renderers: manifest.rendererSelection,
           managedRuntime: manifest.managed,
           environments: NFS2015MetalFX.environment(for: metalFX.preference).map { [$0] } ?? [],
-          debugChannels: debugChannels, usesSidecar: sidecar.enabled)
+          debugChannels: debugChannels, usesSidecar: sidecar.enabled,
+          experiments: wineSwitches.environment)
       }
       let runtime = makeRuntime()
       var readiness: NFS2015Readiness
@@ -121,7 +127,8 @@ struct NFS2015Session {
       diagnostics.displayNote = retinaPlan.reasons.joined(separator: " ")
       try snapshot(
         readiness: readiness, store: store, plan: plan, owned: owned, outcome: settingsOutcome,
-        metalFX: metalFX, diagnostics: diagnostics, sidecar: sidecarState)
+        metalFX: metalFX, diagnostics: diagnostics, sidecar: sidecarState,
+        experiments: experimentsState)
       guard options.action == "--play" else { return 0 }
       guard let install = readiness.install else {
         throw LauncherError.operation(
@@ -139,8 +146,8 @@ struct NFS2015Session {
       if adopted != nil {
         print(
           """
-          The EA app that is already running keeps the x87 sidecar setting it was started with. \
-          Quit it and press Play again to apply a changed setting.
+          The EA app that is already running keeps the x87 sidecar and Wine experiment settings \
+          it was started with. Quit it and press Play again to apply a changed setting.
           """)
       }
       let pressure = MemoryPressure.current()?.notice
@@ -158,7 +165,7 @@ struct NFS2015Session {
         context: crashContext(
           manifest: manifest, facts: facts, plan: safety, seeded: seeded, metalFX: metalFX,
           diagnostics: diagnostics.preference, tuning: tuning, experiment: experiment,
-          sidecar: sidecar, settings: try store.inspect().settings))
+          sidecar: sidecar, wineSwitches: wineSwitches, settings: try store.inspect().settings))
       let outcome: PlayOutcome
       do {
         outcome = try play(
@@ -177,7 +184,8 @@ struct NFS2015Session {
       case .finished(let status):
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, metalFX: metalFX,
-          diagnostics: diagnostics, sidecar: sidecarState, crash: crash)
+          diagnostics: diagnostics, sidecar: sidecarState, experiments: experimentsState,
+          crash: crash)
         return status
       case .notReady(let reason):
         var notice = [reason, pressure].compactMap { $0 }.joined(separator: " ")
@@ -189,7 +197,8 @@ struct NFS2015Session {
         print(notice)
         try snapshot(
           readiness: readiness, store: store, plan: plan, owned: owned, notice: notice,
-          metalFX: metalFX, diagnostics: diagnostics, sidecar: sidecarState, crash: crash)
+          metalFX: metalFX, diagnostics: diagnostics, sidecar: sidecarState,
+          experiments: experimentsState, crash: crash)
         return 0
       }
     }
@@ -230,6 +239,24 @@ struct NFS2015Session {
     }
     let loaded = store.load()
     return NFS2015SidecarState(
+      preference: loaded.preference, notice: loaded.notice, outcome: outcome)
+  }
+
+  /// Carries out a Wine experiment request, if this is one, and reads the choice the launch will use.
+  ///
+  /// A choice that cannot be read is the defaults with a notice, never a failure.
+  func readExperimentsState(for options: SessionOptions) -> NFS2015WineExperimentsState {
+    let store = NFS2015WineExperimentsStore(support: paths.support)
+    var outcome: NFS2015WineExperimentsOutcome?
+    if options.action == "--configure-experiments", let request = options.request {
+      do {
+        let requested = try JSONDecoder().decode(
+          NFS2015WineExperimentsRequest.self, from: BoundedFile.read(request, limit: 4096))
+        outcome = store.apply(requested)
+      } catch { outcome = .refused(error.localizedDescription) }
+    }
+    let loaded = store.load()
+    return NFS2015WineExperimentsState(
       preference: loaded.preference, notice: loaded.notice, outcome: outcome)
   }
 
@@ -522,7 +549,7 @@ struct NFS2015Session {
     readiness: NFS2015Readiness, store: NFS2015SettingsStore, plan: StoreClientPlan, owned: Bool,
     outcome: NFS2015SettingsOutcome? = nil, notice: String? = nil, metalFX: NFS2015MetalFXState,
     diagnostics: NFS2015DiagnosticsState, sidecar: NFS2015SidecarState,
-    crash: NFS2015CrashNotice? = nil
+    experiments: NFS2015WineExperimentsState, crash: NFS2015CrashNotice? = nil
   ) throws {
     let installed = readiness.install
     var version = installed?.clientVersion
@@ -537,7 +564,7 @@ struct NFS2015Session {
       optionsDigest: options.digest, optionsProblem: options.problem, backups: options.backups,
       outcome: outcome, ownsWindowsFolder: owned ? true : nil,
       setup: owned ? readiness.setup : nil, notice: notice, metalFX: metalFX,
-      diagnostics: diagnostics, sidecar: sidecar, crashReport: crash
+      diagnostics: diagnostics, sidecar: sidecar, experiments: experiments, crashReport: crash
     ).write(to: paths.support.appendingPathComponent("launcher-state.json"))
   }
 }

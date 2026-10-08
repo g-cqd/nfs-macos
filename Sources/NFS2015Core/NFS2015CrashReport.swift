@@ -18,6 +18,8 @@ package struct NFS2015CrashContext: Sendable {
   package var experiment: NFS2015ExperimentOverrides
   /// Whether the x87 sidecar was attached to the Wine session of this launch, and why.
   package var sidecar: NFS2015SidecarChoice
+  /// The Wine experiment switches set for this launch, and why.
+  package var wineSwitches: NFS2015WineExperimentsChoice
 
   /// - Parameter sidecar: The choice the launch used; when omitted, the default joined with
   ///   `experiment`.
@@ -26,7 +28,8 @@ package struct NFS2015CrashContext: Sendable {
     displayPlan: NFS2015DisplaySafetyPlan, seed: NFS2015FirstRunOptions.Outcome?,
     metalFX: NFS2015MetalFXPreference, diagnostics: NFS2015DiagnosticsPreference,
     diagnosticLog: Bool, settings: NFS2015Settings, tuning: [String: String],
-    experiment: NFS2015ExperimentOverrides, sidecar: NFS2015SidecarChoice? = nil
+    experiment: NFS2015ExperimentOverrides, sidecar: NFS2015SidecarChoice? = nil,
+    wineSwitches: NFS2015WineExperimentsChoice? = nil
   ) {
     self.pins = pins
     self.host = host
@@ -41,6 +44,9 @@ package struct NFS2015CrashContext: Sendable {
     self.experiment = experiment
     self.sidecar =
       sidecar ?? NFS2015SidecarChoice(preference: .standard, experiment: experiment)
+    self.wineSwitches =
+      wineSwitches
+      ?? NFS2015WineExperimentsChoice(preference: .standard, experiment: experiment)
   }
 }
 
@@ -52,7 +58,7 @@ package struct NFS2015CrashContext: Sendable {
 /// how busy the Mac was. It holds no names, no EA data of any kind and no game content; the text
 /// is passed through `NFS2015Redaction.scrubReport` before it is kept.
 package struct NFS2015CrashReport: Equatable, Sendable {
-  static let sizeLimit = 65_536
+  static let sizeLimit = 131_072
 
   package let text: String
   package let faultCount: Int
@@ -80,6 +86,7 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       "wineserver reported a crash \(digest.serverCrashes) time(s); game launches in this session: "
         + "\(digest.launches)")
     lines += Self.faultLines(findings)
+    lines += Self.crashBlockSection(digest: digest, context: context)
     lines.append("")
     lines += Self.displaySection(digest: digest, context: context)
     lines.append("")
@@ -96,6 +103,7 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       .map { "\($0.key)=\($0.value)" }.joined(separator: " ")
     lines.append("runtime switches in force: \(switches.isEmpty ? "none" : switches)")
     lines.append("experiment overrides: \(context.experiment.summary)")
+    lines.append("wine experiment switches: \(context.wineSwitches.line)")
     lines.append("")
     lines.append("== Game options (catalog values only) ==")
     let values = context.settings.values.sorted { $0.key < $1.key }
@@ -118,6 +126,8 @@ package struct NFS2015CrashReport: Equatable, Sendable {
       lines.append("== Last exception trace lines (diagnostic Wine log) ==")
       lines += digest.trace
     }
+    lines += Self.rwxSection(digest: digest, context: context)
+    lines += Self.pageTraceSection(digest: digest, context: context)
     var body = NFS2015Redaction.scrubReport(lines.joined(separator: "\n"))
     if body.utf8.count > Self.sizeLimit {
       body = String(decoding: body.utf8.prefix(Self.sizeLimit), as: UTF8.self) + "\n[cut]"
@@ -149,6 +159,101 @@ package struct NFS2015CrashReport: Equatable, Sendable {
         "the same place, nfs16+0x\(String(rva, radix: 16, uppercase: true)), faulted "
           + "\(hits.count) times in this session")
     }
+    return lines
+  }
+
+  /// The `wine-crash:` blocks of a runtime that prints them. Nothing for a runtime that does not,
+  /// so a report from an older runtime reads exactly as before.
+  private static func crashBlockSection(digest: NFS2015LogDigest, context: NFS2015CrashContext)
+    -> [String]
+  {
+    let blocks = digest.crashBlocks
+    guard !blocks.isEmpty || context.pins.expectsCrashBlock else { return [] }
+    var lines = ["", "== Crash context (wine-crash block) =="]
+    if blocks.isEmpty {
+      lines.append(
+        "this runtime prints a crash block when a program faults, and none was found in the log")
+    }
+    // The first block and the last two carry the detail; a log full of blocks must not push the
+    // build and Mac sections out of a report of bounded size.
+    let shown = Set(blocks.indices.filter { $0 == 0 || $0 >= blocks.count - 2 })
+    if shown.count < blocks.count {
+      lines.append("\(blocks.count) blocks in the log; the first and the last two are shown")
+    }
+    for (index, block) in blocks.enumerated() where shown.contains(index) {
+      lines.append("block \(index + 1) of \(blocks.count): " + block.reportLines[0])
+      lines += block.reportLines.dropFirst()
+    }
+    return lines
+  }
+
+  /// The `wine-rwx:` lines of a session that set `WINE_RWX_WX_EMULATION`, as numbers. Nothing for
+  /// a session without the switch and without lines.
+  private static func rwxSection(digest: NFS2015LogDigest, context: NFS2015CrashContext)
+    -> [String]
+  {
+    let rwx = digest.rwx
+    guard !rwx.isEmpty || context.wineSwitches.emulatesWriteXorExecute else { return [] }
+    var lines = ["", "== RWX W^X emulation (wine-rwx lines) =="]
+    if rwx.isEmpty {
+      lines.append(
+        "WINE_RWX_WX_EMULATION was set for this launch, and the log holds no wine-rwx line "
+          + "(a process prints its counters when it exits, so a process that was killed prints none)"
+      )
+      return lines
+    }
+    for activation in rwx.activations {
+      lines.append(
+        "process \(activation.process) had its first page under the emulation at "
+          + "0x\(String(activation.firstPage, radix: 16))")
+    }
+    for counters in rwx.counters {
+      lines.append(
+        "process \(counters.process) at exit: \(counters.stores) stores let through; pages "
+          + "released: \(counters.releasedHost) after host-code faults, \(counters.releasedCarrier) "
+          + "for kernel writes, \(counters.releasedHot) for being written too often")
+    }
+    lines += rwx.pageLog.reportLines
+    if let window = context.wineSwitches.rwxLogWindow, rwx.pageLog.isEmpty {
+      lines.append(
+        "WINE_RWX_WX_LOG was set to \(window) and the log holds no page line: no page of that window "
+          + "was taken over, left alone or released in a process whose lines reached this log")
+    }
+    if rwx.activations.count > rwx.counters.count {
+      lines.append(
+        "\(rwx.activations.count) active and \(rwx.counters.count) exit lines are listed; "
+          + "a process that died does not print an exit line")
+    }
+    return lines
+  }
+
+  /// The `wine-trace:` lines of a session that set `WINE_TRACE_PAGE`, as numbers: the newest
+  /// events before the last fault. Nothing for a session without the switch and without lines.
+  private static func pageTraceSection(digest: NFS2015LogDigest, context: NFS2015CrashContext)
+    -> [String]
+  {
+    let trace = digest.pageTrace
+    guard !trace.isEmpty || context.wineSwitches.tracesPages else { return [] }
+    var lines = ["", "== Page trace (wine-trace lines) =="]
+    if trace.isEmpty {
+      lines.append("WINE_TRACE_PAGE was set for this launch, and the log holds no wine-trace line")
+      return lines
+    }
+    for window in trace.windows {
+      lines.append(
+        "window 0x\(String(window.start, radix: 16)) to 0x\(String(window.end, radix: 16)), "
+          + "announced by process \(window.process)")
+    }
+    let shown = trace.beforeLastFault
+    if shown.isEmpty {
+      lines.append("no event before the last fault; \(trace.afterLastFault) after it")
+      return lines
+    }
+    lines.append(
+      "\(trace.totalBeforeLastFault) events before the last fault: the newest \(shown.count) are "
+        + "shown, \(trace.droppedBeforeLastFault) earlier dropped; \(trace.afterLastFault) came "
+        + "after the fault")
+    lines += shown.map { "  " + $0.reportLine }
     return lines
   }
 
