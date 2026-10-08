@@ -70,12 +70,20 @@ the audit reports it. An ad-hoc helper therefore runs, but without the 4 GiB add
 arm64 route is only meaningful in a Developer ID build. Other ad-hoc paths still get no
 entitlements, as before.
 
+The team and bundle identifiers live in one place, `WINEHOST_TEAM` and
+`WINEHOST_BUNDLE_IDENTIFIER` in `Packaging/signing_policy.py`; the scripts and tests import them.
+`signing_entitlements(path, identity)` takes the signing identity (`'-'` for ad-hoc), as the
+main-app policy does: for every other program an ad-hoc signature keeps only the device
+entitlements, for the winehost helper it keeps the unrestricted subset above. The helper does
+not carry the device entitlements (`privacy.py` lists only the loaders, starters and session
+helpers); once Wine itself runs inside the helper, decide whether it must.
+
 ## How to enable it
 
 Add a block to a recipe (nothing in the repository does this yet):
 
 ```json
-"inputs": { "winehostBuild": "{project}/Build/winehost", "winehostProfile": "{home}/Downloads/winehost_developer_id_2.provisionprofile" },
+"inputs": { "winehostBuild": "{project}/Build/winehost", "winehostProfile": "{home}/<path>/winehost.provisionprofile" },
 "winehost": {
   "binary": { "input": "winehostBuild", "source": "winehost" },
   "provisioningProfile": { "input": "winehostProfile" },
@@ -93,8 +101,8 @@ path; with it the bundle also gets `runtime-profile.json` and the session launch
 
 ```sh
 python3 Packaging/build.py --recipe <recipe-with-winehost>.json --game-data import \
-  --output "Build/<name>.app" --identity 7492E391094B7E2B51A7A5D14CBB9CFBF29FB277 \
-  --input winehostProfile=/Users/gc/Downloads/winehost_developer_id_2.provisionprofile \
+  --output "Build/<name>.app" --identity "<Developer ID Application identity or SHA-1>" \
+  --input winehostProfile=<path>/winehost.provisionprofile \
   --input winehostBuild=<dir containing the arm64 winehost>
 ```
 
