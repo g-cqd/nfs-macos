@@ -1,8 +1,8 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
 Newest (the Rosetta workaround is ON by default, and every report carries the history of the game's code page):
-  Need for Speed Bundled 20261008-<commit>-0010.app    (the complete app: game and EA app inside)
-  Need for Speed Import 20261008-<commit>-0010.app     (no game, no EA app: uses your own Windows folder)
+  Need for Speed Bundled 20261008-13d1f4f-0010.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-13d1f4f-0010.app     (no game, no EA app: uses your own Windows folder)
 Earlier, still here: the "-0009" apps (2f65bd4), the "-0008" apps (dcf3a4d) and the "-0007" apps (5864653).
 
 WHAT IS DIFFERENT IN THE "-0010" APPS (added 2026-10-08)
@@ -40,6 +40,16 @@ THE TEST FOR THE "-0010" APPS (several launches; quit the app and the EA app bet
  NFS2015_AB_WINE_RWX_WX_HOT_LIMIT / _NEAR_LIMIT=<n> (0 = never release) and NFS2015_AB_WINE_RWX_WX_TF_RELEASE=1, in front of the session
  helper command (docs/NFS2015.md section 20.5).
 
+WHAT WAS CHECKED ON THE "-0010" BUILD (on the Mac that built it)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's files,
+Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account, session or machine
+file and no D3DMetal files are inside; the Swift tests (937), the build with warnings as errors and 19 packaging checks; a clean-room first
+start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the owner's own folders unreadable): it
+finished and everything was in place byte for byte (47 checks passed); and that a fresh first start has the workaround ON and the page log
+asked for, without anything saved. NOT checked: the page lines from the game itself (only from a test program), a saved "off" and the
+developer overrides live (unit tests only), anything with the game, the end-of-Play summary line, the Settings page on screen, a second Mac,
+EA sign-in, activation, Gatekeeper, the Import app in a Windows folder of your own.
+
 WHAT WAS DIFFERENT IN THE "-0009" APPS (added 2026-10-08; kept as it was)
 They are the "-0008" apps with:
  1. A Wine runtime with one more patch (0009); only one Wine file differs (ntdll.so). It fixes what your tests of "-0008" found:
@@ -73,7 +83,7 @@ THE TEST FOR THE "-0009" APPS (several launches; quit the app and the EA app bet
  Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=0 (or 1) and, only for a developer, NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release)
  in front of the session helper command (docs/NFS2015.md section 20.5).
 
-WHAT WAS CHECKED ON THE "-0009" BUILD (on the Mac that built it; the "-0010" check is in the delivery notes of docs/NFS2015.md section 28.5)
+WHAT WAS CHECKED ON THE "-0009" BUILD (on the Mac that built it; kept as it was)
 Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's files,
 Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account, session or machine
 file and no D3DMetal files are inside; the Swift tests (920), the build with warnings as errors and 19 packaging checks; a clean-room first
