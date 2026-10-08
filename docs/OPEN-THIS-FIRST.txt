@@ -1,8 +1,8 @@
 NEED FOR SPEED (2015) - COMPLETE APP, REBUILT WINE - OPEN THIS FIRST
 
 Newest, with the workaround for the crash to test:
-  Need for Speed Bundled 20261008-<commit>-0008.app    (the complete app: game and EA app inside)
-  Need for Speed Import 20261008-<commit>-0008.app     (no game, no EA app: uses your own Windows folder)
+  Need for Speed Bundled 20261008-dcf3a4d-0008.app    (the complete app: game and EA app inside)
+  Need for Speed Import 20261008-dcf3a4d-0008.app     (no game, no EA app: uses your own Windows folder)
 Earlier, still here: the "-0007" apps (5864653), the "-0005" apps (8b9bcba) and the "-rebuilt" apps (da146a2).
 
 WHAT IS DIFFERENT IN THE "-0008" APPS (added 2026-10-08)
@@ -38,6 +38,17 @@ THE TEST FOR THE "-0008" APPS (several launches; quit the app and the EA app bet
  there may be none for the crashed process. Developer path: NFS2015_AB_WINE_RWX_WX_EMULATION=1 (or 0) and, only for a developer,
  NFS2015_AB_WINE_RWX_WX_HOT_LIMIT=<n> (0 = never release) in front of the session helper command (docs/NFS2015.md section 20.5).
  To turn everything off again: "Reset" in the Wine experiments group.
+
+WHAT WAS CHECKED ON THE "-0008" BUILD (on the Mac that built it)
+Checked: the code signature (valid, Developer ID, NOT notarized, so macOS will say it cannot verify it); every game file, the EA app's
+files, Wine Mono, the Wine runtime and the licence texts against their pinned hashes inside the finished app; that no EA account,
+session or machine file and no D3DMetal files are inside; the Swift tests (917), the build with warnings as errors and 19 packaging
+checks; a clean-room first start of the Bundled app (fresh private folder, no network, app copied to another path, the game and the
+owner's own folders unreadable): it finished and everything was in place byte for byte (47 checks passed); and that the new switch
+reaches Wine through the app: with it saved on, Wine's own processes printed "wine-rwx:" lines in the first start, with nothing saved
+they printed none. NOT checked: anything with the game itself (whether it then runs and for how long, the cost), the "RWX W^X emulation"
+summary line at the end of a Play (it needs a Play), the Settings page on screen, a second Mac, EA sign-in, activation, Gatekeeper,
+the Import app in a Windows folder of your own.
 
 WHAT WAS DIFFERENT IN THE "-0007" APPS (added 2026-10-08; the page trace and two re-toggle experiments)
 Need for Speed Bundled 20261008-5864653-0007.app and Need for Speed Import 20261008-5864653-0007.app are the "-0005" apps with:
