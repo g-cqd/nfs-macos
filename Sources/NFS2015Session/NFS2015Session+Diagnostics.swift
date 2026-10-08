@@ -54,13 +54,14 @@ extension NFS2015Session {
     manifest: BundleManifest?, facts: NFS2015DisplayFacts?, plan: NFS2015DisplaySafetyPlan,
     seeded: NFS2015FirstRunOptions.Outcome?, metalFX: NFS2015MetalFXState,
     diagnostics: NFS2015DiagnosticsPreference, tuning: RuntimeTuning,
-    experiment: NFS2015ExperimentOverrides, settings: NFS2015Settings
+    experiment: NFS2015ExperimentOverrides, sidecar: NFS2015SidecarChoice,
+    settings: NFS2015Settings
   ) throws(LauncherError) -> NFS2015CrashContext {
     NFS2015CrashContext(
       pins: NFS2015BuildPins(bundle: paths.bundle, manifest: manifest), host: host.host(),
       display: facts, displayPlan: plan, seed: seeded, metalFX: metalFX.preference,
       diagnostics: diagnostics, diagnosticLog: false, settings: settings,
-      tuning: try tuning.environment(), experiment: experiment)
+      tuning: try tuning.environment(), experiment: experiment, sidecar: sidecar)
   }
 
   /// Sets up the diagnostic log and the crash monitor for one Play.

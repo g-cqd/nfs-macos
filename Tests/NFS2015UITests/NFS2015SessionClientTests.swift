@@ -15,6 +15,7 @@ struct NFS2015SessionClientTests {
       (.installClient(folder), "--install-client"), (.openClient, "--open-client"),
       (.configureMetalFX(NFS2015MetalFXRequest(action: .reset)), "--configure-metalfx"),
       (.configureDiagnostics(NFS2015DiagnosticsRequest(action: .reset)), "--configure-diagnostics"),
+      (.configureSidecar(NFS2015SidecarRequest(action: .reset)), "--configure-sidecar"),
       (
         .configure(
           NFS2015SettingsRequest(action: .restoreOriginal, changes: [:], expectedDigest: "d")),

@@ -16,13 +16,17 @@ package struct NFS2015CrashContext: Sendable {
   /// The runtime switches the launch used, after any experiment.
   package var tuning: [String: String]
   package var experiment: NFS2015ExperimentOverrides
+  /// Whether the x87 sidecar was attached to the Wine session of this launch, and why.
+  package var sidecar: NFS2015SidecarChoice
 
+  /// - Parameter sidecar: The choice the launch used; when omitted, the default joined with
+  ///   `experiment`.
   package init(
     pins: NFS2015BuildPins, host: NFS2015HostFacts, display: NFS2015DisplayFacts?,
     displayPlan: NFS2015DisplaySafetyPlan, seed: NFS2015FirstRunOptions.Outcome?,
     metalFX: NFS2015MetalFXPreference, diagnostics: NFS2015DiagnosticsPreference,
     diagnosticLog: Bool, settings: NFS2015Settings, tuning: [String: String],
-    experiment: NFS2015ExperimentOverrides
+    experiment: NFS2015ExperimentOverrides, sidecar: NFS2015SidecarChoice? = nil
   ) {
     self.pins = pins
     self.host = host
@@ -35,6 +39,8 @@ package struct NFS2015CrashContext: Sendable {
     self.settings = settings
     self.tuning = tuning
     self.experiment = experiment
+    self.sidecar =
+      sidecar ?? NFS2015SidecarChoice(preference: .standard, experiment: experiment)
   }
 }
 
@@ -85,8 +91,7 @@ package struct NFS2015CrashReport: Equatable, Sendable {
     lines.append(
       "diagnostic Wine log for this launch: "
         + (context.diagnosticLog ? NFS2015DiagnosticLog.channels : "off"))
-    lines.append(
-      "x87 sidecar: \(context.experiment.sidecarOff ? "OFF (experiment)" : "on (as shipped)")")
+    lines.append("x87 sidecar: \(context.sidecar.line)")
     let switches = context.tuning.sorted { $0.key < $1.key }
       .map { "\($0.key)=\($0.value)" }.joined(separator: " ")
     lines.append("runtime switches in force: \(switches.isEmpty ? "none" : switches)")

@@ -87,7 +87,7 @@ struct LaunchEnvironmentTests {
   }
 
   @Test
-  func `leaves the sidecar variable out when an experiment turns it off, and changes nothing else`()
+  func `leaves the sidecar variable out when the game turns it off, and changes nothing else`()
     throws
   {
     let plain = try environment()

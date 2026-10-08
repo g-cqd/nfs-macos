@@ -16,7 +16,7 @@ struct SessionOptionsTests {
     }
     for flag in [
       "--configure", "--choose-installation", "--install-client", "--configure-metalfx",
-      "--configure-diagnostics",
+      "--configure-diagnostics", "--configure-sidecar",
     ] {
       let options = try SessionOptions(
         arguments: [app, "--support", "/tmp/Player", flag, "--request", "/tmp/request"])
@@ -32,6 +32,7 @@ struct SessionOptionsTests {
     ["/A.app", "--support", "/tmp/p", "--configure"],
     ["/A.app", "--support", "/tmp/p", "--configure-metalfx"],
     ["/A.app", "--support", "/tmp/p", "--configure-diagnostics"],
+    ["/A.app", "--support", "/tmp/p", "--configure-sidecar"],
     ["/A.app", "--support", "/tmp/p", "--choose-installation"],
     ["/A.app", "--support", "/tmp/p", "--install-client", "--request"],
     ["/A.app", "--support", "/tmp/p", "--install-client", "--request", "a", "--request", "b"],
