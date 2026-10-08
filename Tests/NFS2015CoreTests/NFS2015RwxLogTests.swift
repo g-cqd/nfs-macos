@@ -34,6 +34,36 @@ struct NFS2015RwxLogTests {
   }
 
   @Test
+  func
+    `reads lines Wine's own processes printed in a first start of the -0008 app with the switch saved`()
+  {
+    // Captured 2026-10-08 from the Bundled app's own session helper (first start, private folder,
+    // WINE_RWX_WX_EMULATION=1 saved): eight processes became active, one printed its exit counters.
+    let log = read([
+      "wine-rwx: active pid=85250 first page 0x800000",
+      "wine-rwx: active pid=86726 first page 0x800000",
+      "wine-rwx: pid=86726 stores=300 released(host=0 carrier=0 hot=1)",
+      "wine-rwx: active pid=86768 first page 0x800000",
+      "wine-rwx: active pid=86889 first page 0x800000",
+      "wine-rwx: active pid=87117 first page 0x800000",
+      "wine-rwx: active pid=87212 first page 0x800000",
+      "wine-rwx: active pid=87576 first page 0x800000",
+      "wine-rwx: active pid=87684 first page 0x800000",
+    ])
+    #expect(log.activations.count == 8 && log.counters.count == 1)
+    #expect(log.activations.allSatisfy { $0.firstPage == 0x80_0000 })
+    #expect(
+      log.counters == [
+        .init(process: 86726, stores: 300, releasedHost: 0, releasedCarrier: 0, releasedHot: 1)
+      ])
+    #expect(log.hotReleasedProcesses == 1 && log.totalStores == 300 && log.totalReleased == 1)
+    #expect(
+      log.summary
+        == "RWX W^X emulation: 8 processes reported active, 1 reported counters: 300 stores through, 1 pages released (1 because they were written too often)."
+    )
+  }
+
+  @Test
   func `reads the address with or without the 0x the runtime prints`() {
     #expect(
       read(["wine-rwx: active pid=1 first page 1b30000"]).activations

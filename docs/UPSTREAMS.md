@@ -163,7 +163,7 @@ frame rate. The retained CoD4 result and its limits are summarized in [CoD4](COD
 | Pin | Was (profile `nfs2015-tf-cx11-rebuild-0007-20261008`) | Now (profile `nfs2015-tf-cx11-rebuild-0008-20261008`) |
 |---|---|---|
 | Wine source revision | `c2afb959160c39e98b4e329d558b05b45da37c42` (base + 7 commits) | `dae832f4f33bf1fd11800f7d41a8651bc8fd21e9` (base `1a7b0c76` + 8 commits) |
-| Source archive in the app | `wine-nfs2015-source-0007.tar.gz`, `b0d61a3b…58a6` | `wine-nfs2015-source-0008.tar.gz`, `275198d8b16f6be946514a9c9e93bbdc094dfd92b7f1a659775c55d117873dfc` |
+| Source archive in the app | `wine-nfs2015-source-0007.tar.gz`, `b0d61a3b…58a6` | `wine-nfs2015-source-0008.tar.gz` made by the packager (`git archive HEAD`, file SHA-256 `3d4cf8ba138b43bec29bd022c06d50d1482844e9228c0219a160f0a204fc77e9`); the wine-rebuild session's own file `275198d8b16f6be946514a9c9e93bbdc094dfd92b7f1a659775c55d117873dfc` has identical contents under a `wine-nfs2015-0008/` folder |
 | `lib/wine/x86_64-unix/ntdll.so` | `b1bddee4…0de4` | `8f593e2880e8e56f99f6d0589c791fbc3517fb051d1eb3dc921e3f6065899d35` |
 | Capability added | | `rosettaRwxWxEmulation` |
 | Both `kernelbase.dll`, the other four earlier pins, sidecar, mtld3d, EA client layer | | unchanged |
