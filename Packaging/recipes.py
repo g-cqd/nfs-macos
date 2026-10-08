@@ -1,5 +1,6 @@
 """Load declarative bundle recipes with safe, unique resource destinations."""
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 
@@ -517,8 +518,9 @@ def load_recipe(name='nfsmw', path=None):
 
 def resolve_inputs(recipe, overrides=()):
     project = Path(__file__).resolve().parents[1]
+    store = os.environ.get('NFS_MACOS_STORE') or str(project.parent.parent / 'Store')
     variables = {'project': str(project), 'tools': str(project.parent),
-                 'games': str(project.parent.parent), 'home': str(Path.home())}
+                 'games': str(project.parent.parent), 'store': store, 'home': str(Path.home())}
     inputs = {name: Path(value.format_map(variables)).expanduser().resolve()
               for name, value in recipe['inputs'].items()}
     for override in overrides:

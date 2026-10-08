@@ -17,8 +17,8 @@
     "mtld3dSource": "{games}/release-build/src/mtld3d",
     "x87Source": "{games}/release-build/src/x87sidecar",
     "packaging": "{project}/Packaging",
-    "game": "{games}/CoD4",
-    "runtime": "{games}/CoD4-tools/wine"
+    "game": "{store}/cod4",
+    "runtime": "{store}/cod4-tools/wine"
   },
   "originalFiles": [
     "iw3sp.exe",

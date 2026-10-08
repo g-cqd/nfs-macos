@@ -21,7 +21,7 @@
     "x87Source": "{games}/tools-integrate/src/x87sidecar",
     "packaging": "{project}/Packaging",
     "runtime": "{games}/CoD4-tools/wine",
-    "game": "{games}/FarCry2"
+    "game": "{store}/farcry2"
   },
   "originalFiles": [
     "bin/Dunia.dll",

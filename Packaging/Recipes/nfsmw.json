@@ -17,7 +17,7 @@
     "mtld3dSource": "{games}/release-build/src/mtld3d",
     "x87Source": "{games}/release-build/src/x87sidecar",
     "packaging": "{project}/Packaging",
-    "game": "{games}/NFSMW",
+    "game": "{store}/nfs-mw",
     "runtime": "{home}/Library/Mobile Documents/com~apple~CloudDocs/Documents/Shared/Shared - Games/Most Wanted Bundled.app/Contents/SharedSupport/Wine"
   },
   "originalFiles": [

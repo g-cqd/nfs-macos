@@ -56,7 +56,7 @@
     "packaging": "{project}/Packaging",
     "runtime": "{games}/wine-rebuild/runtime/wine",
     "runtimeSourceTree": "{games}/wine-rebuild/src/wine",
-    "game": "{games}/NFS2015-game",
+    "game": "{store}/nfs-2015",
     "wineMono": "{tools}/inputs/wine-mono",
     "clientLayer": "{tools}/inputs/client-layer"
   },

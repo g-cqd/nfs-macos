@@ -45,7 +45,7 @@ for name in ['nfsmw', 'cod4', 'farcry2', 'nfs2015']:
     shipped = shipped_recipe(recipe)
     assert set(shipped['inputs']) == set(recipe['inputs']) and validate_recipe(json.loads(json.dumps(shipped)))
     text = json.dumps(shipped)
-    for leak in ['/Users', '{home}', '{games}', '{tools}', '{project}', 'Mobile Documents',
+    for leak in ['/Users', '{home}', '{games}', '{store}', '{tools}', '{project}', 'Mobile Documents',
                  'NFS2015-debug', 'drive_c']:
         assert leak not in text, name + ' ships a build location: ' + leak
     assert recipe['inputs'] != shipped['inputs'], 'The build recipe itself must keep its inputs'
