@@ -199,12 +199,38 @@ struct BF3Session {
     let alive = {
       Date().timeIntervalSince(begin) < 30 || started?.isRunning == true || serverIsRunning()
     }
-    if let seconds = service.wait(stillStarting: alive) {
-      print("The \(game.storeClient.name) local service answered after about \(seconds) s.")
-      return 0
+    guard let seconds = service.wait(stillStarting: alive) else {
+      print(
+        "The \(game.storeClient.name) did not answer in time. Sign in in its window, then try again."
+      )
+      return 2
     }
-    print("The local service did not answer yet. Sign in in the EA window, then open Battlelog.")
-    return 2
+    print("The \(game.storeClient.name) local service answered after about \(seconds) s.")
+    return waitUntilReady(since: begin) ? 0 : 3
+  }
+
+  /// Waits, within the service's bounded wait, until the store reports the game ready to play:
+  /// the player is signed in and the game is listed as installed.
+  func waitUntilReady(since begin: Date) -> Bool {
+    let service = game.storeBrowser.service
+    while true {
+      switch service.state() {
+      case .ready:
+        print("Signed in; the \(game.storeClient.name) lists Battlefield 3 as installed and ready.")
+        return true
+      case .notAnswering:
+        print("The \(game.storeClient.name) stopped answering.")
+        return false
+      case .notReady:
+        guard Date().timeIntervalSince(begin) < Double(service.seconds) else {
+          print(
+            "The \(game.storeClient.name) runs but is not signed in, or does not list Battlefield 3 as installed. Sign in in its window, then open Battlelog again."
+          )
+          return false
+        }
+        sleep(3)
+      }
+    }
   }
 
   func openStore() throws -> Int32 {
@@ -219,9 +245,15 @@ struct BF3Session {
         "\(plan.name) needs a Chromium-family browser (Chrome, Chromium, Edge, Brave or Vivaldi). Safari blocks its call to the EA app."
       )
     }
-    if !plan.service.answers() {
-      print(
-        "Note: the \(game.storeClient.name) is not answering yet; \(plan.name) will ask for it.")
+    // Battlelog asks for the EA app when its service does not answer, so the page is only
+    // opened once the client is up, signed in and lists the game; the client is started first.
+    if plan.service.state() != .ready {
+      print("Starting the \(game.storeClient.name) first; \(plan.name) opens when it is ready.")
+      let status = try startClient()
+      guard status == 0 else {
+        print("\(plan.name) was not opened.")
+        return status
+      }
     }
     let profile =
       options.developer.browserProfile ?? paths.support.appendingPathComponent(plan.profileFolder)
@@ -317,17 +349,27 @@ struct BF3Session {
       let sidecar: Bool
       let browser: String?
       let profile: Bool
+      /// notRunning, starting, notReady (not signed in or game not listed) or ready.
+      let client: String
     }
     let server = isPrepared && serverIsRunning()
     let browser = game.storeBrowser.browser(installed: {
       NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
     })
+    let state = server ? game.storeBrowser.service.state() : .notAnswering
+    let client =
+      switch (server, state) {
+      case (false, _): "notRunning"
+      case (true, .notAnswering): "starting"
+      case (true, .notReady): "notReady"
+      case (true, .ready): "ready"
+      }
     let value = Status(
-      prepared: isPrepared, server: server, service: server && game.storeBrowser.service.answers(),
+      prepared: isPrepared, server: server, service: state != .notAnswering,
       running: server ? PrefixActivity.running(game.watchedPrograms).sorted() : [],
       sidecar: settings.sidecar,
       browser: browser?.url.deletingPathExtension().lastPathComponent,
-      profile: FileManager.default.fileExists(atPath: profile.path))
+      profile: FileManager.default.fileExists(atPath: profile.path), client: client)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     print(String(decoding: (try? encoder.encode(value)) ?? Data(), as: UTF8.self))

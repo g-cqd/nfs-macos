@@ -187,6 +187,14 @@ struct PreparedPrefixTests {
       url: "http://127.0.0.1:80/ping", origin: "https://battlelog.battlefield.com", reply: "pong",
       seconds: 180)
     #expect(throws: LauncherError.self) { try browser(probe: privileged).validate() }
+    let elsewhere = LocalServiceProbe(
+      url: "http://127.0.0.1:3215/ping", origin: "https://battlelog.battlefield.com", reply: "pong",
+      seconds: 180, gameURL: "http://127.0.0.1:4215/game/status", gameReply: "INSTALLED")
+    #expect(throws: LauncherError.self) { try browser(probe: elsewhere).validate() }
+    let halfDeclared = LocalServiceProbe(
+      url: "http://127.0.0.1:3215/ping", origin: "https://battlelog.battlefield.com", reply: "pong",
+      seconds: 180, gameURL: "http://127.0.0.1:3215/game/status")
+    #expect(throws: LauncherError.self) { try browser(probe: halfDeclared).validate() }
   }
 
   @Test
@@ -195,6 +203,7 @@ struct PreparedPrefixTests {
       url: "http://127.0.0.1:1/ping", origin: "https://battlelog.battlefield.com", reply: "pong",
       seconds: 5)
     #expect(!probe.answers(timeout: 1))
+    #expect(probe.state() == .notAnswering)
   }
 
   @Test

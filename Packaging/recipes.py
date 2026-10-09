@@ -489,8 +489,11 @@ def validate_store_browser(browser, client):
             or not PLAIN_FOLDER.fullmatch(browser['profileFolder']):
         raise ValueError('The store browser profile must be one plain folder name')
     service = browser['service']
-    if not isinstance(service, dict) or set(service) != {'url', 'origin', 'reply', 'seconds'}:
-        raise ValueError('The store service declares exactly url, origin, reply and seconds')
+    if not isinstance(service, dict) or not {'url', 'origin', 'reply', 'seconds'} <= set(service) \
+            or not set(service) <= {'url', 'origin', 'reply', 'seconds', 'gameURL', 'gameReply'} \
+            or ('gameURL' in service) != ('gameReply' in service):
+        raise ValueError('The store service declares url, origin, reply and seconds, and optionally '
+                         'both gameURL and gameReply')
     match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,96}', str(service['url']))
     if not match or not 1024 <= int(match.group(1)) <= 65535:
         raise ValueError('The store service must be plain HTTP on 127.0.0.1 and an unprivileged port')
@@ -501,6 +504,11 @@ def validate_store_browser(browser, client):
             or not isinstance(service['seconds'], int) or isinstance(service['seconds'], bool) \
             or not 5 <= service['seconds'] <= 600:
         raise ValueError('The store service needs an HTTPS origin, a reply and a bounded wait')
+    if 'gameURL' in service:
+        game = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,140}', str(service['gameURL']))
+        if not game or game.group(1) != match.group(1) or not isinstance(service['gameReply'], str) \
+                or not 0 < len(service['gameReply']) <= 64:
+            raise ValueError('The game state check must be on the same local service, with a reply')
 
 
 def validate_presets(presets):

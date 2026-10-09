@@ -13,6 +13,7 @@ struct BF3Status: Decodable, Equatable {
   var sidecar = true
   var browser: String?
   var profile = false
+  var client = "notRunning"
 }
 
 /// Runs the session helper off the main actor and keeps the starter's state.
@@ -111,7 +112,13 @@ final class BF3Model {
   }
 
   func openStore(page: String) async {
-    await perform(["--open-store", page], busyText: "Opening Battlelog.")
+    clientSeen = true
+    quietPolls = 0
+    await perform(
+      ["--open-store", page],
+      busyText: status.client == "ready"
+        ? "Opening Battlelog."
+        : "Starting the EA app first; Battlelog opens once it is signed in and lists the game.")
   }
 
   func applyPreset(_ name: String) async {

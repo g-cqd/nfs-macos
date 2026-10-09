@@ -72,6 +72,8 @@ refuses('a profile outside the folder', lambda r: r['storeBrowser'].update(profi
 refuses('a remote service', lambda r: r['storeBrowser']['service'].update(url='http://example.com:3215/ping'))
 refuses('a service on an undeclared port', lambda r: r['storeBrowser']['service'].update(url='http://127.0.0.1:4219/'))
 refuses('a plain HTTP origin', lambda r: r['storeBrowser']['service'].update(origin='http://battlelog.battlefield.com'))
+refuses('a game check on another port', lambda r: r['storeBrowser']['service'].update(gameURL='http://127.0.0.1:4215/game/status'))
+refuses('a game check without its reply', lambda r: r['storeBrowser']['service'].pop('gameReply'))
 refuses('an unbounded wait', lambda r: r['storeBrowser']['service'].update(seconds=601))
 refuses('no registry records', lambda r: r.update(prefixRegistry=[]))
 refuses('an unknown hive', lambda r: r['prefixRegistry'][0].update(hive='userdef.reg'))
@@ -111,4 +113,4 @@ with tempfile.TemporaryDirectory() as folder:
 if failures:
     print('\n'.join(failures))
     raise SystemExit(1)
-print('Prepared-prefix recipe gate passed: 5 shipped recipes byte-identical, 32 refusals, manifest writer checks')
+print('Prepared-prefix recipe gate passed: 5 shipped recipes byte-identical, 34 refusals, manifest writer checks')

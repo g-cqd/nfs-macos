@@ -133,12 +133,39 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
   package let reply: String
   /// How long one start waits for the service.
   package let seconds: Int
+  /// The address that reports the game's state, on the same service, and the text its reply
+  /// contains when the player is signed in and the store lists the game as installed. The page
+  /// would otherwise ask the player to start and sign in to the store client.
+  package let gameURL: String?
+  package let gameReply: String?
 
-  package init(url: String, origin: String, reply: String, seconds: Int) {
+  package init(
+    url: String, origin: String, reply: String, seconds: Int, gameURL: String? = nil,
+    gameReply: String? = nil
+  ) {
     self.url = url
     self.origin = origin
     self.reply = reply
     self.seconds = seconds
+    self.gameURL = gameURL
+    self.gameReply = gameReply
+  }
+
+  /// The store client's state as the page sees it.
+  package enum State: String, Codable, Sendable {
+    /// The service does not answer.
+    case notAnswering
+    /// The service answers, but the game is not reported ready: not signed in, or not listed.
+    case notReady
+    /// The service answers and reports the game ready to play.
+    case ready
+  }
+
+  package func state() -> State {
+    guard answers() else { return .notAnswering }
+    guard let gameURL, let gameReply else { return .ready }
+    return Self.reply(url: gameURL, origin: origin)?.contains(gameReply) == true
+      ? .ready : .notReady
   }
 
   package var port: Int? { URL(string: url)?.port }
@@ -154,18 +181,33 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
     else {
       throw .operation("A local service needs an HTTPS origin, a reply and a bounded wait.")
     }
+    guard (gameURL == nil) == (gameReply == nil) else {
+      throw .operation("A game state check needs both its address and its reply.")
+    }
+    if let gameURL, let gameReply {
+      guard let game = URL(string: gameURL), game.scheme == "http", game.host == "127.0.0.1",
+        game.port == port, gameURL.utf8.count <= 160, (1...64).contains(gameReply.utf8.count)
+      else {
+        throw .operation("The game state check must be on the same local service.")
+      }
+    }
   }
 
   /// One plain HTTP/1.1 request over a loopback socket with a short timeout; true when the reply
   /// contains the expected text. A socket rather than `URLSession`: the address is fixed to
   /// 127.0.0.1, so no proxy, cache or transport policy can apply or answer instead.
   package func answers(timeout: Int = 3) -> Bool {
+    Self.reply(url: url, origin: origin, timeout: timeout)?.contains(reply) == true
+  }
+
+  /// The raw reply of one GET, at most 16 KiB, or nil when nothing answered.
+  static func reply(url: String, origin: String, timeout: Int = 3) -> String? {
     guard let address = URL(string: url), let port = address.port, address.host == "127.0.0.1"
-    else { return false }
+    else { return nil }
     let path = address.path.isEmpty ? "/" : address.path
     let query = address.query.map { "?" + $0 } ?? ""
     let descriptor = socket(AF_INET, SOCK_STREAM, 0)
-    guard descriptor >= 0 else { return false }
+    guard descriptor >= 0 else { return nil }
     defer { close(descriptor) }
     var limit = timeval(tv_sec: timeout, tv_usec: 0)
     let size = socklen_t(MemoryLayout<timeval>.size)
@@ -181,14 +223,14 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
         connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
       }
     }
-    guard connected == 0 else { return false }
+    guard connected == 0 else { return nil }
     let request =
       "GET \(path)\(query) HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nOrigin: \(origin)\r\n"
       + "Connection: close\r\n\r\n"
     let sent = request.utf8CString.withUnsafeBufferPointer {
       send(descriptor, $0.baseAddress, $0.count - 1, 0)
     }
-    guard sent > 0 else { return false }
+    guard sent > 0 else { return nil }
     var reply = [UInt8]()
     var buffer = [UInt8](repeating: 0, count: 4096)
     while reply.count < 16_384 {
@@ -196,7 +238,7 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
       guard count > 0 else { break }
       reply.append(contentsOf: buffer[0..<count])
     }
-    return String(decoding: reply, as: UTF8.self).contains(self.reply)
+    return reply.isEmpty ? nil : String(decoding: reply, as: UTF8.self)
   }
 
   /// Polls until the service answers or the bounded wait ends.

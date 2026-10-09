@@ -1,4 +1,5 @@
 import AppKit
+import LauncherCore
 import SwiftUI
 
 struct BF3View: View {
@@ -56,14 +57,29 @@ struct BF3View: View {
 
   private var clientLine: String {
     if !model.status.prepared { return "the Windows folder is not ready" }
-    if model.status.service { return "running, local service answering" }
-    if model.status.server { return "starting or signed out" }
-    return "not running"
+    switch model.status.client {
+    case "ready": return "signed in, Battlefield 3 ready"
+    case "notReady": return "running, not signed in (sign in in the EA window)"
+    case "starting": return "starting"
+    default: return "not running"
+    }
   }
 }
 
 final class BF3AppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+  /// Quitting stops the Windows side, which ends a running game, so that is confirmed first.
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    guard !PrefixActivity.running(["bf3.exe"]).isEmpty else { return .terminateNow }
+    let alert = NSAlert()
+    alert.messageText = "Quit and stop Battlefield 3?"
+    alert.informativeText =
+      "Quitting stops the EA app and the game, so PunkBuster does not keep running."
+    alert.addButton(withTitle: "Quit")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+  }
 
   func applicationWillTerminate(_ notification: Notification) {
     let bundle = Bundle.main.bundleURL

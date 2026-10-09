@@ -99,7 +99,9 @@
       "url": "http://127.0.0.1:3215/ping",
       "origin": "https://battlelog.battlefield.com",
       "reply": "pong",
-      "seconds": 180
+      "seconds": 180,
+      "gameURL": "http://127.0.0.1:3215/game/status?masterTitleId=50182",
+      "gameReply": "\"state\":\"INSTALLED\""
     }
   },
   "renderers": [
