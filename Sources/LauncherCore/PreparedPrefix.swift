@@ -183,8 +183,9 @@ package struct PreparedPrefixPlacement {
       }
       try files.createDirectory(
         at: data.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try requireSpace()
+      // A stage left by an interrupted copy is removed first, so its space counts as free.
       if files.fileExists(atPath: stage.path) { try files.removeItem(at: stage) }
+      try requireSpace()
       try files.createDirectory(at: stage, withIntermediateDirectories: false)
       do {
         let staged = stage.appendingPathComponent("Prefix")
@@ -236,8 +237,19 @@ package struct PreparedPrefixPlacement {
     for attribute in manifest.attributes {
       let url = root.appendingPathComponent(attribute.path)
       guard let value = Data(base64Encoded: attribute.value) else { continue }
-      let status = value.withUnsafeBytes { bytes in
-        setxattr(url.path, attribute.name, bytes.baseAddress, bytes.count, 0, XATTR_NOFOLLOW)
+      func set() -> Int32 {
+        value.withUnsafeBytes { bytes in
+          setxattr(url.path, attribute.name, bytes.baseAddress, bytes.count, 0, XATTR_NOFOLLOW)
+        }
+      }
+      var status = set()
+      if status != 0, errno == EACCES,
+        let mode = (try? files.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int
+      {
+        // A file Wine keeps read-only takes its attribute once it is briefly writable.
+        try files.setAttributes([.posixPermissions: mode | 0o200], ofItemAtPath: url.path)
+        status = set()
+        try files.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
       }
       guard status == 0 else {
         throw LauncherError.operation(

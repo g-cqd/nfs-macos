@@ -195,10 +195,8 @@ struct BF3Session {
     }
     print("Waiting for its local service. Sign in in the EA window if it asks.")
     let begin = Date()
-    // The server needs a moment to appear; until then the started process alone counts.
-    let alive = {
-      Date().timeIntervalSince(begin) < 30 || started?.isRunning == true || serverIsRunning()
-    }
+    // The started process, or once it has handed over, this prefix's server, keeps the wait going.
+    let alive = { started?.isRunning == true || serverIsRunning() }
     guard let seconds = service.wait(stillStarting: alive) else {
       print(
         "The \(game.storeClient.name) did not answer in time. Sign in in its window, then try again."
@@ -302,29 +300,34 @@ struct BF3Session {
         "The game has no settings yet: start it once from Battlelog and quit it, then apply a preset."
       )
     }
-    let text = try String(contentsOf: profile, encoding: .utf8)
     let keys = Array(Set(game.presets.flatMap { $0.values.map(\.key) })).sorted()
     if name == "show" {
+      let text = try String(contentsOf: profile, encoding: .utf8)
       for line in TextProfilePreset.lines(in: text, keys: keys) { print(line) }
       return 0
     }
     guard let preset = game.presets.first(where: { $0.name == name }) else {
       throw LauncherError.operation("There is no preset named \(name).")
     }
+    // Checked before reading: the game rewrites its settings when it exits.
     if !PrefixActivity.running([game.storeClient.leaseTarget]).isEmpty {
-      throw LauncherError.operation(
-        "Quit the game first: it rewrites its settings when it exits.")
+      throw LauncherError.operation("Quit the game first: it rewrites its settings when it exits.")
     }
+    let text = try String(contentsOf: profile, encoding: .utf8)
     let result = preset.apply(to: text, display: Self.mainDisplay())
+    for key in result.missing { print("Not in this profile, left out: \(key)") }
+    guard result.text != text else {
+      print("\(preset.title): the settings already match; nothing changed.")
+      return 0
+    }
     let backup = profile.deletingLastPathComponent().appendingPathComponent(
       profile.lastPathComponent + ".bak-\(Self.timestamp())")
     try FileManager.default.copyItem(at: profile, to: backup)
     try Data(result.text.utf8).write(to: profile, options: .atomic)
-    for key in result.missing { print("Not in this profile, left out: \(key)") }
-    print("Applied \(preset.title). The previous settings are in \(backup.lastPathComponent).")
     for line in TextProfilePreset.lines(in: result.text, keys: preset.values.map(\.key)) {
       print(line)
     }
+    print("Applied \(preset.title). The previous settings are in \(backup.lastPathComponent).")
     return 0
   }
 

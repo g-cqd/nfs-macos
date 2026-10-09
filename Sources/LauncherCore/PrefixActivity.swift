@@ -9,7 +9,7 @@ package enum PrefixActivity {
     var info = stat()
     guard stat(prefix.path, &info) == 0 else { return nil }
     let folder =
-      "server-\(String(UInt64(info.st_dev), radix: 16))-\(String(info.st_ino, radix: 16))"
+      "server-\(String(UInt64(UInt32(bitPattern: info.st_dev)), radix: 16))-\(String(info.st_ino, radix: 16))"
     return URL(fileURLWithPath: "/tmp/.wine-\(user)").appendingPathComponent(folder)
       .appendingPathComponent("socket")
   }

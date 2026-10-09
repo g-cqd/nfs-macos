@@ -44,6 +44,11 @@ DRIVE_LINKS = [{'path': 'dosdevices/c:', 'target': '../drive_c'},
                {'path': 'dosdevices/z:', 'target': '/'}]
 # Finder state and other detritus never belongs to a template.
 DETRITUS = {'.DS_Store'}
+# What an app built on the same runtime carries that is not this app's: its launcher's own source
+# (sign.py archives this app's) and Most Wanted's mod notices, sources and patches.
+NOT_THIS_GAME = {'launcher-source.tar.gz', 'Ultimate-ASI-Loader.txt', 'WidescreenFixesPack.txt',
+                 'XtendedInput.txt', 'rumble', 'unlocks', 'widescreen-light-streaks.patch',
+                 'XtendedInput-source.tar.gz', 'XtendedInput.patch', 'bench_native_boundary.c'}
 
 
 def _attributes(path):
@@ -115,6 +120,12 @@ def manifest(recipe, scanned):
     """The `game-manifest.json` of a prepared-prefix app; refuses a template the pins disagree with."""
     validate_recipe(recipe)
     seed = recipe['prefixSeed']
+    # The bounds the app enforces (PreparedPrefix.validate), so an oversized scan fails here.
+    if not 1 <= len(scanned['files']) <= 200_000 or len(scanned['emptyDirectories']) > 10_000 \
+            or len(scanned['attributes']) > 4_096 \
+            or any(len(entry['path'].encode()) > 512 for entry in scanned['files']) \
+            or any(len(base64.b64decode(item['value'])) > 65_536 for item in scanned['attributes']):
+        raise ValueError('The template is outside the bounds the app accepts')
     hashes, digest = pins(recipe, scanned)
     if hashes != recipe['executableHashes'] or digest != recipe['inventorySHA256']:
         raise ValueError('The template does not match the recipe pins')
@@ -162,7 +173,7 @@ def finish(app, recipe, scanned, build, sources_app):
     for folder in ['Licenses', 'Sources']:
         for item in sorted((retained / folder).iterdir()):
             target = resources / folder / item.name
-            if item.name == 'launcher-source.tar.gz' or target.exists():
+            if item.name in NOT_THIS_GAME or target.exists():
                 continue
             # A clone on one APFS volume: the corresponding source of the same runtime build.
             subprocess.run(['/bin/cp', '-cR', str(item), str(target)], check=True)

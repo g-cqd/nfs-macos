@@ -204,8 +204,8 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
   static func reply(url: String, origin: String, timeout: Int = 3) -> String? {
     guard let address = URL(string: url), let port = address.port, address.host == "127.0.0.1"
     else { return nil }
-    let path = address.path.isEmpty ? "/" : address.path
-    let query = address.query.map { "?" + $0 } ?? ""
+    let path = address.path(percentEncoded: true).isEmpty ? "/" : address.path(percentEncoded: true)
+    let query = address.query(percentEncoded: true).map { "?" + $0 } ?? ""
     let descriptor = socket(AF_INET, SOCK_STREAM, 0)
     guard descriptor >= 0 else { return nil }
     defer { close(descriptor) }
@@ -213,6 +213,8 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
     let size = socklen_t(MemoryLayout<timeval>.size)
     setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &limit, size)
     setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &limit, size)
+    var one: Int32 = 1
+    setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
     var target = sockaddr_in()
     target.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
     target.sin_family = sa_family_t(AF_INET)
@@ -233,7 +235,8 @@ package struct LocalServiceProbe: Codable, Equatable, Sendable {
     guard sent > 0 else { return nil }
     var reply = [UInt8]()
     var buffer = [UInt8](repeating: 0, count: 4096)
-    while reply.count < 16_384 {
+    let deadline = Date().addingTimeInterval(Double(timeout))
+    while reply.count < 16_384, Date() < deadline {
       let count = recv(descriptor, &buffer, buffer.count, 0)
       guard count > 0 else { break }
       reply.append(contentsOf: buffer[0..<count])

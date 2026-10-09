@@ -61,14 +61,17 @@ final class BF3Model {
       process.standardError = pipe
       process.standardInput = FileHandle.nullDevice
       do { try process.run() } catch { return (1, error.localizedDescription) }
+      HelperProcesses.shared.insert(process)
+      defer { HelperProcesses.shared.remove(process) }
       let data = pipe.fileHandleForReading.readDataToEndOfFile()
       process.waitUntilExit()
       return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }.value
   }
 
-  func perform(_ arguments: [String], busyText: String) async {
-    guard !busy else { return }
+  @discardableResult
+  func perform(_ arguments: [String], busyText: String) async -> Bool {
+    guard !busy else { return false }
     busy = true
     message = busyText
     let (status, output) = await Self.runHelper(
@@ -78,6 +81,7 @@ final class BF3Model {
     appendLog(arguments: arguments, output: output)
     busy = false
     await refresh()
+    return status == 0
   }
 
   func refresh() async {
@@ -129,9 +133,12 @@ final class BF3Model {
     await perform(["--sidecar", on ? "on" : "off"], busyText: "Saving the x87 sidecar choice.")
   }
 
-  func stop() async {
-    clientSeen = false
-    await perform(["--stop"], busyText: "Stopping the Windows side of this app.")
+  /// - Returns: Whether the helper stopped the prefix; on failure the supervisor tries again.
+  @discardableResult
+  func stop() async -> Bool {
+    let stopped = await perform(["--stop"], busyText: "Stopping the Windows side of this app.")
+    if stopped { clientSeen = false }
+    return stopped
   }
 
   /// Polls the status; when the EA app and the game have both been gone for two polls after
@@ -147,8 +154,7 @@ final class BF3Model {
         quietPolls = 0
       } else if clientSeen, status.server {
         quietPolls += 1
-        if quietPolls >= 2 {
-          await stop()
+        if quietPolls >= 2, !busy, await stop() {
           message = "The EA app was closed, so the Windows side was stopped."
         }
       }
@@ -174,13 +180,38 @@ final class BF3Model {
   }
 
   /// Stops the prefix synchronously when the starter quits, so nothing is left running.
+  ///
+  /// A helper still running (a start that waits for the EA app holds the session lock) is ended
+  /// first, and a stop that finds the lock taken (status 73) is tried again for a few seconds.
   nonisolated static func stopOnQuit(helper: URL, bundle: URL, support: URL) {
-    let process = Process()
-    process.executableURL = helper
-    process.arguments = [bundle.path, "--support", support.path, "--stop"]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    guard (try? process.run()) != nil else { return }
-    process.waitUntilExit()
+    HelperProcesses.shared.terminateAll()
+    for _ in 0..<10 {
+      let process = Process()
+      process.executableURL = helper
+      process.arguments = [bundle.path, "--support", support.path, "--stop"]
+      process.standardOutput = FileHandle.nullDevice
+      process.standardError = FileHandle.nullDevice
+      guard (try? process.run()) != nil else { return }
+      process.waitUntilExit()
+      guard process.terminationStatus == 73 else { return }
+      Thread.sleep(forTimeInterval: 1)
+    }
+  }
+}
+
+/// The helper processes the starter is running, so quitting can end them before it stops.
+final class HelperProcesses: @unchecked Sendable {
+  static let shared = HelperProcesses()
+  private let lock = NSLock()
+  private var running: [ObjectIdentifier: Process] = [:]
+
+  func insert(_ process: Process) { lock.withLock { running[ObjectIdentifier(process)] = process } }
+  func remove(_ process: Process) { lock.withLock { running[ObjectIdentifier(process)] = nil } }
+  func terminateAll() {
+    let all = lock.withLock { Array(running.values) }
+    for process in all where process.isRunning {
+      process.terminate()
+      process.waitUntilExit()
+    }
   }
 }

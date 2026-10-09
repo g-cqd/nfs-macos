@@ -505,7 +505,7 @@ def validate_store_browser(browser, client):
             or not 5 <= service['seconds'] <= 600:
         raise ValueError('The store service needs an HTTPS origin, a reply and a bounded wait')
     if 'gameURL' in service:
-        game = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,140}', str(service['gameURL']))
+        game = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,137}', str(service['gameURL']))
         if not game or game.group(1) != match.group(1) or not isinstance(service['gameReply'], str) \
                 or not 0 < len(service['gameReply']) <= 64:
             raise ValueError('The game state check must be on the same local service, with a reply')
@@ -577,7 +577,7 @@ def validate_prepared_prefix(recipe):
     if not executable or not any(path.casefold() == executable.casefold()
                                  for path in recipe['executableHashes']):
         raise ValueError('A prepared-prefix recipe must pin its game executable')
-    if executable.casefold() != client['leaseTarget'].casefold():
+    if executable != client['leaseTarget']:
         raise ValueError('The lease target is the game executable')
     validate_store_browser(recipe.get('storeBrowser'), client)
     validate_renderers(recipe, recipe.get('renderers', []))
@@ -711,6 +711,8 @@ def validate_recipe(recipe):
     if 'thirdPartyLicenses' in recipe:
         validate_third_party_licenses(recipe['thirdPartyLicenses'])
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
+    if recipe.get('referencesInstallation') and 'prefixSeed' in recipe:
+        raise ValueError('A prefix seed needs a recipe that does not reference an installation')
     if recipe.get('referencesInstallation'):
         # The import edition of a store-client recipe ships no game bytes at all, so it carries no
         # inventory. Its bundled edition, when the recipe declares one, ships the user's verified
