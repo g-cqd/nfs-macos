@@ -77,12 +77,16 @@ package struct ImportRules: Codable, Equatable, Sendable {
   package let knownBuilds: [KnownBuild]
   package let maximumFiles: Int
   package let maximumBytes: Int
+  /// Bare names of files that sit directly in the game folder, beside the copied directories,
+  /// such as a 64-bit game's launcher and executables. Nil when the recipe has no such key, which
+  /// keeps every existing manifest byte-identical; a present list must not be empty.
+  package let rootFiles: [String]?
 
   package init(
     executable: String, machine: String = "i386", required: [RequiredFile],
     directories: [Directory], pairings: [Pairing] = [], markers: [Marker] = [],
     knownBuilds: [KnownBuild] = [], maximumFiles: Int = 20_000,
-    maximumBytes: Int = 16_000_000_000
+    maximumBytes: Int = 16_000_000_000, rootFiles: [String]? = nil
   ) {
     self.executable = executable
     self.machine = machine
@@ -93,9 +97,23 @@ package struct ImportRules: Codable, Equatable, Sendable {
     self.knownBuilds = knownBuilds
     self.maximumFiles = maximumFiles
     self.maximumBytes = maximumBytes
+    self.rootFiles = rootFiles
   }
 
-  var expectedMachine: UInt16? { machine == "i386" ? PortableExecutable.machineI386 : nil }
+  /// The PE machine type the recipe's `machine` names; nil for any other spelling.
+  var expectedMachine: UInt16? {
+    switch machine {
+    case "i386": PortableExecutable.machineI386
+    case "x86_64": PortableExecutable.machineAMD64
+    default: nil
+    }
+  }
+
+  /// How the player is told which kind of executable the recipe expects.
+  var machineDescription: String { machine == "x86_64" ? "64-bit" : "32-bit" }
+
+  /// The most root files a recipe may name.
+  static let maximumRootFiles = 16
 
   /// Rejects unsafe paths, unbounded lists and rules that could never select their own executable.
   package func validate() throws(LauncherError) {
@@ -118,15 +136,17 @@ package struct ImportRules: Codable, Equatable, Sendable {
       else { throw invalid }
     }
     guard Set(roots).count == roots.count else { throw invalid }
+    let rootFiles = try validatedRootFiles(roots: roots)
     for file in required {
       try ManifestFile.validate(path: file.path)
+      let path = file.path.lowercased()
       guard file.minimumSize >= 0, file.minimumSize <= 4_000_000_000,
-        roots.contains(where: { file.path.lowercased().hasPrefix($0 + "/") })
+        rootFiles.contains(path) || roots.contains(where: { path.hasPrefix($0 + "/") })
       else { throw invalid }
     }
-    guard required.contains(where: { $0.path.lowercased() == executable.lowercased() }) else {
-      throw invalid
-    }
+    let requiredPaths = Set(required.map { $0.path.lowercased() })
+    guard rootFiles.isSubset(of: requiredPaths), requiredPaths.contains(executable.lowercased())
+    else { throw invalid }
     for pairing in pairings {
       try ManifestFile.validate(path: pairing.directory)
       let directory = pairing.directory.lowercased()
@@ -149,6 +169,35 @@ package struct ImportRules: Codable, Equatable, Sendable {
         })
       else { throw invalid }
     }
+  }
+
+  /// The lower-cased root file names, empty when the key is absent.
+  ///
+  /// A present list holds 1...16 ASCII names that start with a letter or digit (so no `.`, `..`,
+  /// dotfile or leading space), contain no separator, are unique ignoring case, and do not share a
+  /// name with the first component of a copied directory.
+  private func validatedRootFiles(roots: [String]) throws(LauncherError) -> Set<String> {
+    guard let rootFiles else { return [] }
+    let invalid = LauncherError.operation("The game recognition rules are invalid.")
+    guard (1...Self.maximumRootFiles).contains(rootFiles.count),
+      rootFiles.allSatisfy(Self.isRootFileName)
+    else { throw invalid }
+    let names = Set(rootFiles.map { $0.lowercased() })
+    let firstComponents = Set(roots.map { String($0.split(separator: "/").first ?? "") })
+    guard names.count == rootFiles.count, names.isDisjoint(with: firstComponents) else {
+      throw invalid
+    }
+    return names
+  }
+
+  /// `[A-Za-z0-9][A-Za-z0-9._ ()-]{0,63}`, matched in full, as the packager checks it.
+  static func isRootFileName(_ value: String) -> Bool {
+    let bytes = Array(value.utf8)
+    func alphanumeric(_ byte: UInt8) -> Bool {
+      (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+    }
+    guard let first = bytes.first, alphanumeric(first), bytes.count <= 64 else { return false }
+    return bytes.dropFirst().allSatisfy { alphanumeric($0) || Array("._ ()-".utf8).contains($0) }
   }
 
   private static func simpleName(_ value: String) -> Bool {

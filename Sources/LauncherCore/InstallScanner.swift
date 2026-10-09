@@ -62,6 +62,17 @@ package enum InstallScanner {
         throw .operation("The installation is larger than this app supports.")
       }
     }
+    // Files that sit at the game folder's root, beside the directories: resolved like any other
+    // path (case-insensitively, never through a link) and counted against the same limits.
+    for name in rules.rootFiles ?? [] {
+      let resolved = try resolve(name, in: root, wantsFile: true)
+      let size = try describe(resolved.url).size
+      found.append(Found(relative: resolved.relative, url: resolved.url, size: size))
+      totalBytes += size
+      guard found.count <= rules.maximumFiles, totalBytes <= rules.maximumBytes else {
+        throw .operation("The installation contains more data than this app supports.")
+      }
+    }
     var seen = Set<String>()
     for item in found where !seen.insert(item.relative.lowercased()).inserted {
       throw .operation("Two files differ only by letter case: \(item.relative)")
@@ -86,7 +97,8 @@ package enum InstallScanner {
     else { throw .operation("\(rules.executable) was not found in the selected folder.") }
     let image = try PortableExecutable.read(executable.url)
     guard image.machine == rules.expectedMachine, !image.isDynamicLibrary else {
-      throw .operation("\(rules.executable) is not a 32-bit Windows game executable.")
+      throw .operation(
+        "\(rules.executable) is not a \(rules.machineDescription) Windows game executable.")
     }
     var inventory: [ManifestFile] = []
     inventory.reserveCapacity(found.count)
