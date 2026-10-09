@@ -32,6 +32,11 @@ DENIED_BACKENDS = {
 }
 # The executable whose pinned digest proves which game build a bundled edition contains.
 GAME_EXECUTABLES = {'nfs2015': 'NFS16.exe'}
+# The PE machine types an import recipe may expect; i386 is what every shipped recipe declares.
+MACHINES = {'i386', 'x86_64'}
+EXECUTABLE_NAME = re.compile(r'[A-Za-z0-9._-]{1,64}(?i:\.exe)')
+MAX_OFFER_IDS = 32
+MAX_LAUNCH_REQUEST = 512
 GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
 WINDOWS_PATH = re.compile(r'[A-Za-z]:(?:\\[A-Za-z0-9 ._()-]+)+\\?')
 
@@ -46,8 +51,8 @@ def validate_import_rules(rules):
     if not isinstance(rules, dict):
         raise ValueError('Import rules must be an object')
     safe_relative(rules.get('executable'))
-    if rules.get('machine') != 'i386':
-        raise ValueError('Only 32-bit executables are supported')
+    if not isinstance(rules.get('machine'), str) or rules['machine'] not in MACHINES:
+        raise ValueError('Only i386 and x86_64 executables are supported')
     required, directories = rules.get('required'), rules.get('directories')
     if not isinstance(required, list) or not 1 <= len(required) <= 64:
         raise ValueError('Import rules need 1-64 required files')
@@ -128,12 +133,54 @@ def validate_store_client(client):
             or not url.startswith(('origin2://', 'link2ea://')) \
             or any(ord(c) < 32 or ord(c) > 126 for c in url):
         raise ValueError('The store launch request must be a bounded store URL with an offer slot')
-    if not re.fullmatch(r'[0-9]{1,20}', str(client.get('offerID'))):
-        raise ValueError('The store offer identifier must be a decimal number')
+    offers = _offer_ids(client.get('offerID'))
+    if len(url.replace('{offer}', ','.join(offers))) > MAX_LAUNCH_REQUEST:
+        raise ValueError('The expanded store launch request is too long')
     if not isinstance(client.get('readinessSeconds'), int) \
             or not 5 <= client['readinessSeconds'] <= 600:
         raise ValueError('Invalid store client readiness wait')
+    _validate_launch_chain(client)
     return client
+
+
+def _offer_ids(value):
+    """One decimal offer id, or a bounded list of distinct ones, as the launch request joins them."""
+    ids = [value] if isinstance(value, str) else value
+    if not isinstance(ids, list) or not 1 <= len(ids) <= MAX_OFFER_IDS or not all(
+            isinstance(i, str) and re.fullmatch(r'[0-9]{1,20}', i) for i in ids):
+        raise ValueError('The store offer identifier must be a decimal number or a bounded list of them')
+    if len(set(ids)) != len(ids):
+        raise ValueError('Duplicate store offer identifier')
+    return ids
+
+
+def _validate_launch_chain(client):
+    """Optional description of a game that starts through helper processes before its own.
+
+    launchChain names the executables the store client's launch request starts, in order;
+    leaseTarget is the one the session lease follows, so it must be one of them; expectedPorts are
+    the loopback ports whose availability the launch checks beforehand.
+    """
+    chain = client.get('launchChain')
+    if chain is not None:
+        if not isinstance(chain, list) or not 1 <= len(chain) <= 8 or not all(
+                isinstance(n, str) and EXECUTABLE_NAME.fullmatch(n) for n in chain):
+            raise ValueError('The launch chain must be 1-8 plain executable names')
+        if len({n.casefold() for n in chain}) != len(chain):
+            raise ValueError('Duplicate launch chain executable')
+    target = client.get('leaseTarget')
+    if target is not None:
+        if chain is None:
+            raise ValueError('A lease target needs a launch chain')
+        if not isinstance(target, str) or target.casefold() not in {n.casefold() for n in chain}:
+            raise ValueError('The lease target must be one of the launch chain executables')
+    ports = client.get('expectedPorts')
+    if ports is not None:
+        if not isinstance(ports, list) or not 1 <= len(ports) <= 8 or not all(
+                isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports):
+            raise ValueError('Expected ports must be 1-8 unprivileged port numbers')
+        if len(set(ports)) != len(ports):
+            raise ValueError('Duplicate expected port')
 
 
 def validate_runtime_tuning(tuning):
@@ -183,13 +230,56 @@ def validate_prefix_settings(settings):
     return settings
 
 
+def game_executable(recipe):
+    """The executable that identifies the game: the built-in one for a known game, else the recipe's.
+
+    A recipe cannot rename a known game's executable; it can only name one for a game the table
+    does not know, which is how a new game declares itself.
+    """
+    known = GAME_EXECUTABLES.get(recipe['gameID'])
+    declared = recipe.get('gameExecutable')
+    if declared is not None:
+        if not isinstance(declared, str) or not declared.lower().endswith('.exe') \
+                or len(declared) > 128 or safe_relative(declared) != declared:
+            raise ValueError('The game executable must be a relative path to an .exe')
+        if known is not None and declared.casefold() != known.casefold():
+            raise ValueError('The game executable of a known game cannot be changed')
+        return declared
+    return known or ''
+
+
+def denied_backends(recipe):
+    """(executable, {backend: reason}): the built-in denials stay, a recipe may only add its own."""
+    built_in = DENIED_BACKENDS.get(recipe['gameID'], {})
+    executable = built_in.get('executable', '')
+    denied = dict(built_in.get('backends', {}))
+    declared = recipe.get('deniedBackends')
+    if declared is None:
+        return executable, denied
+    if not isinstance(declared, dict) or set(declared) != {'executable', 'backends'}:
+        raise ValueError('Denied backends declare exactly an executable and a backends map')
+    if not isinstance(declared['executable'], str) or not EXECUTABLE_NAME.fullmatch(declared['executable']):
+        raise ValueError('Denied backends apply to one plain executable name')
+    if executable and declared['executable'].casefold() != executable.casefold():
+        raise ValueError('The denied-backend executable of a known game cannot be changed')
+    backends = declared['backends']
+    if not isinstance(backends, dict) or not 1 <= len(backends) <= 8:
+        raise ValueError('Denied backends need 1-8 entries')
+    for backend, reason in backends.items():
+        if not re.fullmatch('[a-z0-9]{1,32}', backend) or not isinstance(reason, str) \
+                or not 0 < len(reason) <= 200 or ';' in reason or any(ord(c) < 32 for c in reason):
+            raise ValueError('Unusable denied backend')
+        if backend in denied and denied[backend] != reason:
+            raise ValueError('A built-in denial cannot be reworded: ' + backend)
+        denied[backend] = reason
+    return declared['executable'], denied
+
+
 def validate_renderers(recipe, renderers):
     """Mirror of the native RendererSelection validation, plus the per-game denial list."""
     if not isinstance(renderers, list) or not 1 <= len(renderers) <= 16:
         raise ValueError('A recipe needs between one and sixteen renderer rules')
-    denial = DENIED_BACKENDS.get(recipe['gameID'], {})
-    executable = denial.get('executable', '')
-    denied = denial.get('backends', {})
+    executable, denied = denied_backends(recipe)
     for item in renderers:
         if not isinstance(item, dict) or item.get('api') not in RENDERER_APIS:
             raise ValueError('Unknown graphics API in a renderer rule')
@@ -448,7 +538,7 @@ def validate_recipe(recipe):
                 raise ValueError('A bundled store-client edition needs a game input')
             if 'inventorySHA256' not in recipe:
                 raise ValueError('A bundled store-client edition must pin its whole payload inventory')
-            if not any(path.casefold() == GAME_EXECUTABLES.get(recipe['gameID'], '').casefold()
+            if not any(path.casefold() == game_executable(recipe).casefold()
                        for path in recipe['executableHashes']):
                 raise ValueError('A bundled store-client edition must pin the game executable')
             validate_prefix_settings(recipe.get('bundledPrefixSettings', []))
@@ -461,6 +551,7 @@ def validate_recipe(recipe):
             if 'game' in recipe['inputs']:
                 raise ValueError('An import-only referencing recipe takes no game input')
         validate_store_client(recipe.get('storeClient'))
+        game_executable(recipe)
         validate_prefix_settings(recipe.get('prefixSettings', []))
         validate_renderers(recipe, recipe.get('renderers', []))
         if 'managedRuntime' in recipe:
@@ -485,7 +576,8 @@ def validate_recipe(recipe):
             raise ValueError('Invalid controller device')
     else:
         for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
-                    'bundledPrefixSettings', 'managedRuntime', 'clientLayer']:
+                    'bundledPrefixSettings', 'managedRuntime', 'clientLayer', 'gameExecutable',
+                    'deniedBackends']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

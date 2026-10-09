@@ -42,6 +42,7 @@ def main():
         [sys.executable, 'Packaging/check_recipes.py'],
         [sys.executable, 'Packaging/check_farcry2_recipe.py'],
         [sys.executable, 'Packaging/check_nfs2015_recipe.py'],
+        [sys.executable, 'Packaging/check_bf4_recipe_schema.py'],
         [sys.executable, 'Packaging/check_nfs2015_settings.py'],
         [sys.executable, 'Packaging/check_nfs2015_metalfx.py'],
         [sys.executable, 'Packaging/check_bundle_hygiene.py'],
