@@ -24,6 +24,9 @@ package enum LaunchEnvironment {
       managedCode
         ? "IGOProxy32.exe=d;winemenubuilder.exe=d;mshtml="
         : "IGOProxy32.exe=d;winemenubuilder.exe=d;mscoree,mshtml="
+    // Battlefield 3 keeps mshtml: the game's finalize step (Touchup's Game Explorer registration)
+    // needs the res:// handler that Wine Gecko provides, and Gecko is installed in its prefix.
+    case .bf3: "IGOProxy32.exe=d;winemenubuilder.exe=d"
     }
   }
 

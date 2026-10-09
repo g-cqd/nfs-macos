@@ -172,9 +172,10 @@ with TemporaryDirectory() as temporary:
 print('PASS the audit holds every component NOTICE.md names to its licence file (%d mutants refused)' % (len(mutants) + 5))
 
 # 5. No other recipe is affected: the games that do not ship dxmt declare nothing and still validate.
+# Need for Speed (2015) and Battlefield 3 ship dxmt, so both declare its licence.
 for path in sorted((PROJECT / 'Packaging/Recipes').glob('*.json')):
     loaded = load_recipe(path.stem)
-    assert ('thirdPartyLicenses' in loaded) == (path.stem == 'nfs2015'), path.name
+    assert ('thirdPartyLicenses' in loaded) == (path.stem in {'nfs2015', 'bf3'}), path.name
 shipped = json.loads(json.dumps(recipe))
 assert validate_recipe(shipped)['thirdPartyLicenses'] == recipe['thirdPartyLicenses']
 print('PASS notice licence gate: all checks passed')

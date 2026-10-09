@@ -439,6 +439,167 @@ def validate_client_layer(declared):
     return declared
 
 
+PAGE_NAME = re.compile(r'[a-z-]{1,32}')
+BUNDLE_ID = re.compile(r'[A-Za-z0-9.-]{3,128}')
+PLAIN_FOLDER = re.compile(r'[A-Za-z0-9_-]{1,64}')
+PRESET_KEY = re.compile(r'[A-Za-z0-9._]{1,96}')
+PRESET_VALUE = re.compile(r'[A-Za-z0-9.-]{1,32}')
+PRESET_PLACEHOLDERS = {'{display.width}', '{display.height}', '{display.refresh}'}
+HIVES = {'system.reg', 'user.reg'}
+
+
+def _reason(value, limit=300):
+    if not isinstance(value, str) or not 0 < len(value) <= limit or any(ord(c) < 32 for c in value):
+        raise ValueError('A prepared-prefix entry needs a plain reason')
+
+
+def validate_store_browser(browser, client):
+    """Mirror of the native StoreBrowserPlan: a store web page that starts the game.
+
+    The page is opened in an installed Chromium-family browser with its own profile and the
+    identity the page accepts; its service must be one of the store client's expected ports.
+    """
+    if not isinstance(browser, dict) or set(browser) != {
+            'name', 'pages', 'userAgent', 'browsers', 'profileFolder', 'service'}:
+        raise ValueError('The store browser declares exactly name, pages, userAgent, browsers, '
+                         'profileFolder and service')
+    if not isinstance(browser['name'], str) or not 0 < len(browser['name']) <= 64:
+        raise ValueError('The store browser needs a plain name')
+    pages = browser['pages']
+    if not isinstance(pages, list) or not 1 <= len(pages) <= 8:
+        raise ValueError('The store browser needs 1-8 pages')
+    names = set()
+    for page in pages:
+        if not isinstance(page, dict) or set(page) != {'name', 'title', 'url'} \
+                or not PAGE_NAME.fullmatch(str(page['name'])) or page['name'] in names \
+                or not isinstance(page['title'], str) or not 0 < len(page['title']) <= 64 \
+                or not isinstance(page['url'], str) or len(page['url']) > 256 \
+                or not re.fullmatch(r'https://[A-Za-z0-9.-]+(?:/[!-~]*)?', page['url']):
+            raise ValueError('A store page is a short name, a title and a plain HTTPS address')
+        names.add(page['name'])
+    agent = browser['userAgent']
+    if not isinstance(agent, str) or not 16 <= len(agent) <= 256 \
+            or any(not 32 <= ord(c) <= 126 or c == '"' for c in agent):
+        raise ValueError('The store browser identity must be plain printable text')
+    ids = browser['browsers']
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 8 or len(set(ids)) != len(ids) \
+            or not all(isinstance(i, str) and BUNDLE_ID.fullmatch(i) for i in ids):
+        raise ValueError('The store browsers must be 1-8 distinct bundle identifiers')
+    if not isinstance(browser['profileFolder'], str) or browser['profileFolder'].startswith('.') \
+            or not PLAIN_FOLDER.fullmatch(browser['profileFolder']):
+        raise ValueError('The store browser profile must be one plain folder name')
+    service = browser['service']
+    if not isinstance(service, dict) or set(service) != {'url', 'origin', 'reply', 'seconds'}:
+        raise ValueError('The store service declares exactly url, origin, reply and seconds')
+    match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,96}', str(service['url']))
+    if not match or not 1024 <= int(match.group(1)) <= 65535:
+        raise ValueError('The store service must be plain HTTP on 127.0.0.1 and an unprivileged port')
+    if int(match.group(1)) not in client.get('expectedPorts', []):
+        raise ValueError("The store service port must be one of the store client's expected ports")
+    if not re.fullmatch(r'https://[A-Za-z0-9.-]{1,120}', str(service['origin'])) \
+            or not isinstance(service['reply'], str) or not 0 < len(service['reply']) <= 64 \
+            or not isinstance(service['seconds'], int) or isinstance(service['seconds'], bool) \
+            or not 5 <= service['seconds'] <= 600:
+        raise ValueError('The store service needs an HTTPS origin, a reply and a bounded wait')
+
+
+def validate_presets(presets):
+    """Named value sets for the game's own `Key value` settings profile."""
+    if not isinstance(presets, list) or len(presets) > 8:
+        raise ValueError('Presets must be a list of at most eight')
+    names = set()
+    for preset in presets:
+        if not isinstance(preset, dict) or set(preset) != {'name', 'title', 'values', 'reason'} \
+                or not PAGE_NAME.fullmatch(str(preset['name'])) or preset['name'] in names \
+                or not isinstance(preset['title'], str) or not 0 < len(preset['title']) <= 64:
+            raise ValueError('A preset declares a unique plain name, a title, values and a reason')
+        names.add(preset['name'])
+        _reason(preset['reason'])
+        values = preset['values']
+        if not isinstance(values, list) or not 1 <= len(values) <= 64:
+            raise ValueError('A preset needs 1-64 values')
+        keys = set()
+        for value in values:
+            if not isinstance(value, dict) or set(value) != {'key', 'value'} \
+                    or not PRESET_KEY.fullmatch(str(value['key'])) or value['key'] in keys \
+                    or not (value['value'] in PRESET_PLACEHOLDERS
+                            or PRESET_VALUE.fullmatch(str(value['value']))):
+                raise ValueError('Unusable preset value in ' + preset['name'])
+            keys.add(value['key'])
+
+
+def validate_prepared_prefix(recipe):
+    """A bundled edition that ships a whole prepared prefix, store client and game included.
+
+    Such a prefix cannot be rebuilt from Wine's defaults and a few registry values, so the app
+    carries it and the session places it once. The recipe lists what the prefix must hold and
+    why (registry records, game-folder files), the store page that starts the game and the
+    settings presets. It installs no managed runtime or client layer: both are in the prefix.
+    """
+    if recipe.get('editions') != ['bundled']:
+        raise ValueError('A prepared-prefix recipe produces the bundled edition only')
+    for key in ['referencesInstallation', 'importRules', 'managedRuntime', 'clientLayer',
+                'prefixSettings', 'bundledPrefixSettings', 'controllerDevices']:
+        if key in recipe:
+            raise ValueError('A prepared-prefix recipe does not declare ' + key)
+    if recipe['compatibility'] or recipe['defaults']:
+        raise ValueError('A prepared-prefix recipe ships no compatibility or default files')
+    seed = recipe['prefixSeed']
+    if not isinstance(seed, dict) or set(seed) != {
+            'input', 'source', 'path', 'settingsProfile', 'backgroundPrograms', 'reason'}:
+        raise ValueError('The prefix seed declares exactly input, source, path, settingsProfile, '
+                         'backgroundPrograms and reason')
+    if seed['input'] not in recipe['inputs']:
+        raise ValueError('Undeclared prefix seed input')
+    safe_relative(seed['source'])
+    safe_relative(seed['settingsProfile'])
+    if not PLAIN_FOLDER.fullmatch(str(seed['path'])):
+        raise ValueError('The prefix seed is one plain resource folder')
+    programs = seed['backgroundPrograms']
+    if not isinstance(programs, list) or len(programs) > 8 or not all(
+            isinstance(n, str) and EXECUTABLE_NAME.fullmatch(n) for n in programs):
+        raise ValueError('Background programs must be at most eight plain executable names')
+    _reason(seed['reason'])
+    if 'inventorySHA256' not in recipe:
+        raise ValueError('A prepared-prefix recipe must pin its game inventory')
+    client = validate_store_client(recipe.get('storeClient'))
+    if 'launchChain' not in client or 'leaseTarget' not in client or 'expectedPorts' not in client:
+        raise ValueError('A prepared-prefix game names its launch chain, lease target and ports')
+    executable = game_executable(recipe)
+    if not executable or not any(path.casefold() == executable.casefold()
+                                 for path in recipe['executableHashes']):
+        raise ValueError('A prepared-prefix recipe must pin its game executable')
+    if executable.casefold() != client['leaseTarget'].casefold():
+        raise ValueError('The lease target is the game executable')
+    validate_store_browser(recipe.get('storeBrowser'), client)
+    validate_renderers(recipe, recipe.get('renderers', []))
+    records = recipe.get('prefixRegistry')
+    if not isinstance(records, list) or not 1 <= len(records) <= 64:
+        raise ValueError('A prepared-prefix recipe lists 1-64 registry records')
+    for record in records:
+        if not isinstance(record, dict) or not {'hive', 'path', 'reason'} <= set(record) \
+                or not set(record) <= {'hive', 'path', 'name', 'reason'} \
+                or record['hive'] not in HIVES or not isinstance(record['path'], str) \
+                or not 0 < len(record['path']) <= 256 or ']' in record['path'] \
+                or ('name' in record and (not isinstance(record['name'], str)
+                                          or not 0 < len(record['name']) <= 128)):
+            raise ValueError('Unusable prefix registry record')
+        _reason(record['reason'])
+    shims = recipe.get('gameShims', [])
+    if not isinstance(shims, list) or len(shims) > 16:
+        raise ValueError('Game-folder files must be a bounded list')
+    for shim in shims:
+        if not isinstance(shim, dict) or set(shim) != {'path', 'sha256', 'reason'} \
+                or not SHA256.fullmatch(str(shim['sha256'])):
+            raise ValueError('A game-folder file declares its path, SHA-256 pin and reason')
+        safe_relative(shim['path'])
+        _reason(shim['reason'])
+    validate_presets(recipe.get('presets', []))
+    if 'runtimeSource' in recipe:
+        if validate_runtime_source(recipe['runtimeSource'])['input'] not in recipe['inputs']:
+            raise ValueError('Undeclared runtime source input')
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -593,10 +754,12 @@ def validate_recipe(recipe):
         if not isinstance(devices, list) or len(devices) > 32 or not all(
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
             raise ValueError('Invalid controller device')
+    elif 'prefixSeed' in recipe:
+        validate_prepared_prefix(recipe)
     else:
         for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
                     'bundledPrefixSettings', 'managedRuntime', 'clientLayer', 'gameExecutable',
-                    'deniedBackends']:
+                    'deniedBackends', 'storeBrowser', 'presets', 'prefixRegistry', 'gameShims']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)

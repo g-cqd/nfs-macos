@@ -13,6 +13,8 @@ let package = Package(
     .executable(name: "FarCry2Session", targets: ["FarCry2Session"]),
     .executable(name: "NFS2015Launcher", targets: ["NFS2015Launcher"]),
     .executable(name: "NFS2015Session", targets: ["NFS2015Session"]),
+    .executable(name: "BF3Launcher", targets: ["BF3Launcher"]),
+    .executable(name: "BF3Session", targets: ["BF3Session"]),
   ],
   targets: [
     .target(name: "LauncherCore"),
@@ -31,6 +33,8 @@ let package = Package(
     .executableTarget(
       name: "FarCry2Launcher", dependencies: ["LauncherCore", "FarCry2Core", "SharedLauncher"]),
     .executableTarget(name: "NFSMWSession", dependencies: ["LauncherCore"]),
+    .executableTarget(name: "BF3Session", dependencies: ["LauncherCore"]),
+    .executableTarget(name: "BF3Launcher", dependencies: ["LauncherCore", "SharedLauncher"]),
     .executableTarget(name: "NFSMWLauncher", dependencies: ["LauncherCore", "SharedLauncher"]),
     .testTarget(
       name: "LauncherCoreTests", dependencies: ["LauncherCore", "GameFixtures"],
