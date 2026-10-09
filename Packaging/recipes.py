@@ -36,6 +36,10 @@ GAME_EXECUTABLES = {'nfs2015': 'NFS16.exe'}
 MACHINES = {'i386', 'x86_64'}
 EXECUTABLE_NAME = re.compile(r'[A-Za-z0-9._-]{1,64}(?i:\.exe)')
 MAX_OFFER_IDS = 32
+# Files that sit directly in the game folder, beside the copied directories (a 64-bit game's
+# launcher and executables); optional, so every recipe without the key validates as before.
+MAX_ROOT_FILES = 16
+ROOT_FILE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._ ()-]{0,63}')
 MAX_LAUNCH_REQUEST = 512
 GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
 WINDOWS_PATH = re.compile(r'[A-Za-z]:(?:\\[A-Za-z0-9 ._()-]+)+\\?')
@@ -72,14 +76,29 @@ def validate_import_rules(rules):
             raise ValueError('Excluded suffixes must be lowercase extensions')
     if len(set(roots)) != len(roots):
         raise ValueError('Duplicate import directory')
+    root_files = []
+    if 'rootFiles' in rules:
+        listed = rules['rootFiles']
+        if not isinstance(listed, list) or not 1 <= len(listed) <= MAX_ROOT_FILES:
+            raise ValueError('Import rules need 1-%d root files when rootFiles is present' % MAX_ROOT_FILES)
+        for name in listed:
+            if not isinstance(name, str) or not ROOT_FILE_NAME.fullmatch(name):
+                raise ValueError('Invalid root file name')
+            root_files.append(name.lower())
+        if len(set(root_files)) != len(root_files):
+            raise ValueError('Duplicate root file')
+        if any(name in {root.split('/')[0] for root in roots} for name in root_files):
+            raise ValueError('A root file shares its name with a copied directory')
     names = []
     for item in required:
         path = safe_relative(item.get('path'))
         names.append(path.lower())
         if not isinstance(item.get('minimumSize'), int) or not 0 <= item['minimumSize'] <= 4_000_000_000:
             raise ValueError('Invalid required file size')
-        if not any(path.lower().startswith(root + '/') for root in roots):
+        if path.lower() not in root_files and not any(path.lower().startswith(root + '/') for root in roots):
             raise ValueError('Required file is outside every copied directory: ' + path)
+    if any(name not in names for name in root_files):
+        raise ValueError('Every root file must also be a required file')
     if rules['executable'].lower() not in names:
         raise ValueError('The executable must be a required file')
     for item in rules.get('pairings', []):

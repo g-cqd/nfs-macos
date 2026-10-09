@@ -197,6 +197,73 @@ for key, value in [('gameExecutable', 'Game.exe'), ('deniedBackends', deepcopy(r
     altered = load_recipe('cod4'); altered[key] = value
     must_reject(altered, 'non-referencing recipe declaring ' + key)
 
+# Root files: names of files that sit directly in the game folder, beside the copied directories.
+def root_rules(**changes):
+    rules = deepcopy(good['importRules'])
+    rules['executable'] = 'Game64.exe'
+    rules['required'] = [{'path': 'Game64.exe', 'minimumSize': 1},
+                         {'path': 'Launcher64.exe', 'minimumSize': 1},
+                         {'path': 'Game/Game64.dat', 'minimumSize': 1}]
+    rules['rootFiles'] = ['Game64.exe', 'Launcher64.exe']
+    rules.update(changes)
+    return rules
+
+
+accepted = validate_import_rules(root_rules())
+assert accepted['rootFiles'] == ['Game64.exe', 'Launcher64.exe']
+# Matching is case-insensitive, like the other path rules, and a space or brackets are fine.
+validate_import_rules(root_rules(rootFiles=['game64.EXE', 'LAUNCHER64.exe']))
+validate_import_rules(root_rules(
+    rootFiles=['Game64.exe', 'Launcher 64 (x).exe'],
+    required=[{'path': 'Game64.exe', 'minimumSize': 1}, {'path': 'Launcher 64 (x).exe', 'minimumSize': 1}]))
+# Without the key the old behaviour holds: a root level required file is outside every directory.
+rules = root_rules(); del rules['rootFiles']
+try: validate_import_rules(rules)
+except ValueError: pass
+else: raise AssertionError('Root level file accepted without rootFiles')
+too_many = ['File%d.exe' % n for n in range(17)]
+bad_lists = {
+    'empty list': [], 'not a list': 'Game64.exe', 'null': None, 'object': {'Game64.exe': 1},
+    'traversal': ['..'], 'dot': ['.'], 'parent path': ['../Game64.exe'], 'separator': ['Game/Game64.exe'],
+    'backslash': ['Game\\Game64.exe'], 'absolute': ['/Game64.exe'], 'dotfile': ['.hidden.exe'],
+    'empty name': [''], 'null byte': ['Game64.exe\0'], 'newline': ['Game64.exe\n'],
+    'non string': [7], 'object entry': [{'name': 'Game64.exe'}], 'too long': ['A' * 65 + '.exe'],
+    'non ascii': ['Gamé64.exe'], 'duplicate': ['Game64.exe', 'Game64.exe'],
+    'duplicate by case': ['Game64.exe', 'GAME64.EXE'], 'too many': too_many,
+    'collides with a directory': ['Game64.exe', 'Game'], 'collides by case': ['Game64.exe', 'GAME'],
+}
+for why, listed in bad_lists.items():
+    rules = root_rules(rootFiles=listed)
+    if why == 'too many':
+        rules['required'] = [{'path': name, 'minimumSize': 1} for name in listed]
+        rules['executable'] = 'File0.exe'
+    try: validate_import_rules(rules)
+    except ValueError: continue
+    raise AssertionError('Accepted invalid rootFiles: ' + why)
+# Sixteen is the limit: the sixteenth is accepted, the seventeenth is not (above).
+sixteen = ['File%d.exe' % n for n in range(16)]
+validate_import_rules(root_rules(
+    rootFiles=sixteen, required=[{'path': name, 'minimumSize': 1} for name in sixteen],
+    executable='File0.exe'))
+# A root file that no required entry mentions would never be checked, so it is refused.
+try: validate_import_rules(root_rules(rootFiles=['Game64.exe', 'Launcher64.exe', 'Extra.exe']))
+except ValueError: pass
+else: raise AssertionError('Unreferenced root file accepted')
+# The executable must be a required file, whether or not it is a root file.
+for executable in ['Other.exe', 'Game/Missing.exe', 'game64.dat']:
+    try: validate_import_rules(root_rules(executable=executable))
+    except ValueError: continue
+    raise AssertionError('Executable outside the required files accepted: ' + executable)
+# A required file at the root that rootFiles does not list is still outside every directory.
+try: validate_import_rules(root_rules(rootFiles=['Game64.exe']))
+except ValueError: pass
+else: raise AssertionError('Unlisted root level required file accepted')
+# The rule also holds inside a whole recipe.
+recipe = synthetic(); recipe['importRules'] = root_rules()
+validate_recipe(recipe)
+recipe = synthetic(); recipe['importRules'] = root_rules(rootFiles=['../Game64.exe', 'Launcher64.exe'])
+must_reject(recipe, 'traversal in rootFiles inside a recipe')
+
 # Nothing about the shipped recipes changes: none uses a new key, and each still validates.
 for name in ['nfsmw', 'cod4', 'nfs2015', 'farcry2', 'farcry2-bundled']:
     recipe = load_recipe(name)
@@ -208,4 +275,5 @@ for name in ['nfsmw', 'cod4', 'nfs2015', 'farcry2', 'farcry2-bundled']:
     rules = recipe.get('importRules')
     if rules:
         assert rules['machine'] == 'i386'
+        assert 'rootFiles' not in rules
 print('64-bit recipe schema regressions passed')
