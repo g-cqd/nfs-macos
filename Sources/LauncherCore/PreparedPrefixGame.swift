@@ -179,7 +179,9 @@ package struct PreparedPrefixGame: Codable, Equatable, Sendable {
       storeClient.installRoot)
     let versions = ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
       .filter { name in
-        !name.isEmpty && name.allSatisfy { $0.isNumber || $0 == "." }
+        // EA's own updater names a new client folder `13.805.11.6320-1791598480`: digits, dots and
+        // one dash-separated build suffix. A plain digits-and-dots test lost the updated client.
+        Self.isClientVersionFolder(name)
           && FileManager.default.fileExists(
             atPath: root.appendingPathComponent(name).appendingPathComponent(
               storeClient.clientExecutable
@@ -190,5 +192,16 @@ package struct PreparedPrefixGame: Codable, Equatable, Sendable {
     return "C:\\"
       + (storeClient.installRoot + "/" + version + "/" + storeClient.clientExecutable)
       .replacingOccurrences(of: "/", with: "\\")
+  }
+
+  /// Whether `name` looks like an EA client version folder: digits and dots, optionally followed
+  /// by `-` and a numeric build suffix (`13.805.2.6319`, `13.805.11.6320-1791598480`).
+  package static func isClientVersionFolder(_ name: String) -> Bool {
+    let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+    guard parts.count == 1 || parts.count == 2 else { return false }
+    guard let version = parts.first, !version.isEmpty,
+      version.allSatisfy({ $0.isNumber || $0 == "." }), version.first != ".", version.last != "."
+    else { return false }
+    return parts.count == 1 || (parts[1].allSatisfy(\.isNumber) && !parts[1].isEmpty)
   }
 }

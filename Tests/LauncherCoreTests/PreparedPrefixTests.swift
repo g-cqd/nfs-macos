@@ -43,6 +43,19 @@ struct PreparedPrefixTests {
   }
 
   @Test
+  func `the store client's own updater folder names are recognised as versions`() {
+    for name in ["13.805.2.6319", "13.805.11.6320-1791598480", "1.0"] {
+      #expect(PreparedPrefixGame.isClientVersionFolder(name), "\(name)")
+    }
+    for name in [
+      "", ".", "13.805.", ".13", "EA Desktop", "13.805.2.6319-", "-1791598480",
+      "13.805-1-2", "13.805.2.6319-abc", "../13.805.2",
+    ] {
+      #expect(!PreparedPrefixGame.isClientVersionFolder(name), "\(name)")
+    }
+  }
+
+  @Test
   func `a template is placed, linked, attributed, verified and published once`() throws {
     let (root, manifest) = try template()
     defer { try? FileManager.default.removeItem(at: root) }
