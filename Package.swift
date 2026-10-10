@@ -15,9 +15,12 @@ let package = Package(
     .executable(name: "NFS2015Session", targets: ["NFS2015Session"]),
     .executable(name: "BF3Launcher", targets: ["BF3Launcher"]),
     .executable(name: "BF3Session", targets: ["BF3Session"]),
+    .executable(name: "GameHub", targets: ["HubApp"]),
   ],
   targets: [
     .target(name: "LauncherCore"),
+    .target(name: "HubCore", dependencies: ["LauncherCore"]),
+    .executableTarget(name: "HubApp", dependencies: ["HubCore", "LauncherCore"]),
     .target(name: "SharedLauncher", dependencies: ["LauncherCore"]),
     .target(name: "CoD4Core", dependencies: ["LauncherCore"]),
     .target(name: "FarCry2Core", dependencies: ["LauncherCore"]),
@@ -41,6 +44,7 @@ let package = Package(
       resources: [.copy("Fixtures")]),
     .testTarget(
       name: "LauncherUITests", dependencies: ["NFSMWLauncher", "LauncherCore", "SharedLauncher"]),
+    .testTarget(name: "HubCoreTests", dependencies: ["HubCore", "LauncherCore"]),
     .testTarget(name: "CoD4CoreTests", dependencies: ["CoD4Core", "LauncherCore"]),
     .testTarget(name: "NFS2015CoreTests", dependencies: ["NFS2015Core", "LauncherCore"]),
     .testTarget(
