@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import HubCore
 import LauncherCore
@@ -12,6 +11,7 @@ struct PendingInstance: Identifiable {
   let prefix: URL
   let plan: InstancePlan
   let freeBytes: Int64
+  var pendingError: HubError?
 }
 
 /// Filter options for the game library.
@@ -63,13 +63,13 @@ final class HubModel {
   private(set) var catalog: [CatalogEntry] = []
   private(set) var instances: [InstanceSummary] = []
   var filter: LibraryFilter = .all
-  private(set) var isLoadingCatalog = false
   private(set) var isCreatingInstance = false
   private(set) var error: HubError?
   private(set) var spaceInfo: SpaceInfo?
   var pending: PendingInstance?
 
   let layout: HubLayout
+  private var catalogGeneration = 0
 
   init(layout: HubLayout = .standard()) {
     self.layout = layout
@@ -97,10 +97,12 @@ final class HubModel {
 
   /// Refresh the catalog of games.
   func refreshCatalog() async {
-    self.isLoadingCatalog = true
+    let generation = catalogGeneration + 1
+    catalogGeneration = generation
     let entries = await Task.detached { GameCatalog.scan(layout: self.layout) }.value
-    self.catalog = entries
-    self.isLoadingCatalog = false
+    if generation == catalogGeneration {
+      self.catalog = entries
+    }
   }
 
   /// Refresh the list of internal instances.
@@ -144,7 +146,7 @@ final class HubModel {
 
   /// Prepare to create an instance (step 1: planning).
   func prepareInstance(for game: CatalogEntry) async {
-    guard let kind = gameKind(for: game.id) else {
+    guard let kind = resolveGameKind(for: game) else {
       self.error = HubError.invalid("Game kind not supported")
       return
     }
@@ -155,7 +157,13 @@ final class HubModel {
         return
       }
 
-      let (_, plan, freeBytes) = try await Task.detached(priority: .userInitiated) {
+      // Check if Wine server is running
+      if PrefixActivity.serverIsRunning(prefix: prefix) {
+        self.error = HubError.invalid("Quit the game before creating an instance")
+        return
+      }
+
+      let (plan, freeBytes) = try await Task.detached(priority: .userInitiated) {
         let recipe = InstanceRecipes.recipe(for: kind, prefix: prefix)
         guard let recipe = recipe else {
           throw HubError.invalid("Recipe not found for \(kind)")
@@ -163,13 +171,11 @@ final class HubModel {
 
         let plan = try InstancePlanner.plan(prefix: prefix, recipe: recipe)
 
-        let parent = self.layout.instances.deletingLastPathComponent()
-        let free = SpaceProbe.freeBytes(at: parent) ?? SpaceProbe.freeBytes(at: self.layout.instances)
-        guard let free = free else {
+        guard let free = SpaceProbe.freeBytes(at: self.layout.instances) else {
           throw HubError.io("Could not determine free space")
         }
 
-        return (recipe, plan, free)
+        return (plan, free)
       }.value
 
       self.pending = PendingInstance(game: game, kind: kind, prefix: prefix, plan: plan, freeBytes: freeBytes)
@@ -182,32 +188,71 @@ final class HubModel {
 
   /// Confirm and build the pending instance (step 2: building).
   func confirmPending() async {
-    guard let pending = self.pending else { return }
+    guard var pending = self.pending else { return }
     self.isCreatingInstance = true
     defer { self.isCreatingInstance = false }
 
     do {
-      let freeBytes = await Task.detached { () -> Int64? in
-        let parent = self.layout.instances.deletingLastPathComponent()
-        return SpaceProbe.freeBytes(at: parent) ?? SpaceProbe.freeBytes(at: self.layout.instances)
-      }.value
+      // Check if Wine server is still running
+      if PrefixActivity.serverIsRunning(prefix: pending.prefix) {
+        pending.pendingError = HubError.invalid("Quit the game before creating an instance")
+        self.pending = pending
+        return
+      }
 
-      guard let freeBytes = freeBytes else {
-        self.error = HubError.io("Could not determine free space")
+      // Re-plan to check if anything changed
+      let recipe = InstanceRecipes.recipe(for: pending.kind, prefix: pending.prefix)
+      guard let recipe = recipe else {
+        pending.pendingError = HubError.invalid("Recipe not found")
+        self.pending = pending
+        return
+      }
+
+      let newPlan = try InstancePlanner.plan(prefix: pending.prefix, recipe: recipe)
+
+      // Compare what the builder will really check, not only the real file bytes.
+      let oldRequired = InstanceBuilder.requiredBytes(pending.plan)
+      let newRequired = InstanceBuilder.requiredBytes(newPlan)
+      if abs(newRequired - oldRequired) > 1000000 {  // 1MB threshold
+        pending.pendingError = HubError.invalid("Game files have changed; please prepare again")
+        self.pending = pending
+        return
+      }
+
+      guard let freeBytes = SpaceProbe.freeBytes(at: layout.instances) else {
+        pending.pendingError = HubError.io("Could not determine free space")
+        self.pending = pending
         return
       }
 
       let budget = SpaceBudget(free: freeBytes)
+      if !budget.allows(adding: newRequired) {
+        pending.pendingError = HubError.belowFloor(needed: newRequired, free: freeBytes, floor: budget.floor)
+        self.pending = pending
+        return
+      }
+
       let instanceID = makeInstanceID(for: pending.game.id)
+      let prefixPath = pending.prefix
+      let instancesPath = self.layout.instances
 
-      _ = try await Task.detached(priority: .userInitiated) {
-        try InstanceBuilder.build(
-          plan: pending.plan, prefix: pending.prefix, instances: self.layout.instances,
-          instanceID: instanceID, budget: budget, now: Date())
-      }.value
-
-      self.pending = nil
-      await reload()
+      do {
+        _ = try await Task.detached(priority: .userInitiated) {
+          try InstanceBuilder.build(
+            plan: newPlan, prefix: prefixPath, instances: instancesPath,
+            instanceID: instanceID, budget: budget, now: Date())
+        }.value
+        self.pending = nil
+        await reload()
+      } catch let err as HubError {
+        var updatedPending = pending
+        updatedPending.pendingError = err
+        self.pending = updatedPending
+      } catch {
+        var updatedPending = pending
+        updatedPending.pendingError = HubError.io(error.localizedDescription)
+        self.pending = updatedPending
+      }
     } catch let err as HubError {
       self.error = err
     } catch {
@@ -242,8 +287,9 @@ final class HubModel {
 
   // MARK: - Helpers
 
-  private func gameKind(for gameID: GameID) -> GameKind? {
-    GameKind(rawValue: gameID.rawValue)
+  func resolveGameKind(for entry: CatalogEntry) -> GameKind? {
+    // The recipe/kind id survives id de-duplication (two wrapped builds of one game).
+    entry.kindID.flatMap(GameKind.init(rawValue:)) ?? GameKind(rawValue: entry.id.rawValue)
   }
 
   private func sourcePrefix(for kind: GameKind) -> URL? {

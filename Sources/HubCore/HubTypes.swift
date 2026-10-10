@@ -29,10 +29,14 @@ package struct CatalogEntry: Identifiable, Codable, Equatable, Sendable {
   package var sizeBytes: Int64?
   /// A short note for the user: the bundle name, the store app id, or the install folder.
   package var detail: String
+  /// The recipe identifier (a `GameKind` raw value such as `cod4`) taken from the bundle manifest
+  /// before `id` was made unique, so two wrapped builds of one game share it. `nil` when the entry
+  /// names no known game.
+  package var kindID: String?
 
   package init(
     id: GameID, title: String, source: GameSource, root: URL, executable: String? = nil,
-    sizeBytes: Int64? = nil, detail: String = ""
+    sizeBytes: Int64? = nil, detail: String = "", kindID: String? = nil
   ) {
     self.id = id
     self.title = title
@@ -41,6 +45,7 @@ package struct CatalogEntry: Identifiable, Codable, Equatable, Sendable {
     self.executable = executable
     self.sizeBytes = sizeBytes
     self.detail = detail
+    self.kindID = kindID
   }
 }
 
@@ -246,6 +251,15 @@ package struct InstancePlan: Equatable, Sendable {
     self.allocatedBytes = allocatedBytes ?? realBytes
     self.skippedSpecialCount = skippedSpecialCount
   }
+}
+
+/// The part of `instance.json` the library list needs. Decoding only this skips building the
+/// (potentially huge) `entries` array.
+package struct InstanceManifestHeader: Decodable, Sendable {
+  package var instanceID: String
+  package var gameID: GameID
+  package var createdAt: Date
+  package var realBytes: Int64
 }
 
 /// The record of a built instance, stored as `instance.json` beside its `Prefix` folder.

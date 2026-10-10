@@ -14,31 +14,36 @@ package enum GameCatalog {
     entries.append(contentsOf: scanEpic(layout))
     entries.append(contentsOf: scanUbisoft(layout))
 
-    // The same folder can be reached twice (`games` and `Games` on a case-insensitive volume, a
-    // Steam library listed twice): keep the first entry per canonical on-disk root.
-    var seenRoots = Set<String>()
-    entries = entries.filter { seenRoots.insert(canonicalPath($0.root)).inserted }
-
-    // Deduplicate IDs: collisions get `-2`, `-3`, etc. or stable hash suffix
-    var idCounts: [String: Int] = [:]
-    for entry in entries {
-      let baseID = entry.id.rawValue
-      idCounts[baseID] = (idCounts[baseID] ?? 0) + 1
-    }
-
-    var finalEntries: [CatalogEntry] = []
-    var idUsed: [String: Int] = [:]
-    for entry in entries {
-      let baseID = entry.id.rawValue
-      var finalID = baseID
-      if (idCounts[baseID] ?? 0) > 1 {
-        let count = (idUsed[baseID] ?? 0) + 1
-        idUsed[baseID] = count
-        finalID = "\(baseID)-\(count + 1)"
+    // Sort by canonical root first, so the result never depends on the order the file system lists
+    // folders. The same folder can be reached twice (`games` and `Games` on a case-insensitive
+    // volume, a Steam library listed twice): keep the first entry per (source, root). Two wrapped
+    // apps are different entries even when their `Game` folders are links to one folder.
+    let ordered = entries
+      .map { (entry: $0, root: canonicalPath($0.root), identity: identity(of: $0)) }
+      .sorted { lhs, rhs in
+        if lhs.root != rhs.root { return lhs.root < rhs.root }
+        if lhs.identity != rhs.identity { return lhs.identity < rhs.identity }
+        return lhs.entry.root.path < rhs.entry.root.path
       }
-      var newEntry = entry
-      newEntry.id = GameID(finalID)
-      finalEntries.append(newEntry)
+    var seenIdentities = Set<String>()
+    let unique = ordered.filter { seenIdentities.insert($0.root + "\u{0}" + $0.identity).inserted }
+
+    // The first entry of each ID keeps it. A later duplicate takes the lowest `-N` (N >= 2) that no
+    // entry uses, so an ID that already ends in `-2` is never taken over.
+    var usedIDs = Set(unique.map { $0.entry.id.rawValue })
+    var claimedIDs = Set<String>()
+    var finalEntries: [CatalogEntry] = []
+    for item in unique {
+      var entry = item.entry
+      let baseID = entry.id.rawValue
+      if !claimedIDs.insert(baseID).inserted {
+        var suffix = 2
+        while usedIDs.contains("\(baseID)-\(suffix)") { suffix += 1 }
+        let newID = "\(baseID)-\(suffix)"
+        usedIDs.insert(newID)
+        entry.id = GameID(newID)
+      }
+      finalEntries.append(entry)
     }
 
     return finalEntries.sorted { lhs, rhs in
@@ -55,8 +60,9 @@ package enum GameCatalog {
     var totalSize: Int64 = 0
     var entryCount = 0
 
+    // The enumerator does not enter a link to a folder, so start from the real folder.
     guard let enumerator = manager.enumerator(
-      at: root,
+      at: URL(fileURLWithPath: resolvedPath(root.path), isDirectory: true),
       includingPropertiesForKeys: [.totalFileAllocatedSizeKey],
       options: []
     ) else {
@@ -86,11 +92,7 @@ package enum GameCatalog {
     var entries: [CatalogEntry] = []
     let manager = FileManager.default
 
-    guard let bundleApps = try? manager.contentsOfDirectory(
-      at: layout.bundles,
-      includingPropertiesForKeys: nil,
-      options: []
-    ) else {
+    guard let bundleApps = contents(of: layout.bundles) else {
       return []
     }
 
@@ -105,11 +107,7 @@ package enum GameCatalog {
         .appendingPathComponent("Game", isDirectory: true)
 
       // Check if Game folder has content
-      guard let gameContents = try? manager.contentsOfDirectory(
-        at: gameFolder,
-        includingPropertiesForKeys: nil,
-        options: []
-      ),
+      guard let gameContents = contents(of: gameFolder),
             !gameContents.isEmpty else {
         continue
       }
@@ -148,13 +146,15 @@ package enum GameCatalog {
         }
       }
 
+      // The recipe kind is recorded before `scan` makes the ID unique.
       let entry = CatalogEntry(
         id: GameID(gameID),
         title: title,
         source: .bundle,
         root: gameFolder,
         executable: executable,
-        detail: appURL.lastPathComponent
+        detail: appURL.lastPathComponent,
+        kindID: GameKind(rawValue: gameID)?.rawValue
       )
 
       entries.append(entry)
@@ -167,29 +167,31 @@ package enum GameCatalog {
     var entries: [CatalogEntry] = []
     let manager = FileManager.default
 
+    // The primary library is the layout's own `steamapps`. Libraries named by `libraryfolders.vdf`
+    // must stay inside the Steam folder; each real folder is scanned once.
     let steamappsURL = layout.steam.appendingPathComponent("steamapps", isDirectory: true)
+    var libraries: [(steamapps: URL, confinedToSteam: Bool)] = [(steamappsURL, false)]
+    var scannedLibraries: Set<String> = [resolvedPath(steamappsURL.path)]
 
-    // Parse library folders
-    var libraryPaths: [URL] = [steamappsURL]
     let libFoldersURL = steamappsURL.appendingPathComponent("libraryfolders.vdf")
     if let vdfText = try? BoundedFile.text(libFoldersURL, limit: 256_000) {
-      // `path` in libraryfolders.vdf names a library root; its manifests live in `<root>/steamapps`.
-      libraryPaths.append(
-        contentsOf: parseLibraryFolders(vdfText, baseLayout: layout).map { library in
-          library.lastPathComponent == "steamapps"
-            ? library : library.appendingPathComponent("steamapps", isDirectory: true)
-        })
+      for library in parseLibraryFolders(vdfText, baseLayout: layout) {
+        let libraryApps = library.appendingPathComponent("steamapps", isDirectory: true)
+        guard isContained(libraryApps, in: layout.steam, allowingEqual: false),
+              scannedLibraries.insert(resolvedPath(libraryApps.path)).inserted else {
+          continue
+        }
+        libraries.append((libraryApps, true))
+      }
     }
 
     // Scan each library for app manifests
-    for libraryPath in libraryPaths {
-      guard let manifests = try? manager.contentsOfDirectory(
-        at: libraryPath,
-        includingPropertiesForKeys: nil,
-        options: []
-      ) else {
+    for (libraryPath, confinedToSteam) in libraries {
+      guard let manifests = contents(of: libraryPath) else {
         continue
       }
+
+      let commonURL = libraryPath.appendingPathComponent("common", isDirectory: true)
 
       for manifestURL in manifests {
         guard manifestURL.lastPathComponent.hasPrefix("appmanifest_") &&
@@ -211,9 +213,11 @@ package enum GameCatalog {
           continue
         }
 
-        let gameRoot = libraryPath
-          .appendingPathComponent("common", isDirectory: true)
-          .appendingPathComponent(installDir, isDirectory: true)
+        guard let gameRoot = steamGameRoot(installDir: installDir, common: commonURL),
+              !confinedToSteam || isContained(gameRoot, in: layout.steam, allowingEqual: false)
+        else {
+          continue
+        }
 
         // Only include if the folder exists
         guard manager.fileExists(atPath: gameRoot.path) else {
@@ -241,26 +245,30 @@ package enum GameCatalog {
     return entries
   }
 
+  /// The game folder `installDir` names under `common`, or `nil` when the name is not a single
+  /// plain folder name or the folder, once every link is resolved, is not strictly inside `common`.
+  private static func steamGameRoot(installDir: String, common: URL) -> URL? {
+    guard !installDir.isEmpty, installDir != ".", installDir != "..",
+          !installDir.contains("/"), !installDir.contains("\\") else {
+      return nil
+    }
+    let root = common.appendingPathComponent(installDir, isDirectory: true)
+    guard isContained(root, in: common, allowingEqual: false) else { return nil }
+    return root
+  }
+
   private static func scanEA(_ layout: HubLayout) -> [CatalogEntry] {
     var entries: [CatalogEntry] = []
     let manager = FileManager.default
 
-    guard let publishers = try? manager.contentsOfDirectory(
-      at: layout.eaGames,
-      includingPropertiesForKeys: nil,
-      options: []
-    ) else {
+    guard let publishers = contents(of: layout.eaGames) else {
       return []
     }
 
     for publisherURL in publishers {
       guard isDirectory(publisherURL) else { continue }
 
-      guard let games = try? manager.contentsOfDirectory(
-        at: publisherURL,
-        includingPropertiesForKeys: nil,
-        options: []
-      ) else {
+      guard let games = contents(of: publisherURL) else {
         continue
       }
 
@@ -297,11 +305,7 @@ package enum GameCatalog {
 
     // If not a game and depth < 1, look one level deeper
     if depth < 1 {
-      guard let subfolders = try? manager.contentsOfDirectory(
-        at: url,
-        includingPropertiesForKeys: nil,
-        options: []
-      ) else {
+      guard let subfolders = contents(of: url) else {
         return nil
       }
 
@@ -361,7 +365,10 @@ package enum GameCatalog {
       title = extractedTitle
     }
     parser.delegate = delegate
-    parser.parse()
+    // `XMLParser.delegate` is weak: keep the delegate alive until the parse has finished.
+    withExtendedLifetime(delegate) {
+      _ = parser.parse()
+    }
 
     return title
   }
@@ -387,11 +394,7 @@ package enum GameCatalog {
 
     // Try to parse .item files
     if let manifestsURL = manifestsURL,
-       let itemFiles = try? manager.contentsOfDirectory(
-         at: manifestsURL,
-         includingPropertiesForKeys: nil,
-         options: []
-       ) {
+       let itemFiles = contents(of: manifestsURL) {
       for itemURL in itemFiles {
         guard itemURL.lastPathComponent.hasSuffix(".item") else { continue }
 
@@ -436,11 +439,7 @@ package enum GameCatalog {
 
     let excludedFolders = Set(["Launcher", "Epic Games Launcher", "Manifests", "Cache", "Data"])
 
-    guard let topLevel = try? manager.contentsOfDirectory(
-      at: layout.epic,
-      includingPropertiesForKeys: nil,
-      options: []
-    ) else {
+    guard let topLevel = contents(of: layout.epic) else {
       return []
     }
 
@@ -476,11 +475,7 @@ package enum GameCatalog {
     ]
 
     for gamesURL in possiblePaths {
-      guard let games = try? manager.contentsOfDirectory(
-        at: gamesURL,
-        includingPropertiesForKeys: nil,
-        options: []
-      ) else {
+      guard let games = contents(of: gamesURL) else {
         continue
       }
 
@@ -506,89 +501,245 @@ package enum GameCatalog {
 
   // MARK: - Helper functions
 
-  /// The canonical on-disk path of `url` (resolves links and the volume's own letter case).
-  private static func canonicalPath(_ url: URL) -> String {
-    (try? url.resourceValues(forKeys: [.canonicalPathKey]))?.canonicalPath
-      ?? url.resolvingSymlinksInPath().path
+  /// What makes an entry the same game twice: its source, plus the canonical `.app` for a wrapped
+  /// game (two apps are two games even when their `Game` folders are links to one folder, but a
+  /// link to an app is that app). A bundle's root is `<app>/Contents/Resources/Game`.
+  private static func identity(of entry: CatalogEntry) -> String {
+    guard entry.source == .bundle else { return entry.source.rawValue }
+    let app = (0..<3).reduce(entry.root) { url, _ in url.deletingLastPathComponent() }
+    return "\(entry.source.rawValue)|\(canonicalPath(app))"
   }
 
-  /// Whether `url` names a folder on disk (not a symlink to one). Asks the file system; a URL's
-  /// trailing slash is not reliable for entries returned by `contentsOfDirectory`.
-  private static func isDirectory(_ url: URL) -> Bool {
-    (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-  }
-
-  private static func resolveSymlinksInPath(_ path: String) -> String {
-    let url = URL(fileURLWithPath: path)
-    var resolvedUrl = url.standardizedFileURL
-    // Try resolving symlinks by accessing the real path through FileManager
-    if let realPath = try? FileManager.default.destinationOfSymbolicLink(atPath: path) {
-      resolvedUrl = URL(fileURLWithPath: realPath).standardizedFileURL
+  /// The entries of the folder `folder` names, following a link to it, or `nil` when it cannot be
+  /// read. `contentsOfDirectory(at:)` fails on a link to a folder; the path form does not.
+  private static func contents(of folder: URL) -> [URL]? {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else {
+      return nil
     }
-    return resolvedUrl.path
+    return names.map { folder.appendingPathComponent($0) }
   }
 
+  /// The canonical on-disk path of `url` (resolves every link and the volume's own letter case).
+  private static func canonicalPath(_ url: URL) -> String {
+    let resolved = resolvedPath(url.path)
+    return (try? URL(fileURLWithPath: resolved).resourceValues(forKeys: [.canonicalPathKey]))?
+      .canonicalPath ?? resolved
+  }
+
+  /// Whether `url` names a folder on disk, following links (`stat` semantics), so a symlinked
+  /// publisher, game or `.app` folder counts. A URL's trailing slash is not reliable for entries
+  /// returned by `contentsOfDirectory`, and `isDirectoryKey` does not follow links.
+  private static func isDirectory(_ url: URL) -> Bool {
+    var info = stat()
+    guard stat(url.path, &info) == 0 else { return false }
+    return (info.st_mode & S_IFMT) == S_IFDIR
+  }
+
+  /// `path` with every link resolved. `realpath(3)` resolves the deepest ancestor that exists,
+  /// and the part that does not exist yet is appended with `.` and `..` applied. A relative path
+  /// is taken from the current directory.
+  private static func resolvedPath(_ path: String) -> String {
+    let absolute = path.hasPrefix("/")
+      ? path : FileManager.default.currentDirectoryPath + "/" + path
+    var existing = absolute.split(separator: "/").map(String.init)
+    var missing: [String] = []
+
+    while true {
+      if let real = realPath("/" + existing.joined(separator: "/")) {
+        return normalized(real, appending: missing)
+      }
+      guard let last = existing.popLast() else {
+        return normalized("/", appending: missing)
+      }
+      missing.insert(last, at: 0)
+    }
+  }
+
+  /// The result of `realpath(3)` for `path`, or `nil` when some component does not exist.
+  private static func realPath(_ path: String) -> String? {
+    guard let buffer = realpath(path, nil) else { return nil }
+    defer { free(buffer) }
+    return String(cString: buffer)
+  }
+
+  /// `base` followed by `components`, with `.` dropped and `..` removing the previous component.
+  private static func normalized(_ base: String, appending components: [String]) -> String {
+    var parts = base.split(separator: "/").map(String.init)
+    for component in components {
+      switch component {
+      case ".": continue
+      case "..": _ = parts.popLast()
+      default: parts.append(component)
+      }
+    }
+    return "/" + parts.joined(separator: "/")
+  }
+
+  /// Whether `url`, with every link resolved on both sides, lies inside `root`. With
+  /// `allowingEqual` false, `root` itself does not count.
+  private static func isContained(_ url: URL, in root: URL, allowingEqual: Bool = true) -> Bool {
+    let child = resolvedPath(url.path)
+    let parent = resolvedPath(root.path)
+    if child == parent { return allowingEqual }
+    return child.hasPrefix(parent == "/" ? "/" : parent + "/")
+  }
+
+  // MARK: - Valve text format
+
+  /// One `{ ... }` block of a Valve text file: its `"key" "value"` pairs and its child blocks.
+  private struct VDFSection {
+    var values: [String: String] = [:]
+    var sections: [(key: String, section: VDFSection)] = []
+  }
+
+  private enum VDFToken {
+    case string(String)
+    case open
+    case close
+  }
+
+  /// Splits Valve text into quoted or bare strings and braces. Inside quotes `\\` is a backslash
+  /// and `\"` a quote; any other backslash is kept. Line ends of any kind are plain whitespace,
+  /// and `//` starts a comment. A string cut off by the end of the text is dropped.
+  private static func tokenizeVDF(_ content: String) -> [VDFToken] {
+    let scalars = Array(content.unicodeScalars)
+    var tokens: [VDFToken] = []
+    var index = 0
+
+    while index < scalars.count {
+      let scalar = scalars[index]
+      if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+        index += 1
+      } else if scalar == "/", index + 1 < scalars.count, scalars[index + 1] == "/" {
+        while index < scalars.count, scalars[index] != "\n", scalars[index] != "\r" { index += 1 }
+      } else if scalar == "{" {
+        tokens.append(.open)
+        index += 1
+      } else if scalar == "}" {
+        tokens.append(.close)
+        index += 1
+      } else if scalar == "\"" {
+        index += 1
+        var text = String.UnicodeScalarView()
+        var closed = false
+        while index < scalars.count {
+          let current = scalars[index]
+          if current == "\"" {
+            closed = true
+            index += 1
+            break
+          }
+          if current == "\\", index + 1 < scalars.count,
+             scalars[index + 1] == "\\" || scalars[index + 1] == "\"" {
+            text.append(scalars[index + 1])
+            index += 2
+          } else {
+            text.append(current)
+            index += 1
+          }
+        }
+        guard closed else { break }
+        tokens.append(.string(String(text)))
+      } else {
+        var text = String.UnicodeScalarView()
+        while index < scalars.count {
+          let current = scalars[index]
+          if CharacterSet.whitespacesAndNewlines.contains(current) || current == "{"
+            || current == "}" || current == "\"" {
+            break
+          }
+          text.append(current)
+          index += 1
+        }
+        tokens.append(.string(String(text)))
+      }
+    }
+
+    return tokens
+  }
+
+  /// Parses Valve text into its top-level section. Blocks left open at the end of the text are
+  /// closed; a block with no key is ignored.
+  private static func parseVDF(_ content: String) -> VDFSection {
+    var stack: [(key: String, section: VDFSection)] = [("", VDFSection())]
+    var pendingKey: String?
+
+    func closeInnermost() {
+      guard stack.count > 1, let finished = stack.popLast() else { return }
+      stack[stack.count - 1].section.sections.append(finished)
+    }
+
+    for token in tokenizeVDF(content) {
+      switch token {
+      case .string(let text):
+        if let key = pendingKey {
+          stack[stack.count - 1].section.values[key] = text
+          pendingKey = nil
+        } else {
+          pendingKey = text
+        }
+      case .open:
+        if let key = pendingKey {
+          stack.append((key, VDFSection()))
+          pendingKey = nil
+        }
+      case .close:
+        pendingKey = nil
+        closeInnermost()
+      }
+    }
+    while stack.count > 1 { closeInnermost() }
+
+    return stack[0].section
+  }
+
+  /// The library roots `libraryfolders.vdf` names that lie inside the Steam folder. Reads the
+  /// numbered sections (`"0" { "path" "..." }`) and the older `"1" "path"` pairs; a `path` that
+  /// is relative, or that resolves outside the Steam folder, is dropped. A `Z:` drive prefix (the
+  /// Wine view of `/`) is converted to a macOS path.
   private static func parseLibraryFolders(_ content: String, baseLayout: HubLayout) -> [URL] {
+    let top = parseVDF(content)
+    guard let folders = top.sections.first(where: { $0.key.lowercased() == "libraryfolders" })?
+      .section else {
+      return []
+    }
+
+    var rawPaths: [String] = []
+    for (key, section) in folders.sections where isNumeric(key) {
+      if let path = section.values["path"] { rawPaths.append(path) }
+    }
+    for (key, value) in folders.values where isNumeric(key) {
+      rawPaths.append(value)
+    }
+
     var paths: [URL] = []
-    let steamResolved = resolveSymlinksInPath(baseLayout.steam.path)
-    let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
+    for raw in rawPaths {
+      var pathStr = raw.trimmingCharacters(in: .whitespaces)
 
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-      // Parse key and value from SINGLE line: "path"		"/x"
-      let parts = trimmed.split(separator: "\"", omittingEmptySubsequences: false)
-      guard parts.count >= 4 else { continue }
-
-      let key = String(parts[1]).trimmingCharacters(in: .whitespaces)
-      guard key == "path" else { continue }
-
-      var pathStr = String(parts[3]).trimmingCharacters(in: .whitespaces)
-
-      // Convert Windows path to macOS path (e.g., "Z:\\Volumes\\ExT2\\Steam" -> "/Volumes/ExT2/Steam")
+      // Convert Windows path to macOS path (e.g., `Z:\Volumes\ExT2\Steam` -> `/Volumes/ExT2/Steam`)
       if pathStr.hasPrefix("Z:") || pathStr.hasPrefix("z:") {
         pathStr = pathStr.dropFirst(2).replacingOccurrences(of: "\\", with: "/")
       }
+      guard pathStr.hasPrefix("/") else { continue }
 
-      let resolved = resolveSymlinksInPath(pathStr)
+      // REQUIRE containment: must be under the steam layout
+      let library = URL(fileURLWithPath: pathStr, isDirectory: true)
+      guard isContained(library, in: baseLayout.steam) else { continue }
 
-      // REQUIRE containment: must be under steam layout
-      guard resolved == steamResolved || resolved.hasPrefix(steamResolved + "/") else {
-        continue
-      }
-
-      let steamappsURL = URL(fileURLWithPath: resolved, isDirectory: true)
-        .appendingPathComponent("steamapps", isDirectory: true)
-      paths.append(steamappsURL)
+      paths.append(library)
     }
 
     return paths
   }
 
+  private static func isNumeric(_ text: String) -> Bool {
+    !text.isEmpty && text.unicodeScalars.allSatisfy { $0.value >= 0x30 && $0.value <= 0x39 }
+  }
+
+  /// The `AppState` pairs of an `appmanifest_*.acf` file. Only pairs directly inside `AppState`
+  /// count; pairs of nested blocks (`UserConfig`, `InstalledDepots`, ...) never overwrite them.
   private static func parseACF(_ content: String) -> [String: String]? {
-    var result: [String: String] = [:]
-    let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
-
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-      // Skip comments and braces
-      guard !trimmed.isEmpty && !trimmed.hasPrefix("//") && trimmed != "{" && trimmed != "}" else {
-        continue
-      }
-
-      // Parse key-value pairs
-      // `"key"<whitespace>"value"` splits into ["", key, whitespace, value, ""].
-      let parts = trimmed.split(separator: "\"", omittingEmptySubsequences: false)
-      guard parts.count >= 4 else { continue }
-
-      let key = String(parts[1]).trimmingCharacters(in: .whitespaces)
-      let value = String(parts[3]).trimmingCharacters(in: .whitespaces)
-
-      result[key] = value
-    }
-
-    return result
+    parseVDF(content).sections.first(where: { $0.key.lowercased() == "appstate" })?.section.values
   }
 
   private static func mapWindowsPath(_ windowsPath: String, baseURL: URL) -> URL? {
@@ -601,13 +752,14 @@ package enum GameCatalog {
     // Drop leading 2-char drive letter (e.g., "C:")
     var pathComponents = components
     if pathComponents.first?.count == 2 &&
-       pathComponents.first?.last?.isLetter == true &&
+       pathComponents.first?.first?.isLetter == true &&
        pathComponents.first?.hasSuffix(":") == true {
       pathComponents.removeFirst()
     }
 
-    // Reject empty, ".", or ".." components
-    guard !pathComponents.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else {
+    // A bare drive names no game folder, and `.` or `..` must never step out of the base.
+    guard !pathComponents.isEmpty,
+          !pathComponents.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else {
       return nil
     }
 
@@ -617,12 +769,8 @@ package enum GameCatalog {
       testURL = testURL.appendingPathComponent(component)
     }
 
-    // Resolve symlinks consistently on both sides
-    let baseResolved = resolveSymlinksInPath(baseURL.path)
-    let testResolved = resolveSymlinksInPath(testURL.path)
-
-    // REQUIRE containment: must be under baseURL
-    guard testResolved == baseResolved || testResolved.hasPrefix(baseResolved + "/") else {
+    // REQUIRE containment: strictly under baseURL once every link on both sides is resolved
+    guard isContained(testURL, in: baseURL, allowingEqual: false) else {
       return nil
     }
 

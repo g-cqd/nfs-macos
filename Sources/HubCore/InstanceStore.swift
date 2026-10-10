@@ -25,7 +25,7 @@ package enum InstanceStore {
   ///
   /// The id of an instance is the name of its folder. A folder is skipped, silently, when its name
   /// is not a valid ``InstanceID``, when it is a link or not a folder, when its `instance.json`
-  /// is missing, oversized or undecodable, or when the manifest names a different id than the
+  /// is missing, oversized or undecodable (only its header fields are decoded, never its entries), or when the manifest names a different id than the
   /// folder (for example a Finder "x copy" of an instance). Hidden folders (`.staging-*`,
   /// `.trash-*`) are never listed.
   /// - Complexity: O(c + m) for c child folders and m bytes of manifests read.
@@ -56,11 +56,11 @@ package enum InstanceStore {
     do {
       let data = try BoundedFile.read(
         URL(fileURLWithPath: folderPath + "/instance.json"), limit: InstanceManifest.maxFileBytes)
-      let manifest = try InstanceManifest.decoder().decode(InstanceManifest.self, from: data)
-      guard manifest.instanceID == id.rawValue else { return nil }
+      let header = try InstanceManifest.decoder().decode(InstanceManifestHeader.self, from: data)
+      guard header.instanceID == id.rawValue else { return nil }
       return InstanceSummary(
-        id: id.rawValue, gameID: manifest.gameID, createdAt: manifest.createdAt,
-        realBytes: manifest.realBytes, url: URL(fileURLWithPath: folderPath, isDirectory: true))
+        id: id.rawValue, gameID: header.gameID, createdAt: header.createdAt,
+        realBytes: header.realBytes, url: URL(fileURLWithPath: folderPath, isDirectory: true))
     } catch {
       return nil
     }

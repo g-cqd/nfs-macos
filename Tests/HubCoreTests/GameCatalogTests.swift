@@ -59,6 +59,7 @@ import Testing
     #expect(entries[0].title == "Test Game")
     #expect(entries[0].id.rawValue == "test-game")
     #expect(entries[0].source == .bundle)
+    #expect(entries[0].kindID == nil)
   }
 
   @Test func bundleEmptyGameFolderSkipped() throws {
@@ -186,171 +187,246 @@ import Testing
   }
 
   @Test func steamVDFSingleLineFormat() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    let tempDir = try makeTempDir()
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
     let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
-    let steamappsDir = steamDir.appendingPathComponent("steamapps", isDirectory: true)
-    try FileManager.default.createDirectory(at: steamappsDir, withIntermediateDirectories: true)
+    let lib2 = steamDir.appendingPathComponent("Lib2", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: steamDir.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
 
-    // Real VDF format: key and value on ONE line
+    // Real VDF layout: tab-separated `"key"<tabs>"value"` pairs on one line, numbered sections, and
+    // a nested `apps` block whose keys must not be taken for library paths.
     let libFoldersVDF = """
-      "LibraryFolders"
+      "libraryfolders"
       {
-        "path"		"\(steamappsDir.path)"
+      \t"0"
+      \t{
+      \t\t"path"\t\t"\(steamDir.path)"
+      \t\t"label"\t\t""
+      \t\t"apps"
+      \t\t{
+      \t\t\t"111111"\t\t"1000000"
+      \t\t}
+      \t}
+      \t"1"
+      \t{
+      \t\t"path"\t\t"\(lib2.path)"
+      \t\t"apps"
+      \t\t{
+      \t\t\t"111111"\t\t"1000000"
+      \t\t}
+      \t}
       }
       """
-    try libFoldersVDF.write(
-      to: steamappsDir.appendingPathComponent("libraryfolders.vdf"),
-      atomically: true,
-      encoding: .utf8
-    )
+    try write(libFoldersVDF, to: steamDir.appendingPathComponent("steamapps/libraryfolders.vdf"))
+    try writeSteamGame(
+      library: lib2, appID: "111111", name: "VDF Test Game", installDir: "TestGame")
 
-    // Create game in the library
-    let gameDir = steamappsDir
-      .appendingPathComponent("common/TestGame", isDirectory: true)
-    try FileManager.default.createDirectory(at: gameDir, withIntermediateDirectories: true)
-    try "game".write(
-      to: gameDir.appendingPathComponent("game.exe"),
-      atomically: true,
-      encoding: .utf8
-    )
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
 
-    let manifestACF = """
-      "AppState"
-      {
-        "appid"		"111111"
-        "name"		"VDF Test Game"
-        "installdir"		"TestGame"
-        "SizeOnDisk"		"1000000"
-      }
-      """
-    try manifestACF.write(
-      to: steamappsDir.appendingPathComponent("appmanifest_111111.acf"),
-      atomically: true,
-      encoding: .utf8
-    )
-
-    let layout = HubLayout(
-      hub: tempDir,
-      bundles: tempDir.appendingPathComponent("Bundles", isDirectory: true),
-      steam: steamDir,
-      eaGames: tempDir.appendingPathComponent("EA Games", isDirectory: true),
-      epic: tempDir.appendingPathComponent("Epic", isDirectory: true),
-      ubisoft: tempDir.appendingPathComponent("Ubisoft", isDirectory: true),
-      instances: tempDir.appendingPathComponent("Instances", isDirectory: true)
-    )
-
-    let entries = GameCatalog.scan(layout: layout)
-    #expect(entries.count == 1)
-    guard !entries.isEmpty else { return }
-    #expect(entries[0].title == "VDF Test Game")
+    #expect(entries.map(\.id.rawValue) == ["steam-111111"])
+    #expect(entries.first?.title == "VDF Test Game")
+    #expect(
+      entries.first?.root.path
+        == lib2.appendingPathComponent("steamapps/common/TestGame").path)
   }
 
   @Test func steamVDFRealWindowsPathFormat() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    let tempDir = try makeTempDir()
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
     let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
-    let steamappsDir = steamDir.appendingPathComponent("steamapps", isDirectory: true)
-    try FileManager.default.createDirectory(at: steamappsDir, withIntermediateDirectories: true)
+    let lib2 = steamDir.appendingPathComponent("Lib2", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: steamDir.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
 
-    // Real format from actual Steam VDF: Windows path with Z: drive
+    // Real format from Steam on Windows or Wine: `Z:` drive, escaped backslashes, CRLF line ends.
+    func windowsPath(_ url: URL) -> String {
+      "Z:" + url.path.replacingOccurrences(of: "/", with: "\\\\")
+    }
+    let libFoldersVDF = [
+      "\"libraryfolders\"",
+      "{",
+      "\t\"0\"",
+      "\t{",
+      "\t\t\"path\"\t\t\"\(windowsPath(steamDir))\"",
+      "\t\t\"apps\"",
+      "\t\t{",
+      "\t\t\t\"222222\"\t\t\"1000000\"",
+      "\t\t}",
+      "\t}",
+      "\t\"1\"",
+      "\t{",
+      "\t\t\"path\"\t\t\"\(windowsPath(lib2))\"",
+      "\t}",
+      "}",
+    ].joined(separator: "\r\n")
+    try write(libFoldersVDF, to: steamDir.appendingPathComponent("steamapps/libraryfolders.vdf"))
+    try writeSteamGame(
+      library: lib2, appID: "222222", name: "Windows Path Game", installDir: "TestGame",
+      lineEnding: "\r\n")
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.map(\.id.rawValue) == ["steam-222222"])
+    #expect(entries.first?.title == "Windows Path Game")
+    #expect(
+      entries.first?.root.path
+        == lib2.appendingPathComponent("steamapps/common/TestGame").path)
+  }
+
+  @Test func steamVDFHostilePathRejected() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
+    let outside = tempDir.appendingPathComponent("Outside", isDirectory: true)
+    let inside = steamDir.appendingPathComponent("Lib2", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: steamDir.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+
+    // A REAL library outside the Steam folder, with a valid game in it.
+    try writeSteamGame(library: outside, appID: "666", name: "Outside Game", installDir: "Evil")
+    // A library inside the Steam folder, so the scan is known to read the file.
+    try writeSteamGame(library: inside, appID: "777", name: "Inside Game", installDir: "Good")
+
     let libFoldersVDF = """
       "libraryfolders"
       {
         "0"
         {
-          "path"		"Z:\\\\Volumes\\\\ExT2\\\\Steam"
+          "path"    "\(outside.path)"
+        }
+        "1"
+        {
+          "path"    "\(steamDir.path)/../Outside"
+        }
+        "2"
+        {
+          "path"    "Outside"
+        }
+        "3"
+        {
+          "path"    "\(inside.path)"
         }
       }
       """
-    try libFoldersVDF.write(
-      to: steamappsDir.appendingPathComponent("libraryfolders.vdf"),
-      atomically: true,
-      encoding: .utf8
-    )
+    try write(libFoldersVDF, to: steamDir.appendingPathComponent("steamapps/libraryfolders.vdf"))
 
-    // Create game in the library (manually under the resolved path)
-    let gameDir = steamappsDir
-      .appendingPathComponent("common/TestGame", isDirectory: true)
-    try FileManager.default.createDirectory(at: gameDir, withIntermediateDirectories: true)
-    try "game".write(
-      to: gameDir.appendingPathComponent("game.exe"),
-      atomically: true,
-      encoding: .utf8
-    )
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
 
-    let manifestACF = """
-      "AppState"
-      {
-        "appid"		"222222"
-        "name"		"Windows Path Game"
-        "installdir"		"TestGame"
-        "SizeOnDisk"		"1000000"
-      }
-      """
-    try manifestACF.write(
-      to: steamappsDir.appendingPathComponent("appmanifest_222222.acf"),
-      atomically: true,
-      encoding: .utf8
-    )
-
-    let layout = HubLayout(
-      hub: tempDir,
-      bundles: tempDir.appendingPathComponent("Bundles", isDirectory: true),
-      steam: steamDir,
-      eaGames: tempDir.appendingPathComponent("EA Games", isDirectory: true),
-      epic: tempDir.appendingPathComponent("Epic", isDirectory: true),
-      ubisoft: tempDir.appendingPathComponent("Ubisoft", isDirectory: true),
-      instances: tempDir.appendingPathComponent("Instances", isDirectory: true)
-    )
-
-    let entries = GameCatalog.scan(layout: layout)
-    // Should find at least the game in the primary steamapps folder
-    #expect(!entries.isEmpty)
+    #expect(entries.map(\.id.rawValue) == ["steam-777"])
   }
 
-  @Test func steamVDFHostilePathRejected() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+  @Test func steamVDFSymlinkedLibraryOutsideRejected() throws {
+    let tempDir = try makeTempDir()
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
     let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
-    let steamappsDir = steamDir.appendingPathComponent("steamapps", isDirectory: true)
-    try FileManager.default.createDirectory(at: steamappsDir, withIntermediateDirectories: true)
+    let outside = tempDir.appendingPathComponent("Outside", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: steamDir.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+    try writeSteamGame(library: outside, appID: "666", name: "Outside Game", installDir: "Evil")
 
-    // Hostile VDF: path escapes the steam layout
+    // `Steam/Link` is a link to the outside library, once absolute and once relative.
+    try FileManager.default.createSymbolicLink(
+      at: steamDir.appendingPathComponent("Link"), withDestinationURL: outside)
+    try FileManager.default.createSymbolicLink(
+      atPath: steamDir.appendingPathComponent("RelLink").path, withDestinationPath: "../Outside")
+
     let libFoldersVDF = """
-      "LibraryFolders"
+      "libraryfolders"
       {
-        "path"		"/tmp"
+        "0"
+        {
+          "path"    "\(steamDir.path)/Link"
+        }
+        "1"
+        {
+          "path"    "\(steamDir.path)/RelLink"
+        }
       }
       """
-    try libFoldersVDF.write(
-      to: steamappsDir.appendingPathComponent("libraryfolders.vdf"),
-      atomically: true,
-      encoding: .utf8
-    )
+    try write(libFoldersVDF, to: steamDir.appendingPathComponent("steamapps/libraryfolders.vdf"))
 
-    let layout = HubLayout(
-      hub: tempDir,
-      bundles: tempDir.appendingPathComponent("Bundles", isDirectory: true),
-      steam: steamDir,
-      eaGames: tempDir.appendingPathComponent("EA Games", isDirectory: true),
-      epic: tempDir.appendingPathComponent("Epic", isDirectory: true),
-      ubisoft: tempDir.appendingPathComponent("Ubisoft", isDirectory: true),
-      instances: tempDir.appendingPathComponent("Instances", isDirectory: true)
-    )
+    #expect(GameCatalog.scan(layout: makeLayout(tempDir)).isEmpty)
+  }
 
-    let entries = GameCatalog.scan(layout: layout)
-    // Should reject the hostile path and find no games
-    #expect(entries.isEmpty)
+  @Test(arguments: ["../../../Documents", "..", ".", "", "Good/Sub", "Good\\Sub", "Good/../Good"])
+  func steamInstallDirEscapeRejected(installDir: String) throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
+    let common = steamDir.appendingPathComponent("steamapps/common", isDirectory: true)
+    // Every name above would reach an existing folder if it were appended unchecked.
+    try FileManager.default.createDirectory(
+      at: common.appendingPathComponent("Good/Sub"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: common.appendingPathComponent("Good\\Sub"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: tempDir.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+    try write(
+      acf(appID: "42", name: "Escaping Game", installDir: installDir),
+      to: steamDir.appendingPathComponent("steamapps/appmanifest_42.acf"))
+
+    #expect(GameCatalog.scan(layout: makeLayout(tempDir)).isEmpty)
+  }
+
+  @Test func steamInstallDirSymlinkOutOfLibraryRejected() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
+    let common = steamDir.appendingPathComponent("steamapps/common", isDirectory: true)
+    let outside = tempDir.appendingPathComponent("Outside/Game", isDirectory: true)
+    try FileManager.default.createDirectory(at: common, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      at: common.appendingPathComponent("Linked"), withDestinationURL: outside)
+    try write(
+      acf(appID: "43", name: "Linked Game", installDir: "Linked"),
+      to: steamDir.appendingPathComponent("steamapps/appmanifest_43.acf"))
+
+    #expect(GameCatalog.scan(layout: makeLayout(tempDir)).isEmpty)
+  }
+
+  @Test func steamACFEscapedQuotesAndNestedBlocks() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let steamDir = tempDir.appendingPathComponent("Steam", isDirectory: true)
+    let steamapps = steamDir.appendingPathComponent("steamapps", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: steamapps.appendingPathComponent("common/RealDir"), withIntermediateDirectories: true)
+
+    // The nested blocks repeat top-level keys with other values: they must not win.
+    let manifest = [
+      "\"AppState\"",
+      "{",
+      "\t\"appid\"\t\t\"99\"",
+      "\t\"name\"\t\t\"Tom \\\"X\\\" \\\\ Co\"",
+      "\t\"installdir\"\t\t\"RealDir\"",
+      "\t\"UserConfig\"",
+      "\t{",
+      "\t\t\"name\"\t\t\"Nested Name\"",
+      "\t\t\"installdir\"\t\t\"../Wrong\"",
+      "\t}",
+      "\t\"MountedConfig\"",
+      "\t{",
+      "\t\t\"appid\"\t\t\"1\"",
+      "\t}",
+      "}",
+    ].joined(separator: "\r\n")
+    try write(manifest, to: steamapps.appendingPathComponent("appmanifest_99.acf"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.count == 1)
+    #expect(entries.first?.id.rawValue == "steam-99")
+    #expect(entries.first?.title == "Tom \"X\" \\ Co")
+    #expect(entries.first?.root.lastPathComponent == "RealDir")
   }
 
   // MARK: - EA tests
@@ -478,44 +554,85 @@ import Testing
   }
 
   @Test func epicWindowsPathEscapeBlocked() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    let tempDir = try makeTempDir()
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
     let epicDir = tempDir.appendingPathComponent("Epic", isDirectory: true)
-    try FileManager.default.createDirectory(at: epicDir, withIntermediateDirectories: true)
+    let outside = tempDir.appendingPathComponent("Outside", isDirectory: true)
+    let manifestDir = epicDir.appendingPathComponent("Manifests", isDirectory: true)
+    try FileManager.default.createDirectory(at: manifestDir, withIntermediateDirectories: true)
+    // Real folders on the far side of every link below.
+    try FileManager.default.createDirectory(
+      at: outside.appendingPathComponent("X"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: tempDir.appendingPathComponent("Users/gc/Documents"), withIntermediateDirectories: true)
 
+    // `Games` is a link out of the Epic folder (absolute), `Rel` another (relative).
+    try FileManager.default.createSymbolicLink(
+      at: epicDir.appendingPathComponent("Games"), withDestinationURL: outside)
+    try FileManager.default.createSymbolicLink(
+      atPath: epicDir.appendingPathComponent("Rel").path, withDestinationPath: "../Outside")
+
+    let locations = [
+      "C:\\\\..\\\\..\\\\Users\\\\gc\\\\Documents",
+      "C:\\\\Games\\\\X",
+      "C:\\\\Rel\\\\X",
+      "D:/Games/X",
+    ]
+    for (index, location) in locations.enumerated() {
+      try write(
+        """
+        {
+          "DisplayName": "Hostile Game \(index)",
+          "InstallLocation": "\(location)",
+          "LaunchExecutable": "game.exe"
+        }
+        """,
+        to: manifestDir.appendingPathComponent("test\(index).item"))
+    }
+
+    #expect(GameCatalog.scan(layout: makeLayout(tempDir)).isEmpty)
+  }
+
+  @Test func epicLinkInsideEpicFolderAllowed() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let epicDir = tempDir.appendingPathComponent("Epic", isDirectory: true)
+    let manifestDir = epicDir.appendingPathComponent("Manifests", isDirectory: true)
+    try FileManager.default.createDirectory(at: manifestDir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: epicDir.appendingPathComponent("Real/X"), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      atPath: epicDir.appendingPathComponent("Alias").path, withDestinationPath: "Real")
+    try write(
+      """
+      {"DisplayName": "Aliased", "InstallLocation": "C:\\\\Alias\\\\X"}
+      """,
+      to: manifestDir.appendingPathComponent("ok.item"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.map(\.title) == ["Aliased"])
+  }
+
+  @Test func epicBareDriveInstallLocationRejected() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let epicDir = tempDir.appendingPathComponent("Epic", isDirectory: true)
     let manifestDir = epicDir.appendingPathComponent("Manifests", isDirectory: true)
     try FileManager.default.createDirectory(at: manifestDir, withIntermediateDirectories: true)
 
-    // Item with hostile Windows path that escapes the layout
-    let itemJSON = """
-      {
-        "DisplayName": "Hostile Game",
-        "InstallLocation": "C:\\\\..\\\\..\\\\Users\\\\gc\\\\Documents",
-        "LaunchExecutable": "game.exe"
-      }
-      """
-    try itemJSON.write(
-      to: manifestDir.appendingPathComponent("test.item"),
-      atomically: true,
-      encoding: .utf8
-    )
+    for (index, location) in ["C:", "C:\\\\", "C:\\\\."].enumerated() {
+      try write(
+        """
+        {"DisplayName": "Whole Epic Folder", "InstallLocation": "\(location)"}
+        """,
+        to: manifestDir.appendingPathComponent("bare\(index).item"))
+    }
 
-    let layout = HubLayout(
-      hub: tempDir,
-      bundles: tempDir.appendingPathComponent("Bundles", isDirectory: true),
-      steam: tempDir.appendingPathComponent("Steam", isDirectory: true),
-      eaGames: tempDir.appendingPathComponent("EA Games", isDirectory: true),
-      epic: epicDir,
-      ubisoft: tempDir.appendingPathComponent("Ubisoft", isDirectory: true),
-      instances: tempDir.appendingPathComponent("Instances", isDirectory: true)
-    )
-
-    let entries = GameCatalog.scan(layout: layout)
-    // Should reject the hostile path and find no games
-    #expect(entries.isEmpty)
+    #expect(GameCatalog.scan(layout: makeLayout(tempDir)).isEmpty)
   }
 
   // MARK: - Ubisoft tests
@@ -654,9 +771,130 @@ import Testing
 
     #expect(entries.count == 2)
     guard entries.count >= 2 else { return }
-    // IDs should be deduplicated
-    #expect(entries[0].id.rawValue == "same-id-2")
-    #expect(entries[1].id.rawValue == "same-id-3")
+    // The first bundle (by path) keeps the ID, the second takes `-2`
+    #expect(entries[0].id.rawValue == "same-id")
+    #expect(entries[1].id.rawValue == "same-id-2")
+  }
+
+  // MARK: - Symlinked folders
+
+  @Test func eaSymlinkedPublisherAndGameFollowed() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let eaGamesDir = tempDir.appendingPathComponent("EA Games", isDirectory: true)
+    let elsewhere = tempDir.appendingPathComponent("Elsewhere", isDirectory: true)
+    try FileManager.default.createDirectory(at: eaGamesDir, withIntermediateDirectories: true)
+    // `EA Games/Linked` is a link to a publisher folder, `EA Games/Real/Game` a link to a game.
+    try write("exe", to: elsewhere.appendingPathComponent("Publisher/FirstGame/first.exe"))
+    try write("exe", to: elsewhere.appendingPathComponent("SecondGame/second.exe"))
+    try FileManager.default.createSymbolicLink(
+      at: eaGamesDir.appendingPathComponent("Linked"),
+      withDestinationURL: elsewhere.appendingPathComponent("Publisher"))
+    try FileManager.default.createDirectory(
+      at: eaGamesDir.appendingPathComponent("Real"), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      at: eaGamesDir.appendingPathComponent("Real/Game"),
+      withDestinationURL: elsewhere.appendingPathComponent("SecondGame"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(Set(entries.map(\.title)) == ["FirstGame", "Game"])
+    #expect(entries.allSatisfy { $0.source == .ea })
+  }
+
+  @Test func bundlesWithLinkedGameFolderBothSurvive() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let bundlesDir = tempDir.appendingPathComponent("Bundles", isDirectory: true)
+    let shared = tempDir.appendingPathComponent("SharedGame", isDirectory: true)
+    try write("content", to: shared.appendingPathComponent("file.txt"))
+
+    for name in ["A", "B"] {
+      let resources = bundlesDir.appendingPathComponent("\(name).app/Contents/Resources")
+      try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+      try FileManager.default.createSymbolicLink(
+        at: resources.appendingPathComponent("Game"), withDestinationURL: shared)
+      try write(
+        #"{"gameID": "game-\#(name.lowercased())", "displayName": "Game \#(name)"}"#,
+        to: resources.appendingPathComponent("bundle-recipe.json"))
+    }
+    // A third app that is a link to the first one is the same app reached by another name.
+    try FileManager.default.createSymbolicLink(
+      at: bundlesDir.appendingPathComponent("C.app"),
+      withDestinationURL: bundlesDir.appendingPathComponent("A.app"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.count == 2)
+    #expect(Set(entries.map(\.detail)) == ["A.app", "B.app"])
+  }
+
+  // MARK: - Sorting and deduplication tests
+
+  @Test func bundlesOfOneGameKeepKindIDAndGetUniqueIDs() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let bundlesDir = tempDir.appendingPathComponent("Bundles", isDirectory: true)
+    for name in ["Build A", "Build B", "Other"] {
+      try makeBundle(
+        in: bundlesDir, name: name, gameID: name == "Other" ? "custom-game" : "cod4")
+    }
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+    let byApp = Dictionary(uniqueKeysWithValues: entries.map { ($0.detail, $0) })
+
+    #expect(entries.count == 3)
+    #expect(byApp["Build A.app"]?.id.rawValue == "cod4")
+    #expect(byApp["Build B.app"]?.id.rawValue == "cod4-2")
+    #expect(byApp["Build A.app"]?.kindID == "cod4")
+    #expect(byApp["Build B.app"]?.kindID == "cod4")
+    #expect(byApp["Other.app"]?.id.rawValue == "custom-game")
+    #expect(byApp["Other.app"]?.kindID == nil)
+  }
+
+  @Test func idsAreStableAcrossScansAndCreationOrder() throws {
+    let names = ["M", "A", "Z", "C", "B"]
+    var assignments: [[String: String]] = []
+
+    for order in [names, names.reversed()] {
+      let tempDir = try makeTempDir()
+      defer { try? FileManager.default.removeItem(at: tempDir) }
+      let bundlesDir = tempDir.appendingPathComponent("Bundles", isDirectory: true)
+      for name in order {
+        try makeBundle(in: bundlesDir, name: name, gameID: "bf3")
+      }
+
+      // Two scans of one folder, and two folders created in opposite orders.
+      for _ in 0..<2 {
+        let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+        assignments.append(Dictionary(uniqueKeysWithValues: entries.map { ($0.detail, $0.id.rawValue) }))
+      }
+    }
+
+    #expect(assignments.count == 4)
+    #expect(assignments.allSatisfy { $0 == assignments[0] })
+    #expect(assignments[0] == [
+      "A.app": "bf3", "B.app": "bf3-2", "C.app": "bf3-3", "M.app": "bf3-4", "Z.app": "bf3-5",
+    ])
+  }
+
+  @Test func generatedIDNeverCollidesWithExistingSuffixedID() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let bundlesDir = tempDir.appendingPathComponent("Bundles", isDirectory: true)
+    try makeBundle(in: bundlesDir, name: "A1", gameID: "a")
+    try makeBundle(in: bundlesDir, name: "A2", gameID: "a")
+    try makeBundle(in: bundlesDir, name: "A3", gameID: "a-2")
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+    let byApp = Dictionary(uniqueKeysWithValues: entries.map { ($0.detail, $0.id.rawValue) })
+
+    #expect(Set(entries.map(\.id.rawValue)).count == 3)
+    #expect(byApp == ["A1.app": "a", "A2.app": "a-3", "A3.app": "a-2"])
   }
 
   // MARK: - Measure function
@@ -681,6 +919,90 @@ import Testing
     let size = GameCatalog.measure(tempDir)
 
     #expect(size > 0)
+  }
+
+  @Test func measureFollowsLinkToGameFolder() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let real = tempDir.appendingPathComponent("Real", isDirectory: true)
+    try write("test content", to: real.appendingPathComponent("file.txt"))
+    let link = tempDir.appendingPathComponent("Link")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+
+    #expect(GameCatalog.measure(link) > 0)
+    #expect(GameCatalog.measure(link) == GameCatalog.measure(real))
+  }
+
+  // MARK: - Helpers
+
+  /// A new folder under the temporary folder, with every link in its path already resolved
+  /// (`/var` is a link to `/private/var`), so paths compare equal to what the scan returns.
+  private func makeTempDir() throws -> URL {
+    let base = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+    let url = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+  }
+
+  private func makeLayout(_ tempDir: URL) -> HubLayout {
+    HubLayout(
+      hub: tempDir,
+      bundles: tempDir.appendingPathComponent("Bundles", isDirectory: true),
+      steam: tempDir.appendingPathComponent("Steam", isDirectory: true),
+      eaGames: tempDir.appendingPathComponent("EA Games", isDirectory: true),
+      epic: tempDir.appendingPathComponent("Epic", isDirectory: true),
+      ubisoft: tempDir.appendingPathComponent("Ubisoft", isDirectory: true),
+      instances: tempDir.appendingPathComponent("Instances", isDirectory: true)
+    )
+  }
+
+  /// Writes `text` to `url`, creating the folders above it.
+  private func write(_ text: String, to url: URL) throws {
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try text.write(to: url, atomically: true, encoding: .utf8)
+  }
+
+  /// An `appmanifest_*.acf` body, with `"` and `\` in the values escaped the way Steam writes them.
+  private func acf(appID: String, name: String, installDir: String, lineEnding: String = "\n")
+    -> String
+  {
+    func escaped(_ value: String) -> String {
+      value
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+    return [
+      "\"AppState\"",
+      "{",
+      "\t\"appid\"\t\t\"\(escaped(appID))\"",
+      "\t\"name\"\t\t\"\(escaped(name))\"",
+      "\t\"installdir\"\t\t\"\(escaped(installDir))\"",
+      "\t\"SizeOnDisk\"\t\t\"1000000\"",
+      "}",
+    ].joined(separator: lineEnding)
+  }
+
+  /// Creates a game folder with an executable in `<library>/steamapps/common/<installDir>` and its
+  /// `appmanifest_<appID>.acf` in `<library>/steamapps`.
+  private func writeSteamGame(
+    library: URL, appID: String, name: String, installDir: String, lineEnding: String = "\n"
+  ) throws {
+    let steamapps = library.appendingPathComponent("steamapps", isDirectory: true)
+    try write("game", to: steamapps.appendingPathComponent("common/\(installDir)/game.exe"))
+    try write(
+      acf(appID: appID, name: name, installDir: installDir, lineEnding: lineEnding),
+      to: steamapps.appendingPathComponent("appmanifest_\(appID).acf"))
+  }
+
+  /// Creates `<bundles>/<name>.app` with a game file and a recipe naming `gameID`.
+  private func makeBundle(in bundles: URL, name: String, gameID: String) throws {
+    let resources = bundles.appendingPathComponent("\(name).app/Contents/Resources")
+    try write("content", to: resources.appendingPathComponent("Game/file.txt"))
+    try write(
+      #"{"gameID": "\#(gameID)", "displayName": "\#(name)"}"#,
+      to: resources.appendingPathComponent("bundle-recipe.json"))
   }
 
   // MARK: - Real layout scan

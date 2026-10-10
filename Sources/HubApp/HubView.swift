@@ -31,6 +31,7 @@ struct HubView: View {
     .sheet(item: $model.pending) { _ in
       PendingInstanceSheet(model: model)
     }
+    .interactiveDismissDisabled(model.isCreatingInstance)
     .alert(
       "Error",
       isPresented: Binding(
@@ -113,6 +114,7 @@ private struct SpaceItem: View {
           Image(systemName: "exclamationmark.circle.fill")
             .font(.caption2)
             .foregroundStyle(.red)
+            .accessibilityLabel("Warning")
         }
       }
       if let bytes = bytes {
@@ -261,7 +263,7 @@ private struct GameInfoBox: View {
     }
     .padding(12)
     .background(Color(nsColor: .controlBackgroundColor))
-    .cornerRadius(8)
+    .clipShape(.rect(cornerRadius: 8))
   }
 }
 
@@ -271,7 +273,7 @@ private struct PlayButton: View {
       Text("Play")
     }
     .disabled(true)
-    .help("The shared prefix is not ready yet")
+    .accessibilityHint("The shared Wine prefix is not ready yet")
   }
 }
 
@@ -346,7 +348,7 @@ private struct CreateInstanceButton: View {
   let game: CatalogEntry
 
   var body: some View {
-    if gameKind(for: game.id) != nil {
+    if model.resolveGameKind(for: game) != nil {
       Button(action: {
         Task { await model.prepareInstance(for: game) }
       }) {
@@ -363,10 +365,6 @@ private struct CreateInstanceButton: View {
         .foregroundStyle(.secondary)
         .font(.caption)
     }
-  }
-
-  private func gameKind(for gameID: GameID) -> GameKind? {
-    GameKind(rawValue: gameID.rawValue)
   }
 }
 
@@ -391,28 +389,64 @@ private struct DetailRow: View {
 
 private struct PendingInstanceSheet: View {
   @Bindable var model: HubModel
+  @State private var isPreparing = false
 
   var body: some View {
     if let pending = model.pending {
       VStack(spacing: 16) {
         Text("Create Instance: \(pending.game.title)")
           .font(.headline)
-        PendingInstanceDetails(pending: pending)
+
+        if isPreparing {
+          ProgressView()
+            .controlSize(.regular)
+        } else if let pendingError = pending.pendingError {
+          Text(errorMessage(for: pendingError))
+            .foregroundStyle(.red)
+            .font(.caption)
+        }
+
+        if !isPreparing {
+          PendingInstanceDetails(pending: pending)
+        }
+
         HStack {
           Button("Cancel") { model.cancelPending() }
+            .disabled(model.isCreatingInstance)
           Spacer()
-          Button("Create") { Task { await model.confirmPending() } }
-            .disabled(!canCreateInstance(pending: pending))
+          Button("Create") {
+            isPreparing = true
+            Task {
+              await model.confirmPending()
+              isPreparing = false
+            }
+          }
+          .disabled(!canCreateInstance(pending: pending) || model.isCreatingInstance)
         }
+
         Spacer()
       }
       .padding(16)
+      .interactiveDismissDisabled(model.isCreatingInstance)
     }
   }
 
   private func canCreateInstance(pending: PendingInstance) -> Bool {
     let budget = SpaceBudget(free: pending.freeBytes)
-    return budget.allows(adding: pending.plan.realBytes)
+    return budget.allows(adding: InstanceBuilder.requiredBytes(pending.plan))
+  }
+
+  private func errorMessage(for error: HubError) -> String {
+    switch error {
+    case let .invalid(msg):
+      return "Invalid: \(msg)"
+    case let .unsafePath(msg):
+      return "Unsafe path: \(msg)"
+    case let .belowFloor(needed, free, floor):
+      return "Insufficient space. Need \(needed.formatted(.byteCount(style: .binary))), have \(free.formatted(.byteCount(style: .binary))), floor \(floor.formatted(.byteCount(style: .binary)))"
+    case let .io(msg):
+      return "I/O error: \(msg)"
+    }
   }
 }
 
@@ -437,13 +471,13 @@ private struct PendingInstanceDetails: View {
           }
         }
       }
-      let remaining = pending.freeBytes - pending.plan.realBytes
+      let remaining = pending.freeBytes - InstanceBuilder.requiredBytes(pending.plan)
       DetailRow(label: "Free After", value: remaining.formatted(.byteCount(style: .binary)))
       DetailRow(label: "Floor", value: SpaceBudget.defaultFloor.formatted(.byteCount(style: .binary)))
     }
     .padding(12)
     .background(Color(nsColor: .controlBackgroundColor))
-    .cornerRadius(8)
+    .clipShape(.rect(cornerRadius: 8))
   }
 }
 

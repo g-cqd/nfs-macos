@@ -137,9 +137,12 @@ private enum Fx {
     if case HubError.invalid = error { return true }
     return false
   }
-  static func isIO(_ error: any Error) -> Bool {
-    if case HubError.io = error { return true }
-    return false
+  /// Matches a `.io` error whose message contains `text`, so a test cannot pass on the wrong `.io`.
+  static func io(containing text: String) -> (any Error) -> Bool {
+    { error in
+      guard case HubError.io(let message) = error else { return false }
+      return message.contains(text)
+    }
   }
   static func isUnsafe(_ error: any Error) -> Bool {
     if case HubError.unsafePath = error { return true }
@@ -168,36 +171,116 @@ private enum Fx {
     "\u{00E9}", "\u{FF41}\u{FF42}", "a/b", "../x", "a b", "a.b", "ab\n",
   ]
 
-  /// Runs `body` on a mounted case-sensitive volume inside `root`, then ejects it.
-  static func withCaseSensitiveVolume(in root: URL, _ body: (URL) throws -> Void) throws {
+  /// Mounts a case-sensitive APFS disk image at `mountpoint`, runs `body`, then ejects the image
+  /// by device (the mount path may have moved by then). The test is cancelled, not failed, when
+  /// the machine cannot create or attach an image.
+  static func withVolume(in root: URL, at mountpoint: URL, _ body: () throws -> Void) throws {
     let image = root.appendingPathComponent("cs.sparseimage").path
-    let mount = root.appendingPathComponent("cs-mount", isDirectory: true)
-    try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
-    try hdiutil([
-      "create", "-size", "16m", "-fs", "Case-sensitive APFS", "-volname", "CS", "-type", "SPARSE",
-      image,
-    ])
-    try hdiutil(["attach", image, "-mountpoint", mount.path, "-nobrowse", "-noverify"])
-    defer {
-      do { try hdiutil(["detach", mount.path, "-force"]) } catch {
-        Issue.record("Could not eject the test volume: \(error)")
-      }
+    try FileManager.default.createDirectory(at: mountpoint, withIntermediateDirectories: true)
+    let device: String
+    do {
+      _ = try hdiutil([
+        "create", "-size", "16m", "-fs", "Case-sensitive APFS", "-volname", "CS", "-type",
+        "SPARSE", image,
+      ])
+      let listing = try hdiutil([
+        "attach", image, "-mountpoint", mountpoint.path, "-nobrowse", "-noverify",
+      ])
+      let first = listing.split(separator: "\n").first.map(String.init) ?? ""
+      device = String(first.split(whereSeparator: { $0 == " " || $0 == "\t" }).first ?? "")
+    } catch {
+      try Test.cancel("hdiutil cannot create or attach a test volume: \(error)")
     }
-    try body(mount)
+    defer {
+      // A volume that was just used can be briefly busy (indexing); each hdiutil call takes
+      // long enough that a few tries are a sufficient pause.
+      var failure: (any Error)?
+      for _ in 0..<5 {
+        do {
+          _ = try hdiutil(["detach", device, "-force"])
+          failure = nil
+          break
+        } catch {
+          failure = error
+        }
+      }
+      if let failure { Issue.record("Could not eject the test volume \(device): \(failure)") }
+    }
+    try body()
   }
 
-  private static func hdiutil(_ arguments: [String]) throws {
+  private static func hdiutil(_ arguments: [String]) throws -> String {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
     process.arguments = arguments
-    process.standardOutput = FileHandle.nullDevice
+    let output = Pipe()
+    process.standardOutput = output
     process.standardError = FileHandle.nullDevice
     try process.run()
+    let data = output.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     guard process.terminationStatus == 0 else {
       throw HubError.io("hdiutil \(arguments.first ?? "") failed with \(process.terminationStatus)")
     }
+    return String(decoding: data, as: UTF8.self)
   }
+}
+
+/// A listening socket where Wine's server for `prefix` would be, so `PrefixActivity` sees a
+/// running server. `stop()` is idempotent and also runs when the value is released.
+private final class FakeWineServer {
+  private let listener: Int32
+  private let socketPath: String
+  private let folder: URL
+  private let parent: URL
+  private let parentExisted: Bool
+  private var stopped = false
+
+  init(prefix: URL) throws {
+    guard let socketURL = PrefixActivity.serverSocket(prefix: prefix) else {
+      throw HubError.io("No server socket for \(prefix.path)")
+    }
+    socketPath = socketURL.path
+    folder = socketURL.deletingLastPathComponent()
+    parent = folder.deletingLastPathComponent()
+    parentExisted = Fx.exists(parent.path)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    listener = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard listener >= 0 else { throw HubError.io("socket() failed") }
+    var address = sockaddr_un()
+    address.sun_family = sa_family_t(AF_UNIX)
+    let bytes = Array(socketPath.utf8)
+    guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
+      throw HubError.io("Socket path too long: \(socketPath)")
+    }
+    withUnsafeMutableBytes(of: &address.sun_path) { buffer in
+      for (index, byte) in bytes.enumerated() { buffer[index] = byte }
+      buffer[bytes.count] = 0
+    }
+    address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+    let bound = withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+      }
+    }
+    guard bound == 0, listen(listener, 4) == 0 else {
+      close(listener)
+      throw HubError.io("Could not listen at \(socketPath)")
+    }
+  }
+
+  func stop() {
+    guard !stopped else { return }
+    stopped = true
+    unlink(socketPath)
+    close(listener)
+    do { try FileManager.default.removeItem(at: folder) } catch {
+      Issue.record("Could not remove the fake wineserver folder: \(error)")
+    }
+    if !parentExisted { rmdir(parent.path) }
+  }
+
+  deinit { stop() }
 }
 
 @Suite struct InstanceTests {
@@ -223,10 +306,23 @@ private enum Fx {
     #expect(freeBytes ?? 0 > 0)
   }
 
-  @Test func spaceProbeReturnsNilForInvalidPath() {
+  @Test func spaceProbeAsksTheNearestExistingAncestorOfAMissingPath() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let known = try #require(SpaceProbe.freeBytes(at: box.root))
+    let nested = box.root.appendingPathComponent("GameHub/Instances/deeper", isDirectory: true)
+    #expect(!Fx.exists(nested.path))
+    let probed = try #require(SpaceProbe.freeBytes(at: nested))
+    #expect(abs(probed - known) < 256 * 1024 * 1024)  // same volume; free space may drift a little
+  }
+
+  @Test func spaceProbeReturnsNilWhenTheVolumeCannotBeRead() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    try box.put("drive_c/locked/inner.txt")
+    chmod(box.path("drive_c/locked"), 0)
     #expect(
-      SpaceProbe.freeBytes(at: URL(fileURLWithPath: "/nonexistent/path/that/does/not/exist")) == nil
-    )
+      SpaceProbe.freeBytes(at: box.prefix.appendingPathComponent("drive_c/locked/x/y")) == nil)
   }
 
   // MARK: - Recipes
@@ -395,28 +491,7 @@ private enum Fx {
     #expect {
       _ = try InstancePlanner.plan(
         prefix: box.prefix, recipe: Fx.recipe(real: ["drive_c/Program Files"]))
-    } throws: { Fx.isIO($0) }
-  }
-
-  @Test func plannerRejectsNamesThatDifferOnlyByCase() throws {
-    let box = try Sandbox()
-    defer { box.discard() }
-    try Fx.withCaseSensitiveVolume(in: box.root) { volume in
-      let prefix = volume.appendingPathComponent("prefix", isDirectory: true)
-      let folder = prefix.appendingPathComponent("drive_c/Program Files")
-      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-      try "1".write(
-        to: folder.appendingPathComponent("Readme.txt"), atomically: false, encoding: .utf8)
-      try "2".write(
-        to: folder.appendingPathComponent("README.TXT"), atomically: false, encoding: .utf8)
-      #expect {
-        _ = try InstancePlanner.plan(
-          prefix: prefix, recipe: Fx.recipe(real: ["drive_c/Program Files"]))
-      } throws: { error in
-        guard case HubError.invalid(let message) = error else { return false }
-        return message.contains("Readme.txt") && message.contains("README.TXT")
-      }
-    }
+    } throws: { Fx.io(containing: "Could not list")($0) }
   }
 
   // MARK: - Planner: recipe paths
@@ -735,7 +810,9 @@ private enum Fx {
     defer { box.discard() }
     let plan = try box.standardPlan()
     try box.build(plan, id: "duplicate-test")
-    #expect { try box.build(plan, id: "duplicate-test") } throws: { Fx.isIO($0) }
+    #expect { try box.build(plan, id: "duplicate-test") } throws: {
+      Fx.io(containing: "already exists")($0)
+    }
     #expect(Fx.exists(box.instancePath("duplicate-test", "instance.json")))
     #expect(Fx.names(box.instances.path).filter { $0.hasPrefix(".staging-") }.isEmpty)
   }
@@ -776,14 +853,14 @@ private enum Fx {
       atPath: live + "/Prefix", withIntermediateDirectories: true)
     try "in progress".write(toFile: live + "/Prefix/file", atomically: false, encoding: .utf8)
 
-    let holder = open(box.instancePath(".lock"), O_RDWR | O_CREAT, 0o600)
+    let holder = open(box.instancePath(".lock"), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
     try #require(holder >= 0)
     defer { close(holder) }
     try #require(flock(holder, LOCK_EX | LOCK_NB) == 0)
 
-    #expect { try box.build(plan, id: "second") } throws: { Fx.isIO($0) }
+    #expect { try box.build(plan, id: "second") } throws: { Fx.io(containing: "being built")($0) }
     #expect { try InstanceRemover.remove(instanceID: "second", instances: box.instances) } throws: {
-      Fx.isIO($0)
+      Fx.io(containing: "being built")($0)
     }
     #expect(try String(contentsOfFile: live + "/Prefix/file", encoding: .utf8) == "in progress")
     #expect(!Fx.exists(box.instancePath("second")))
@@ -799,7 +876,9 @@ private enum Fx {
       entries: [InstanceEntry(path: "missing.bin", kind: .real, size: 1)], realBytes: 1,
       placeholderCount: 0, omittedCount: 0)
 
-    #expect { try box.build(broken, id: "broken") } throws: { Fx.isIO($0) }
+    #expect { try box.build(broken, id: "broken") } throws: {
+      Fx.io(containing: "Copying failed")($0)
+    }
     #expect(Fx.names(box.instances.path) == [".lock", "survivor"])
     #expect(Fx.exists(box.instancePath("survivor", "instance.json")))
   }
@@ -1033,48 +1112,277 @@ private enum Fx {
     defer { box.discard() }
     try box.build(try box.standardPlan(), id: "busy")
     let prefix = URL(fileURLWithPath: box.instancePath("busy", "Prefix"))
-    let socketURL = try #require(PrefixActivity.serverSocket(prefix: prefix))
-    let folder = socketURL.deletingLastPathComponent()
-    let parent = folder.deletingLastPathComponent()
-    let parentExisted = Fx.exists(parent.path)
-    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    defer {
-      do { try FileManager.default.removeItem(at: folder) } catch {
-        Issue.record("Could not remove the fake wineserver folder: \(error)")
-      }
-      if !parentExisted { rmdir(parent.path) }
-    }
-
-    let listener = socket(AF_UNIX, SOCK_STREAM, 0)
-    try #require(listener >= 0)
-    defer { close(listener) }
-    var address = sockaddr_un()
-    address.sun_family = sa_family_t(AF_UNIX)
-    let bytes = Array(socketURL.path.utf8)
-    try #require(bytes.count < MemoryLayout.size(ofValue: address.sun_path))
-    withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-      for (index, byte) in bytes.enumerated() { buffer[index] = byte }
-      buffer[bytes.count] = 0
-    }
-    address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-    let bound = withUnsafePointer(to: &address) {
-      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-        bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-      }
-    }
-    try #require(bound == 0)
-    try #require(listen(listener, 4) == 0)
+    let server = try FakeWineServer(prefix: prefix)
+    defer { server.stop() }
     try #require(PrefixActivity.serverIsRunning(prefix: prefix))
 
     #expect { try InstanceRemover.remove(instanceID: "busy", instances: box.instances) } throws: {
-      Fx.isIO($0)
+      Fx.io(containing: "Wine server is running")($0)
     }
     #expect(Fx.exists(box.instancePath("busy", "instance.json")))
 
-    unlink(socketURL.path)  // the server is gone: nothing accepts connections at the path
+    server.stop()
     try #require(!PrefixActivity.serverIsRunning(prefix: prefix))
     try InstanceRemover.remove(instanceID: "busy", instances: box.instances)
     #expect(!Fx.exists(box.instancePath("busy")))
+  }
+
+  @Test func builderRefusesWhileTheSourceWineServerRuns() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    let server = try FakeWineServer(prefix: box.prefix)
+    defer { server.stop() }
+    try #require(PrefixActivity.serverIsRunning(prefix: box.prefix))
+
+    #expect { try box.build(plan, id: "torn") } throws: {
+      Fx.io(containing: "Quit the game before creating an instance.")($0)
+    }
+    #expect(Fx.names(box.instances.path).isEmpty)
+
+    server.stop()
+    try box.build(plan, id: "torn")
+    #expect(Fx.exists(box.instancePath("torn", "instance.json")))
+  }
+
+  // MARK: - Builder: required bytes, sweep, time validation
+
+  @Test func requiredBytesIsExactlyWhatTheBuilderChecks() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    let needed = InstanceBuilder.requiredBytes(plan)
+    #expect(needed == plan.allocatedBytes + 1_048_576 + Int64(plan.entries.count) * 1024)
+
+    let exactly = SpaceBudget(floor: 0, free: needed)
+    try InstanceBuilder.build(
+      plan: plan, prefix: box.prefix, instances: box.instances, instanceID: "exact",
+      budget: exactly, now: Fx.fixedDate)
+    let oneShort = SpaceBudget(floor: 0, free: needed - 1)
+    #expect {
+      try InstanceBuilder.build(
+        plan: plan, prefix: box.prefix, instances: box.instances, instanceID: "short",
+        budget: oneShort, now: Fx.fixedDate)
+    } throws: { error in
+      guard case HubError.belowFloor(let reported, _, _) = error else { return false }
+      return reported == needed
+    }
+    var huge = plan
+    huge.allocatedBytes = Int64.max
+    #expect(InstanceBuilder.requiredBytes(huge) == Int64.max)
+  }
+
+  @Test func aStuckTrashFolderDoesNotBlockLaterBuilds() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    try box.build(plan, id: "stuck")
+    let pinned = box.instancePath(".trash-stuck", "Prefix/drive_c/other/data.bin")
+    try #require(
+      chflags(box.instancePath("stuck", "Prefix/drive_c/other/data.bin"), UInt32(UF_IMMUTABLE)) == 0
+    )
+    defer { chflags(pinned, 0) }
+    #expect(throws: HubError.self) {
+      try InstanceRemover.remove(instanceID: "stuck", instances: box.instances)
+    }
+    try #require(Fx.exists(pinned))
+
+    try box.build(plan, id: "fresh")
+
+    #expect(Fx.exists(box.instancePath("fresh", "instance.json")))
+    #expect(Fx.exists(pinned))  // still there for the user to deal with
+  }
+
+  @Test func sweepOnlyTouchesStagingAndTrashFoldersWithADash() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    let keepers = [
+      "foreign", ".staging", ".stagingx", ".trash", ".trashcan", "staging-x", "x.trash-y",
+    ]
+    for name in keepers {
+      try FileManager.default.createDirectory(
+        atPath: box.instancePath(name), withIntermediateDirectories: true)
+      try "keep".write(toFile: box.instancePath(name, "file"), atomically: false, encoding: .utf8)
+    }
+    try FileManager.default.createDirectory(
+      atPath: box.instancePath(".staging-gone-00000000"), withIntermediateDirectories: true)
+    try box.build(plan, id: "sweeper")
+
+    for name in keepers {
+      #expect(Fx.exists(box.instancePath(name, "file")), "\(name) must survive the sweep")
+    }
+    #expect(!Fx.exists(box.instancePath(".staging-gone-00000000")))
+  }
+
+  @Test func builderRejectsModificationTimesOutsideASecond() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    // 1_000_000_000 is a whole second; the next two are UTIME_NOW and UTIME_OMIT, which mean
+    // "now" and "leave alone" to utimensat; -1 and Int32.max are simply wrong.
+    for nanos: Int32 in [1_000_000_000, 1_073_741_823, 1_073_741_822, -1, Int32.max] {
+      for kind in [EntryKind.placeholder, .directory, .real] {
+        let plan = InstancePlan(
+          recipe: Fx.recipe(real: ["x"]),
+          entries: [InstanceEntry(path: "x", kind: kind, mtimeNanos: nanos)], realBytes: 0,
+          placeholderCount: 0, omittedCount: 0)
+        Fx.expectFailure("\(kind) with \(nanos) ns", matching: Fx.isInvalid) {
+          try box.build(plan, id: "time")
+        }
+      }
+    }
+    #expect(Fx.names(box.instances.path).isEmpty)
+  }
+
+  @Test func placeholderMarkerKeepsNanosecondDigits() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = InstancePlan(
+      recipe: Fx.recipe(real: ["x"]),
+      entries: [
+        InstanceEntry(path: "a", kind: .placeholder, size: 3, mtimeSeconds: 7, mtimeNanos: 0),
+        InstanceEntry(
+          path: "b", kind: .placeholder, size: 3, mtimeSeconds: 7, mtimeNanos: 999_999_999),
+      ], realBytes: 0, placeholderCount: 2, omittedCount: 0)
+    try box.build(plan, id: "digits")
+    #expect(Fx.xattr(box.instancePath("digits", "Prefix/a")) == "3:7.000000000")
+    #expect(Fx.xattr(box.instancePath("digits", "Prefix/b")) == "3:7.999999999")
+  }
+
+  // MARK: - Builder and remover: mutation guards
+
+  @Test func builderNeverCopiesThroughALinkThatBecameTheSource() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let secret = box.root.appendingPathComponent("secret.txt").path
+    try "secret".write(toFile: secret, atomically: false, encoding: .utf8)
+    try box.link("drive_c/Program Files/data.txt", to: secret)
+    let plan = InstancePlan(
+      recipe: Fx.recipe(real: ["drive_c"]),
+      entries: [
+        InstanceEntry(path: "drive_c", kind: .directory, mode: 0o755),
+        InstanceEntry(path: "drive_c/Program Files", kind: .directory, mode: 0o755),
+        InstanceEntry(path: "drive_c/Program Files/data.txt", kind: .real, size: 6),
+      ], realBytes: 6, placeholderCount: 0, omittedCount: 0)
+
+    #expect { try box.build(plan, id: "followed") } throws: {
+      Fx.io(containing: "not a regular file")($0)
+    }
+    #expect(Fx.names(box.instances.path) == [".lock"])
+  }
+
+  @Test func builderRefusesToReuseAPlaceholderPath() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = InstancePlan(
+      recipe: Fx.recipe(real: ["d"]),
+      entries: [
+        InstanceEntry(path: "d", kind: .directory, mode: 0o755),
+        InstanceEntry(path: "d/f", kind: .placeholder, size: 1),
+        InstanceEntry(path: "d/f", kind: .placeholder, size: 2),
+      ], realBytes: 0, placeholderCount: 2, omittedCount: 0)
+    #expect { try box.build(plan, id: "twice") } throws: {
+      Fx.io(containing: "Creating the placeholder")($0)
+    }
+    #expect(Fx.names(box.instances.path) == [".lock"])
+  }
+
+  @Test func buildNeverReplacesAFolderThatAppearsBeforeTheFinalRename() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    let target = box.instancePath("racy")
+
+    #expect {
+      try InstanceBuilder.build(
+        plan: plan, prefix: box.prefix, instances: box.instances, instanceID: "racy",
+        budget: Fx.budget, now: Fx.fixedDate, beforePublish: { mkdir(target, 0o700) })
+    } throws: { Fx.io(containing: "Moving the finished instance into place")($0) }
+    #expect(Fx.names(target).isEmpty)  // the intruder is untouched, and it is not an instance
+    #expect(Fx.names(box.instances.path) == [".lock", "racy"])
+  }
+
+  @Test func removeNeverReplacesATrashFolderThatAppearsBeforeTheRename() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    try box.build(try box.standardPlan(), id: "raced")
+    let trash = box.instancePath(".trash-raced")
+
+    #expect {
+      try InstanceRemover.remove(
+        instanceID: "raced", instances: box.instances, beforeMove: { mkdir(trash, 0o700) })
+    } throws: { Fx.io(containing: "Moving the instance to the trash")($0) }
+    #expect(Fx.exists(box.instancePath("raced", "instance.json")))
+    #expect(Fx.names(trash).isEmpty)
+  }
+
+  @Test func removerWorksThroughASymlinkedInstancesFolderAndLeavesTheLinkAlone() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    try box.build(try box.standardPlan(), id: "behind-a-link")
+    let alias = box.root.appendingPathComponent("alias", isDirectory: true)
+    try FileManager.default.createSymbolicLink(
+      atPath: alias.path, withDestinationPath: box.instances.path)
+
+    try InstanceRemover.remove(instanceID: "behind-a-link", instances: alias)
+
+    #expect(!Fx.exists(box.instancePath("behind-a-link")))
+    #expect(Fx.names(box.instances.path) == [".lock"])
+    #expect(
+      try FileManager.default.destinationOfSymbolicLink(atPath: alias.path) == box.instances.path)
+    #expect {
+      try InstanceRemover.remove(
+        instanceID: "x", instances: box.root.appendingPathComponent("no-such-folder"))
+    } throws: { Fx.isUnsafe($0) }
+  }
+
+  // MARK: - Lock
+
+  @Test func theLockIsRefusedThroughASymlinkAndClosesOnExec() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let outside = box.root.appendingPathComponent("outside.lock").path
+    try "untouched".write(toFile: outside, atomically: false, encoding: .utf8)
+    try FileManager.default.createSymbolicLink(
+      atPath: box.instancePath(".lock"), withDestinationPath: outside)
+    #expect {
+      try box.build(try box.standardPlan(), id: "linked-lock")
+    } throws: { Fx.io(containing: "Opening the instance lock")($0) }
+    #expect(try String(contentsOfFile: outside, encoding: .utf8) == "untouched")
+    try FileManager.default.removeItem(atPath: box.instancePath(".lock"))
+
+    let lock = try InstanceLock.acquire(instancesPath: box.instances.path)
+    let closesOnExec = lock.closesOnExec  // a noncopyable value cannot go into #expect
+    #expect(closesOnExec)
+    #expect {
+      let second = try InstanceLock.acquire(instancesPath: box.instances.path)
+      second.release()
+    } throws: { Fx.io(containing: "being built")($0) }
+    lock.release()
+    let again = try InstanceLock.acquire(instancesPath: box.instances.path)
+    again.release()
+  }
+
+  // MARK: - Store header
+
+  @Test func storeListsFromTheHeaderAndDoesNotDecodeEntries() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let plan = try box.standardPlan()
+    try box.build(plan, id: "header-only")
+    let path = box.instancePath("header-only", "instance.json")
+    let text = try String(contentsOfFile: path, encoding: .utf8)
+    try #require(text.contains("\"kind\" : \"real\""))
+    try text.replacingOccurrences(of: "\"kind\" : \"real\"", with: "\"kind\" : \"bogus\"")
+      .write(toFile: path, atomically: false, encoding: .utf8)
+
+    let listed = InstanceStore.list(instances: box.instances)
+    #expect(listed.map(\.id) == ["header-only"])
+    #expect(listed.first?.realBytes == plan.realBytes)
+    // The remover still decodes the whole manifest, so it refuses a damaged one.
+    #expect {
+      try InstanceRemover.remove(instanceID: "header-only", instances: box.instances)
+    } throws: { Fx.isUnsafe($0) }
   }
 
   // MARK: - Real prefix (read only)
@@ -1095,5 +1403,57 @@ private enum Fx {
     #expect(!plan.entries.isEmpty)
     #expect(plan.realBytes > 0)
     #expect(plan.allocatedBytes >= 0)
+  }
+}
+
+/// The tests that mount a disk image. `hdiutil` spawns a child process, so they run one at a
+/// time. They are cancelled, not failed, where an image cannot be attached.
+@Suite(.serialized) struct InstanceVolumeTests {
+  @Test func plannerRejectsNamesThatDifferOnlyByCase() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let mount = box.root.appendingPathComponent("cs-mount", isDirectory: true)
+    try Fx.withVolume(in: box.root, at: mount) {
+      let prefix = mount.appendingPathComponent("prefix", isDirectory: true)
+      let folder = prefix.appendingPathComponent("drive_c/Program Files")
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      try "1".write(
+        to: folder.appendingPathComponent("Readme.txt"), atomically: false, encoding: .utf8)
+      try "2".write(
+        to: folder.appendingPathComponent("README.TXT"), atomically: false, encoding: .utf8)
+      #expect {
+        _ = try InstancePlanner.plan(
+          prefix: prefix, recipe: Fx.recipe(real: ["drive_c/Program Files"]))
+      } throws: { error in
+        guard case HubError.invalid(let message) = error else { return false }
+        return message.contains("Readme.txt") && message.contains("README.TXT")
+      }
+    }
+  }
+
+  @Test func theDeleterStaysOnOneVolume() throws {
+    let box = try Sandbox()
+    defer { box.discard() }
+    let tree = box.root.appendingPathComponent("tree", isDirectory: true)
+    let mount = tree.appendingPathComponent("mnt", isDirectory: true)
+    try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+    try "own".write(
+      to: tree.appendingPathComponent("own.txt"), atomically: false, encoding: .utf8)
+    // The tree is deleted in place, not renamed: a volume mounted under a renamed folder
+    // stays busy for minutes and could not be ejected afterwards.
+    try Fx.withVolume(in: box.root, at: mount) {
+      try "canary".write(
+        to: mount.appendingPathComponent("canary.txt"), atomically: false, encoding: .utf8)
+
+      // The mount point itself cannot be removed, so the deletion reports it.
+      #expect {
+        try TreeDeleter.remove(path: tree.path)
+      } throws: { Fx.io(containing: "mnt")($0) }
+
+      #expect(
+        try String(contentsOf: mount.appendingPathComponent("canary.txt"), encoding: .utf8)
+          == "canary")
+      #expect(!Fx.exists(tree.appendingPathComponent("own.txt").path))
+    }
   }
 }

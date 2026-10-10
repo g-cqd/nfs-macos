@@ -227,23 +227,32 @@ package enum InstanceBuilder {
   /// - Parameters:
   ///   - plan: The plan from ``InstancePlanner/plan(prefix:recipe:)``. Every entry path is
   ///     validated again here.
-  ///   - budget: The space needed is the plan's allocated bytes plus a margin for folders and
-  ///     metadata.
-  /// - Throws: `.invalid` for a bad id; `.unsafePath` for a plan entry that escapes the prefix, has no
-  ///   folder parent or whose link would resolve into the source; `.belowFloor` before any write;
-  ///   `.io` for a duplicate id, a held lock, or any failed file operation.
+  ///   - budget: The space needed is ``requiredBytes(_:)``.
+  ///   - beforePublish: Runs after every check and the whole copy, just before the staging folder
+  ///     is renamed into place. It exists so a test can create the target in that window.
+  /// - Throws: `.invalid` for a bad id or a plan entry with a modification time outside
+  ///   `0..<1_000_000_000` nanoseconds; `.unsafePath` for a plan entry that escapes the prefix, has
+  ///   no folder parent or whose link would resolve into the source; `.belowFloor` before any
+  ///   write; `.io` while the source prefix's Wine server is running (a registry copied under a
+  ///   running server can be torn), for a duplicate id, a held lock, or any failed file operation.
   /// - Complexity: O(n) in the number of entries; copying the real files dominates.
   package static func build(
     plan: InstancePlan, prefix: URL, instances: URL, instanceID: String, budget: SpaceBudget,
-    now: Date
+    now: Date, beforePublish: () -> Void = {}
   ) throws(HubError) -> InstanceManifest {
     let id = try InstanceID(instanceID)
     var componentsOfEntry: [[String]] = []
     componentsOfEntry.reserveCapacity(plan.entries.count)
     for entry in plan.entries {
+      guard (0..<1_000_000_000).contains(entry.mtimeNanos) else {
+        throw .invalid("Plan entry '\(entry.path)' has a modification time outside a second.")
+      }
       componentsOfEntry.append(
         try InstancePaths.components(
           entry.path, subject: "Plan entry", dropEmpty: false, escapeIsUnsafe: true))
+    }
+    guard !PrefixActivity.serverIsRunning(prefix: prefix) else {
+      throw .io("Quit the game before creating an instance.")
     }
     let needed = requiredBytes(plan)
     guard budget.allows(adding: needed) else {
@@ -257,51 +266,59 @@ package enum InstanceBuilder {
     } catch {
       throw .io("Could not create \(instancesPath): \(error.localizedDescription)")
     }
-    let lock = try InstanceLock.acquire(instancesPath: instancesPath)
-    defer { lock.release() }
-    try sweepStaleFolders(instancesPath: instancesPath)
+    return try InstanceLock.withLock(instancesPath: instancesPath) {
+      () throws(HubError) -> InstanceManifest in
+      try sweepStaleFolders(instancesPath: instancesPath)
 
-    let targetPath = instancesPath + "/" + id.rawValue
-    var existing = stat()
-    guard lstat(targetPath, &existing) != 0, errno == ENOENT else {
-      throw .io("Instance \(id) already exists.")
-    }
+      let targetPath = instancesPath + "/" + id.rawValue
+      var existing = stat()
+      guard lstat(targetPath, &existing) != 0, errno == ENOENT else {
+        throw .io("Instance \(id) already exists.")
+      }
 
-    let suffix = UUID().uuidString.prefix(8).lowercased()
-    let stagingPath = instancesPath + "/.staging-\(id.rawValue)-\(suffix)"
-    do throws(HubError) {
-      guard mkdir(stagingPath, 0o700) == 0 else {
-        throw posixFailure("Creating the staging folder", stagingPath)
+      let suffix = UUID().uuidString.prefix(8).lowercased()
+      let stagingPath = instancesPath + "/.staging-\(id.rawValue)-\(suffix)"
+      do throws(HubError) {
+        guard mkdir(stagingPath, 0o700) == 0 else {
+          throw posixFailure("Creating the staging folder", stagingPath)
+        }
+        let manifest = try populate(
+          stagingPath: stagingPath, plan: plan, components: componentsOfEntry,
+          sourceRoot: prefix.standardizedFileURL.path, id: id, now: now)
+        beforePublish()
+        guard renamex_np(stagingPath, targetPath, UInt32(RENAME_EXCL)) == 0 else {
+          throw posixFailure("Moving the finished instance into place", targetPath)
+        }
+        return manifest
+      } catch {
+        do throws(HubError) {
+          try TreeDeleter.remove(path: stagingPath)
+        } catch let cleanup {
+          throw .io(
+            "\(text(of: error)) The staging folder \(stagingPath) was left behind: \(text(of: cleanup))"
+          )
+        }
+        throw error
       }
-      let manifest = try populate(
-        stagingPath: stagingPath, plan: plan, components: componentsOfEntry,
-        sourceRoot: prefix.standardizedFileURL.path, id: id, now: now)
-      guard renamex_np(stagingPath, targetPath, UInt32(RENAME_EXCL)) == 0 else {
-        throw posixFailure("Moving the finished instance into place", targetPath)
-      }
-      return manifest
-    } catch {
-      do {
-        try TreeDeleter.remove(path: stagingPath)
-      } catch let cleanup {
-        throw .io(
-          "\(text(of: error)) The staging folder \(stagingPath) was left behind: \(text(of: cleanup))"
-        )
-      }
-      throw error
+
     }
   }
 
-  /// The bytes the budget must cover: allocated bytes of the real files plus 1 MiB and 1 KiB per
-  /// entry for folders, links, placeholders and the manifest. Saturates instead of overflowing.
-  private static func requiredBytes(_ plan: InstancePlan) -> Int64 {
+  /// The bytes the budget must cover to build `plan`: the allocated bytes of the real files plus
+  /// 1 MiB and 1 KiB per entry for folders, links, placeholders and the manifest. Saturates
+  /// instead of overflowing. `build` checks exactly this amount, so a caller that shows the user
+  /// the space an instance needs should show this number.
+  /// - Complexity: O(1).
+  package static func requiredBytes(_ plan: InstancePlan) -> Int64 {
     let margin = Int64(1_048_576) + Int64(plan.entries.count) * 1024
     let (sum, overflow) = plan.allocatedBytes.addingReportingOverflow(margin)
     return overflow ? Int64.max : sum
   }
 
-  /// Deletes `.staging-*` and `.trash-*` folders. The caller holds the instances lock, so each is a
-  /// leftover of a run that no longer exists.
+  /// Deletes `.staging-*` and `.trash-*` folders, best effort. The caller holds the instances lock,
+  /// so each is a leftover of a run that no longer exists. One that cannot be deleted (a stuck
+  /// `.trash-<id>` that `remove` left on purpose, say) is skipped, never an obstacle to the build.
+  /// - Throws: `.io` only when the instances folder cannot be listed.
   private static func sweepStaleFolders(instancesPath: String) throws(HubError) {
     let names: [String]
     do {
@@ -310,7 +327,11 @@ package enum InstanceBuilder {
       throw .io("Could not list \(instancesPath): \(error.localizedDescription)")
     }
     for name in names where name.hasPrefix(".staging-") || name.hasPrefix(".trash-") {
-      try TreeDeleter.remove(path: instancesPath + "/" + name)
+      do {
+        try TreeDeleter.remove(path: instancesPath + "/" + name)
+      } catch {
+        continue  // Left for the next sweep or for the user; see the contract above.
+      }
     }
   }
 
@@ -422,9 +443,7 @@ private struct StagingWriter {
     let descriptor = open(destination, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
     guard descriptor >= 0 else { throw posixFailure("Creating the placeholder", destination) }
     defer { close(descriptor) }
-    let nanos = String(entry.mtimeNanos)
-    let value =
-      "\(entry.size):\(entry.mtimeSeconds).\(String(repeating: "0", count: 9 - nanos.count))\(nanos)"
+    let value = "\(entry.size):\(entry.mtimeSeconds)." + String(format: "%09d", entry.mtimeNanos)
     guard fsetxattr(descriptor, "org.gamehub.placeholder", value, value.utf8.count, 0, 0) == 0
     else {
       throw posixFailure("Marking the placeholder", destination)
@@ -491,56 +510,63 @@ package enum InstanceRemover {
   /// running Wine server. The folder is first renamed to `.trash-<id>`, so it vanishes from the
   /// list at once, then deleted without following links or crossing volumes.
   ///
+  /// - Parameter beforeMove: Runs after every check, just before the rename to `.trash-<id>`. It
+  ///   exists so a test can create that name in the window.
   /// - Throws: `.invalid` for a bad id; `.unsafePath` when the folder is missing, is a link, or its
   ///   `instance.json` is unreadable or names another id; `.io` while the instance's Wine server is
   ///   running, while another build or removal holds the lock, or when deletion fails after the
   ///   rename (the message names the leftover `.trash-<id>` folder).
   /// - Complexity: O(n) in the number of entries of the instance.
-  package static func remove(instanceID: String, instances: URL) throws(HubError) {
+  package static func remove(
+    instanceID: String, instances: URL, beforeMove: () -> Void = {}
+  ) throws(HubError) {
     let id = try InstanceID(instanceID)
     guard let instancesPath = InstancePaths.realPath(instances.path) else {
       throw .unsafePath("The instances folder was not found.")
     }
-    let lock = try InstanceLock.acquire(instancesPath: instancesPath)
-    defer { lock.release() }
+    try InstanceLock.withLock(instancesPath: instancesPath) { () throws(HubError) -> Void in
 
-    let targetPath = instancesPath + "/" + id.rawValue
-    var info = stat()
-    guard lstat(targetPath, &info) == 0 else {
-      throw .unsafePath("Instance \(id) was not found.")
-    }
-    let type = info.st_mode & mode_t(S_IFMT)
-    guard type != mode_t(S_IFLNK) else { throw .unsafePath("Instance \(id) is a link.") }
-    guard type == mode_t(S_IFDIR) else { throw .unsafePath("Instance \(id) is not a folder.") }
+      let targetPath = instancesPath + "/" + id.rawValue
+      var info = stat()
+      guard lstat(targetPath, &info) == 0 else {
+        throw .unsafePath("Instance \(id) was not found.")
+      }
+      let type = info.st_mode & mode_t(S_IFMT)
+      guard type != mode_t(S_IFLNK) else { throw .unsafePath("Instance \(id) is a link.") }
+      guard type == mode_t(S_IFDIR) else { throw .unsafePath("Instance \(id) is not a folder.") }
 
-    let manifest: InstanceManifest
-    do {
-      let data = try BoundedFile.read(
-        URL(fileURLWithPath: targetPath + "/instance.json"), limit: InstanceManifest.maxFileBytes)
-      manifest = try InstanceManifest.decoder().decode(InstanceManifest.self, from: data)
-    } catch {
-      throw .unsafePath("Instance \(id) has no readable instance.json.")
-    }
-    guard manifest.instanceID == id.rawValue else {
-      throw .unsafePath("The instance.json of \(id) names a different instance.")
-    }
-    guard !PrefixActivity.serverIsRunning(prefix: URL(fileURLWithPath: targetPath + "/Prefix"))
-    else { throw .io("Instance \(id) is in use: its Wine server is running. Quit the game first.") }
+      let manifest: InstanceManifest
+      do {
+        let data = try BoundedFile.read(
+          URL(fileURLWithPath: targetPath + "/instance.json"), limit: InstanceManifest.maxFileBytes)
+        manifest = try InstanceManifest.decoder().decode(InstanceManifest.self, from: data)
+      } catch {
+        throw .unsafePath("Instance \(id) has no readable instance.json.")
+      }
+      guard manifest.instanceID == id.rawValue else {
+        throw .unsafePath("The instance.json of \(id) names a different instance.")
+      }
+      guard !PrefixActivity.serverIsRunning(prefix: URL(fileURLWithPath: targetPath + "/Prefix"))
+      else {
+        throw .io("Instance \(id) is in use: its Wine server is running. Quit the game first.")
+      }
 
-    let trashName = ".trash-\(id.rawValue)"
-    let trashPath = instancesPath + "/" + trashName
-    var leftover = stat()
-    if lstat(trashPath, &leftover) == 0 { try TreeDeleter.remove(path: trashPath) }
-    guard renamex_np(targetPath, trashPath, UInt32(RENAME_EXCL)) == 0 else {
-      throw posixFailure("Moving the instance to the trash", targetPath)
-    }
-    do {
-      try TreeDeleter.remove(path: trashPath)
-    } catch {
-      throw .io(
-        "Instance \(id) was removed from the list but not fully deleted; delete the leftover "
-          + "folder \(trashName) in \(instancesPath). \(text(of: error))"
-      )
+      let trashName = ".trash-\(id.rawValue)"
+      let trashPath = instancesPath + "/" + trashName
+      var leftover = stat()
+      if lstat(trashPath, &leftover) == 0 { try TreeDeleter.remove(path: trashPath) }
+      beforeMove()
+      guard renamex_np(targetPath, trashPath, UInt32(RENAME_EXCL)) == 0 else {
+        throw posixFailure("Moving the instance to the trash", targetPath)
+      }
+      do throws(HubError) {
+        try TreeDeleter.remove(path: trashPath)
+      } catch {
+        throw .io(
+          "Instance \(id) was removed from the list but not fully deleted; delete the leftover "
+            + "folder \(trashName) in \(instancesPath). \(text(of: error))"
+        )
+      }
     }
   }
 }
