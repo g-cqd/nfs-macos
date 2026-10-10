@@ -25,9 +25,6 @@ struct HubView: View {
     }
     .frame(minWidth: 1000, minHeight: 600)
     .navigationSplitViewStyle(.balanced)
-    .safeAreaInset(edge: .top) {
-      SpaceStrip(spaceInfo: model.spaceInfo)
-    }
     .sheet(item: $model.pending) { _ in
       PendingInstanceSheet(model: model)
     }
@@ -76,57 +73,56 @@ struct HubView: View {
   }
 }
 
-// MARK: - Space Strip
+// MARK: - Space footer
 
-private struct SpaceStrip: View {
+/// Free space on both disks and the instance floor, as a compact footer of the sidebar so it never
+/// covers the library or the detail controls.
+private struct SpaceFooter: View {
   let spaceInfo: SpaceInfo?
 
   var body: some View {
-    VStack(spacing: 0) {
-      HStack(spacing: 16) {
-        if let info = spaceInfo {
-          SpaceItem(label: "Game Disk", bytes: info.hubFree, isWarning: false)
-          SpaceItem(label: "Internal Disk", bytes: info.homeFree, isWarning: info.isHomeBelowFloor)
-          SpaceItem(label: "Instance Floor", bytes: SpaceBudget.defaultFloor, isWarning: false)
-        }
-        Spacer()
-      }
-      .padding(12)
-      .font(.caption)
+    VStack(alignment: .leading, spacing: 4) {
       Divider()
+      if let info = spaceInfo {
+        SpaceRow(label: "Game disk", bytes: info.hubFree, isWarning: false)
+        SpaceRow(label: "Internal disk", bytes: info.homeFree, isWarning: info.isHomeBelowFloor)
+        SpaceRow(label: "Instance floor", bytes: SpaceBudget.defaultFloor, isWarning: false)
+      } else {
+        Text("Measuring disk space…")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
-    .background(Color(nsColor: .controlBackgroundColor))
+    .padding(.horizontal, 12)
+    .padding(.bottom, 8)
+    .background(.bar)
   }
 }
 
-private struct SpaceItem: View {
+private struct SpaceRow: View {
   let label: String
   let bytes: Int64?
   let isWarning: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      HStack(spacing: 4) {
-        Text(label)
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-        if isWarning {
-          Image(systemName: "exclamationmark.circle.fill")
-            .font(.caption2)
-            .foregroundStyle(.red)
-            .accessibilityLabel("Warning")
-        }
+    HStack(spacing: 6) {
+      if isWarning {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.red)
+          .accessibilityHidden(true)
       }
-      if let bytes = bytes {
-        Text(bytes.formatted(.byteCount(style: .binary)))
-          .font(.callout.monospaced())
-          .foregroundStyle(isWarning ? .red : .primary)
-      } else {
-        Text("—")
-          .font(.callout.monospaced())
-          .foregroundStyle(.secondary)
-      }
+      Text(label)
+        .foregroundStyle(.secondary)
+      Spacer(minLength: 8)
+      Text(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? "—")
+        .font(.callout.monospacedDigit())
+        .foregroundStyle(isWarning ? .red : .primary)
     }
+    .font(.caption)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      isWarning ? "\(label), below the instance floor" : label)
+    .accessibilityValue(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? "unknown")
   }
 }
 
@@ -141,7 +137,9 @@ private struct HubSidebar: View {
       FilterList(model: model)
       Divider()
       LibraryList(model: model, selectedGameID: $selectedGameID)
-      Spacer()
+    }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      SpaceFooter(spaceInfo: model.spaceInfo)
     }
   }
 }
@@ -166,8 +164,13 @@ private struct FilterList: View {
         .accessibilityElement(children: .combine)
       }
       .listStyle(.sidebar)
+      .scrollDisabled(true)
+      .frame(height: CGFloat(LibraryFilter.allCases.count) * FilterList.rowHeight + 8)
     }
   }
+
+  /// Height of one filter row; the list is sized to its rows so the library gets the rest.
+  private static let rowHeight: CGFloat = 28
 }
 
 private struct LibraryList: View {
@@ -228,7 +231,7 @@ private struct GameDetailPane: View {
   var body: some View {
     VStack(spacing: 12) {
       GameInfoBox(game: game)
-      PlayButton()
+      PlayButton(model: model, game: game)
       InstancesSection(model: model, game: game, instanceToRemove: $instanceToRemove, showRemoveConfirmation: $showRemoveConfirmation)
       if model.filter != .internalInstances {
         CreateInstanceSection(model: model, game: game)
@@ -268,12 +271,22 @@ private struct GameInfoBox: View {
 }
 
 private struct PlayButton: View {
+  let model: HubModel
+  let game: CatalogEntry
+
   var body: some View {
-    Button(action: {}) {
+    let launchable = model.canLaunch(game)
+    Button {
+      Task { await model.launch(game) }
+    } label: {
       Text("Play")
     }
-    .disabled(true)
-    .accessibilityHint("The shared Wine prefix is not ready yet")
+    .disabled(!launchable)
+    .help(launchable ? "Open this game's wrapped app" : "Starting this game from the Hub needs the shared prefix, which is not ready yet")
+    .accessibilityHint(
+      launchable
+        ? "Opens the wrapped app that owns this game"
+        : "The shared Wine prefix is not ready yet")
   }
 }
 

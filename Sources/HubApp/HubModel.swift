@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import HubCore
 import LauncherCore
@@ -283,6 +284,25 @@ final class HubModel {
   /// Clear the error message.
   func clearError() {
     self.error = nil
+  }
+
+  // MARK: - Launching
+
+  /// Whether the Hub can start `game` today: wrapped apps only, until the shared prefix exists.
+  func canLaunch(_ game: CatalogEntry) -> Bool { GameLauncher.wrappedApp(for: game) != nil }
+
+  /// Opens the wrapped app that owns `game`.
+  func launch(_ game: CatalogEntry) async {
+    guard let app = GameLauncher.wrappedApp(for: game) else {
+      error = .invalid("\(game.title) cannot be started from the Hub yet.")
+      return
+    }
+    do {
+      _ = try await NSWorkspace.shared.openApplication(
+        at: app, configuration: NSWorkspace.OpenConfiguration())
+    } catch {
+      self.error = .io("Could not open \(app.lastPathComponent): \(error.localizedDescription)")
+    }
   }
 
   // MARK: - Helpers
