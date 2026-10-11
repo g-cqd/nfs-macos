@@ -5,14 +5,26 @@ import SwiftUI
 struct HubView: View {
   @Bindable var model: HubModel
   @State private var selectedGameID: GameID?
+  @State private var selectedInstanceID: String?
   @State private var showRemoveConfirmation = false
   @State private var instanceToRemove: InstanceSummary?
 
   var body: some View {
     NavigationSplitView {
-      HubSidebar(model: model, selectedGameID: $selectedGameID)
+      HubSidebar(model: model, selectedGameID: $selectedGameID, selectedInstanceID: $selectedInstanceID)
     } detail: {
-      if let gameID = selectedGameID, let game = model.catalog.first(where: { $0.id == gameID }) {
+      if model.filter == .internalInstances {
+        if let id = selectedInstanceID, let instance = model.instances.first(where: { $0.id == id }) {
+          InstanceDetailPane(
+            model: model, instance: instance, instanceToRemove: $instanceToRemove,
+            showRemoveConfirmation: $showRemoveConfirmation)
+        } else {
+          Text("No Instance Selected")
+            .font(.title)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+      } else if let gameID = selectedGameID, let game = model.catalog.first(where: { $0.id == gameID }) {
         GameDetailPane(model: model, game: game, instanceToRemove: $instanceToRemove, showRemoveConfirmation: $showRemoveConfirmation)
       } else {
         VStack {
@@ -84,7 +96,7 @@ private struct SpaceFooter: View {
     VStack(alignment: .leading, spacing: 4) {
       Divider()
       if let info = spaceInfo {
-        SpaceRow(label: "Game disk", bytes: info.hubFree, isWarning: false)
+        SpaceRow(label: "Game disk", bytes: info.hubFree, isWarning: false, missingText: "Not connected")
         SpaceRow(label: "Internal disk", bytes: info.homeFree, isWarning: info.isHomeBelowFloor)
         SpaceRow(label: "Instance floor", bytes: SpaceBudget.defaultFloor, isWarning: false)
       } else {
@@ -103,6 +115,7 @@ private struct SpaceRow: View {
   let label: String
   let bytes: Int64?
   let isWarning: Bool
+  var missingText = "—"
 
   var body: some View {
     HStack(spacing: 6) {
@@ -114,7 +127,7 @@ private struct SpaceRow: View {
       Text(label)
         .foregroundStyle(.secondary)
       Spacer(minLength: 8)
-      Text(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? "—")
+      Text(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? missingText)
         .font(.callout.monospacedDigit())
         .foregroundStyle(isWarning ? .red : .primary)
     }
@@ -122,7 +135,7 @@ private struct SpaceRow: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
       isWarning ? "\(label), below the instance floor" : label)
-    .accessibilityValue(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? "unknown")
+    .accessibilityValue(bytes.map { $0.formatted(.byteCount(style: .binary)) } ?? missingText)
   }
 }
 
@@ -131,12 +144,13 @@ private struct SpaceRow: View {
 private struct HubSidebar: View {
   @Bindable var model: HubModel
   @Binding var selectedGameID: GameID?
+  @Binding var selectedInstanceID: String?
 
   var body: some View {
     VStack(spacing: 0) {
       FilterList(model: model)
       Divider()
-      LibraryList(model: model, selectedGameID: $selectedGameID)
+      LibraryList(model: model, selectedGameID: $selectedGameID, selectedInstanceID: $selectedInstanceID)
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       SpaceFooter(spaceInfo: model.spaceInfo)
@@ -176,6 +190,7 @@ private struct FilterList: View {
 private struct LibraryList: View {
   @Bindable var model: HubModel
   @Binding var selectedGameID: GameID?
+  @Binding var selectedInstanceID: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
@@ -183,7 +198,7 @@ private struct LibraryList: View {
         Text(libraryTitle)
           .font(.headline)
         Spacer()
-        Button(action: { Task { await model.refreshCatalog() } }) {
+        Button(action: { Task { await model.reload() } }) {
           Label("Refresh Catalog", systemImage: "arrow.clockwise")
             .labelStyle(.iconOnly)
         }
@@ -193,6 +208,16 @@ private struct LibraryList: View {
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
 
+      if model.filter == .internalInstances {
+        InstanceList(model: model, selection: $selectedInstanceID)
+      } else if model.filteredCatalog.isEmpty && !model.isGameDriveConnected {
+        ContentUnavailableView(
+          "Game drive not connected",
+          systemImage: "externaldrive.badge.xmark",
+          description: Text(
+            "Plug in the game drive and press Refresh. Instances on the internal disk are listed under Internal instances."
+          ))
+      } else {
       List(model.filteredCatalog, selection: $selectedGameID) { game in
         VStack(alignment: .leading, spacing: 2) {
           Text(game.title)
@@ -207,6 +232,7 @@ private struct LibraryList: View {
         .tag(game.id)
       }
       .listStyle(.sidebar)
+      }
     }
   }
 
@@ -217,6 +243,79 @@ private struct LibraryList: View {
     default:
       "Library"
     }
+  }
+}
+
+// MARK: - Instances without the catalog
+
+/// The internal instances, listed from the internal disk alone, so they show with the big drive unplugged.
+private struct InstanceList: View {
+  let model: HubModel
+  @Binding var selection: String?
+
+  var body: some View {
+    if model.instances.isEmpty {
+      ContentUnavailableView(
+        "No internal instances",
+        systemImage: "internaldrive",
+        description: Text("Create one from a game's detail while the game drive is connected."))
+    } else {
+      List(model.instances, selection: $selection) { instance in
+        VStack(alignment: .leading, spacing: 2) {
+          Text(model.title(for: instance))
+            .lineLimit(1)
+          Text(instance.realBytes.formatted(.byteCount(style: .binary)))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .tag(instance.id)
+      }
+      .listStyle(.sidebar)
+    }
+  }
+}
+
+private struct InstanceDetailPane: View {
+  let model: HubModel
+  let instance: InstanceSummary
+  @Binding var instanceToRemove: InstanceSummary?
+  @Binding var showRemoveConfirmation: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text(model.title(for: instance))
+        .font(.title2.bold())
+      Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+        GridRow {
+          Text("Created").foregroundStyle(.secondary)
+          Text(instance.createdAt, format: .dateTime)
+        }
+        GridRow {
+          Text("Real size").foregroundStyle(.secondary)
+          Text(instance.realBytes.formatted(.byteCount(style: .binary)))
+        }
+        GridRow {
+          Text("Folder").foregroundStyle(.secondary)
+          Text(instance.url.path).lineLimit(2).truncationMode(.middle)
+        }
+      }
+      .font(.callout)
+      HStack {
+        Button("Play") {}
+          .disabled(true)
+          .help("Starting an internal instance needs the shared Wine prefix, which is not ready yet")
+          .accessibilityHint("The shared Wine prefix is not ready yet")
+        Button("Remove", role: .destructive) {
+          instanceToRemove = instance
+          showRemoveConfirmation = true
+        }
+        .accessibilityLabel("Remove \(model.title(for: instance))")
+      }
+      Spacer()
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 

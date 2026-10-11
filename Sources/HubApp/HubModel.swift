@@ -88,7 +88,11 @@ final class HubModel {
   /// Refresh free space information.
   private func refreshSpace() async {
     let (hubFree, homeFree) = await Task.detached { () -> (Int64?, Int64?) in
-      let hub = SpaceProbe.freeBytes(at: self.layout.hub)
+      // The probe walks up to the nearest existing folder, which for a missing drive is the system
+      // volume: only ask when the Hub folder itself exists.
+      let hub =
+        FileManager.default.fileExists(atPath: self.layout.hub.path)
+        ? SpaceProbe.freeBytes(at: self.layout.hub) : nil
       let home = SpaceProbe.freeBytes(at: FileManager.default.homeDirectoryForCurrentUser)
       return (hub, home)
     }.value
@@ -136,6 +140,17 @@ final class HubModel {
     } else {
       return catalog.count
     }
+  }
+
+  /// Whether the big drive's Hub folder was reachable at the last space reading.
+  var isGameDriveConnected: Bool { spaceInfo?.hubFree != nil }
+
+  /// A readable name for an instance: the catalog title when the drive is connected, else the
+  /// built-in title of the known game, else the game id.
+  func title(for instance: InstanceSummary) -> String {
+    let id = instance.gameID.rawValue
+    return catalog.first(where: { $0.id == instance.gameID || $0.kindID == id })?.title
+      ?? GameKind(rawValue: id)?.title ?? id
   }
 
   /// Get instances for a specific game.
