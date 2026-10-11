@@ -81,6 +81,10 @@ struct HubView: View {
       return "Insufficient space. Need \(needed.formatted(.byteCount(style: .binary))), have \(free.formatted(.byteCount(style: .binary))), floor \(floor.formatted(.byteCount(style: .binary)))"
     case let .io(msg):
       return "I/O error: \(msg)"
+    case let .volumeMissing(msg):
+      return "Volume missing: \(msg)"
+    case let .blocked(msg):
+      return "Operation blocked: \(msg)"
     }
   }
 }
@@ -558,6 +562,10 @@ private struct PendingInstanceSheet: View {
       return "Insufficient space. Need \(needed.formatted(.byteCount(style: .binary))), have \(free.formatted(.byteCount(style: .binary))), floor \(floor.formatted(.byteCount(style: .binary)))"
     case let .io(msg):
       return "I/O error: \(msg)"
+    case let .volumeMissing(msg):
+      return "Volume missing: \(msg)"
+    case let .blocked(msg):
+      return "Operation blocked: \(msg)"
     }
   }
 }

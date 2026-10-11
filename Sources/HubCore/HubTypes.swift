@@ -107,6 +107,10 @@ package enum HubError: Error, Equatable, Sendable {
   /// An instance would leave less than the floor free on the internal disk.
   case belowFloor(needed: Int64, free: Int64, floor: Int64)
   case io(String)
+  /// The volume holding the path is not mounted.
+  case volumeMissing(String)
+  /// An operation is refused because something else holds the resource.
+  case blocked(String)
 }
 
 /// Free-space policy for internal-disk instances.

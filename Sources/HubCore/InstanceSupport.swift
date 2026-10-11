@@ -11,7 +11,8 @@ func posixFailure(_ action: String, _ path: String) -> HubError {
 /// The human-readable text of a `HubError`, for composing a message that wraps another error.
 func text(of error: HubError) -> String {
   switch error {
-  case .invalid(let message), .unsafePath(let message), .io(let message): message
+  case .invalid(let message), .unsafePath(let message), .io(let message),
+       .volumeMissing(let message), .blocked(let message): message
   case .belowFloor(let needed, let free, let floor):
     "Needs \(needed) bytes with \(free) free and a floor of \(floor)."
   }
