@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A named set of values for a game's own plain-text settings profile (`Key value` lines).
@@ -9,7 +10,8 @@ import Foundation
 package struct TextProfilePreset: Codable, Equatable, Sendable {
   package struct Value: Codable, Equatable, Sendable {
     package let key: String
-    /// The value, or `{display.width}`, `{display.height}` or `{display.refresh}`.
+    /// The value, or `{display.width}`, `{display.height}`, `{display.refresh}` (whole hertz) or
+    /// `{display.refresh.float}` (the same as `60.000000`).
     package let value: String
 
     package init(key: String, value: String) {
@@ -29,6 +31,15 @@ package struct TextProfilePreset: Codable, Equatable, Sendable {
       self.height = height
       self.refresh = refresh
     }
+
+    /// The main display's current mode in pixels, the desktop the game's full-screen mode
+    /// matches, with a refresh rate that is never below 60.
+    package static func main() -> Display {
+      let mode = CGDisplayCopyDisplayMode(CGMainDisplayID())
+      return Display(
+        width: mode?.pixelWidth ?? 1920, height: mode?.pixelHeight ?? 1200,
+        refresh: max(60, Int((mode?.refreshRate ?? 0).rounded())))
+    }
   }
 
   package let name: String
@@ -44,7 +55,9 @@ package struct TextProfilePreset: Codable, Equatable, Sendable {
     self.reason = reason
   }
 
-  static let placeholders = ["{display.width}", "{display.height}", "{display.refresh}"]
+  static let placeholders = [
+    "{display.width}", "{display.height}", "{display.refresh}", "{display.refresh.float}",
+  ]
 
   package func validate() throws(LauncherError) {
     guard (1...32).contains(name.utf8.count),
@@ -83,6 +96,7 @@ package struct TextProfilePreset: Codable, Equatable, Sendable {
         case "{display.width}": String(display.width)
         case "{display.height}": String(display.height)
         case "{display.refresh}": String(display.refresh)
+        case "{display.refresh.float}": String(format: "%.6f", Double(display.refresh))
         default: item.value
         }
       return Value(key: item.key, value: value)

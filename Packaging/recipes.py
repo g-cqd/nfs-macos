@@ -444,7 +444,8 @@ BUNDLE_ID = re.compile(r'[A-Za-z0-9.-]{3,128}')
 PLAIN_FOLDER = re.compile(r'[A-Za-z0-9_-]{1,64}')
 PRESET_KEY = re.compile(r'[A-Za-z0-9._]{1,96}')
 PRESET_VALUE = re.compile(r'[A-Za-z0-9.-]{1,32}')
-PRESET_PLACEHOLDERS = {'{display.width}', '{display.height}', '{display.refresh}'}
+PRESET_PLACEHOLDERS = {'{display.width}', '{display.height}', '{display.refresh}',
+                       '{display.refresh.float}'}
 HIVES = {'system.reg', 'user.reg'}
 
 

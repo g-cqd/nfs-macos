@@ -125,10 +125,6 @@ final class BF3Model {
         : "Starting the EA app first; Battlelog opens once it is signed in and lists the game.")
   }
 
-  func applyPreset(_ name: String) async {
-    await perform(["--preset", name], busyText: "Applying the settings preset.")
-  }
-
   func setSidecar(_ on: Bool) async {
     await perform(["--sidecar", on ? "on" : "off"], busyText: "Saving the x87 sidecar choice.")
   }

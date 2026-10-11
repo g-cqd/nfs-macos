@@ -192,36 +192,21 @@
   ],
   "presets": [
     {
-      "name": "windowed",
-      "title": "Windowed 1920x1200",
-      "reason": "The tested setup: the campaign ran windowed at 1920x1200",
-      "values": [
-        {
-          "key": "GstRender.FullscreenEnabled",
-          "value": "0"
-        },
-        {
-          "key": "GstRender.ResolutionWidth",
-          "value": "1920"
-        },
-        {
-          "key": "GstRender.ResolutionHeight",
-          "value": "1200"
-        },
-        {
-          "key": "GstRender.ResolutionHertz",
-          "value": "60"
-        }
-      ]
-    },
-    {
       "name": "fullscreen",
       "title": "Full Screen",
-      "reason": "Not verified: full screen did not work on the bring-up Mac (cause unknown); uses the main display's current mode",
+      "reason": "Full screen only, applied before each start at the main display's native pixel size and refresh (at least 60). Not verified: the Wine driver's native full screen is new and has not been run with this game yet",
       "values": [
         {
           "key": "GstRender.FullscreenEnabled",
           "value": "1"
+        },
+        {
+          "key": "GstRender.FullscreenScreen",
+          "value": "0"
+        },
+        {
+          "key": "GstRender.FullscreenRefreshRate",
+          "value": "{display.refresh.float}"
         },
         {
           "key": "GstRender.ResolutionWidth",
@@ -234,77 +219,6 @@
         {
           "key": "GstRender.ResolutionHertz",
           "value": "{display.refresh}"
-        }
-      ]
-    },
-    {
-      "name": "perf",
-      "title": "Performance",
-      "reason": "Untested: windowed 1920x1200 with the game's lowest quality tiers (guessed values, not measured)",
-      "values": [
-        {
-          "key": "GstRender.FullscreenEnabled",
-          "value": "0"
-        },
-        {
-          "key": "GstRender.ResolutionWidth",
-          "value": "1920"
-        },
-        {
-          "key": "GstRender.ResolutionHeight",
-          "value": "1200"
-        },
-        {
-          "key": "GstRender.ResolutionHertz",
-          "value": "60"
-        },
-        {
-          "key": "GstRender.OverallGraphicsQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.ShadowQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.EffectsQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.MeshQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.TerrainQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.TextureQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.UndergrowthQuality",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.AmbientOcclusion",
-          "value": "0"
-        },
-        {
-          "key": "GstRender.AntiAliasingDeferred",
-          "value": "0"
-        },
-        {
-          "key": "GstRender.AntiAliasingPost",
-          "value": "1"
-        },
-        {
-          "key": "GstRender.MotionBlurEnabled",
-          "value": "0"
-        },
-        {
-          "key": "GstRender.TransparentShadows",
-          "value": "0"
         }
       ]
     }

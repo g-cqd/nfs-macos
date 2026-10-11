@@ -32,11 +32,10 @@ struct BF3View: View {
         }.disabled(model.busy || !model.status.prepared)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
-      GroupBox("Game settings (with the game closed)") {
+      GroupBox("Game settings") {
         HStack {
-          Button("Windowed") { Task { await model.applyPreset("windowed") } }
-          Button("Full Screen") { Task { await model.applyPreset("fullscreen") } }
-          Button("Performance") { Task { await model.applyPreset("perf") } }
+          Text("Full screen at the display's size, set at every start")
+            .font(.caption).foregroundStyle(.secondary)
           Toggle(
             "x87 sidecar",
             isOn: Binding(

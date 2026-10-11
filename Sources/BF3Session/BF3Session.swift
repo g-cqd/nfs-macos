@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import Darwin
 import Foundation
 import LauncherCore
@@ -76,7 +75,10 @@ struct BF3Session {
     }
     return try SessionLock.withLock(at: paths.support.appendingPathComponent("session.lock")) {
       switch options.action {
-      case "--prepare": return try prepare()
+      case "--prepare":
+        let status = try prepare()
+        if isPrepared { refreshProfile() }
+        return status
       case "--start-client": return try startClient()
       case "--open-store": return try openStore()
       case "--stop": return try stop()
@@ -158,6 +160,7 @@ struct BF3Session {
     guard isPrepared else {
       throw LauncherError.operation("Prepare the Windows folder first.")
     }
+    refreshProfile()
     let service = game.storeBrowser.service
     let clientName = game.watchedPrograms[0]
     var started: Process?
@@ -253,6 +256,8 @@ struct BF3Session {
         return status
       }
     }
+    // The display may have changed while the client started or the player signed in.
+    refreshProfile()
     let profile =
       options.developer.browserProfile ?? paths.support.appendingPathComponent(plan.profileFolder)
     try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
@@ -293,15 +298,46 @@ struct BF3Session {
     return 0
   }
 
+  /// The preset every start applies: the game runs full screen only.
+  static let startPreset = "fullscreen"
+
+  /// Before the game can start, writes the full-screen preset for the display as it is now, so the
+  /// game's resolution follows the external monitor, lid state and scaling. It never stops a
+  /// start: a missing profile (the game has not run yet) or a failure is a note.
+  func refreshProfile() {
+    do {
+      switch try applyPreset(Self.startPreset) {
+      case .noProfile:
+        print("Note: the game has no settings yet; it gets the full-screen size on its next start.")
+      case .gameRunning:
+        print("Note: the game is running, so its settings were left as they are.")
+      case .unchanged(let missing):
+        for key in missing { print("Not in this profile, left out: \(key)") }
+      case .applied(let backup, _, let missing):
+        for key in missing { print("Not in this profile, left out: \(key)") }
+        print("Set the game's full-screen size to the display; previous settings in \(backup).")
+      }
+    } catch {
+      print("Note: the game's full-screen size was not set: \(error.localizedDescription)")
+    }
+  }
+
+  func applyPreset(_ name: String) throws -> TextProfileRefresh {
+    try game.refreshPreset(
+      named: name, prefix: prefix, display: TextProfilePreset.Display.main(),
+      gameIsRunning: !PrefixActivity.running([game.storeClient.leaseTarget]).isEmpty,
+      stamp: Self.timestamp())
+  }
+
+  /// `--preset` with no name shows the current values; with a name it applies that preset.
   func preset() throws -> Int32 {
-    let name = options.value ?? "show"
     guard FileManager.default.fileExists(atPath: profile.path) else {
       throw LauncherError.operation(
         "The game has no settings yet: start it once from Battlelog and quit it, then apply a preset."
       )
     }
-    let keys = Array(Set(game.presets.flatMap { $0.values.map(\.key) })).sorted()
-    if name == "show" {
+    guard let name = options.value, name != "show" else {
+      let keys = Array(Set(game.presets.flatMap { $0.values.map(\.key) })).sorted()
       let text = try String(contentsOf: profile, encoding: .utf8)
       for line in TextProfilePreset.lines(in: text, keys: keys) { print(line) }
       return 0
@@ -309,25 +345,19 @@ struct BF3Session {
     guard let preset = game.presets.first(where: { $0.name == name }) else {
       throw LauncherError.operation("There is no preset named \(name).")
     }
-    // Checked before reading: the game rewrites its settings when it exits.
-    if !PrefixActivity.running([game.storeClient.leaseTarget]).isEmpty {
+    switch try applyPreset(name) {
+    case .noProfile:
+      throw LauncherError.operation("The game has no settings yet.")
+    case .gameRunning:
       throw LauncherError.operation("Quit the game first: it rewrites its settings when it exits.")
-    }
-    let text = try String(contentsOf: profile, encoding: .utf8)
-    let result = preset.apply(to: text, display: Self.mainDisplay())
-    for key in result.missing { print("Not in this profile, left out: \(key)") }
-    guard result.text != text else {
+    case .unchanged(let missing):
+      for key in missing { print("Not in this profile, left out: \(key)") }
       print("\(preset.title): the settings already match; nothing changed.")
-      return 0
+    case .applied(let backup, let lines, let missing):
+      for key in missing { print("Not in this profile, left out: \(key)") }
+      for line in lines { print(line) }
+      print("Applied \(preset.title). The previous settings are in \(backup).")
     }
-    let backup = profile.deletingLastPathComponent().appendingPathComponent(
-      profile.lastPathComponent + ".bak-\(Self.timestamp())")
-    try FileManager.default.copyItem(at: profile, to: backup)
-    try Data(result.text.utf8).write(to: profile, options: .atomic)
-    for line in TextProfilePreset.lines(in: result.text, keys: preset.values.map(\.key)) {
-      print(line)
-    }
-    print("Applied \(preset.title). The previous settings are in \(backup.lastPathComponent).")
     return 0
   }
 
@@ -424,7 +454,7 @@ struct BF3Session {
           ?? paths.support.appendingPathComponent(game.storeBrowser.profileFolder), page: page)
       print("page \(page.name): open -n with \(arguments.joined(separator: " "))")
     }
-    let display = Self.mainDisplay()
+    let display = TextProfilePreset.Display.main()
     print("display: \(display.width)x\(display.height)@\(display.refresh)")
     print(
       "settings profile: \(FileManager.default.fileExists(atPath: profile.path) ? "present" : "not yet created") (\(game.settingsProfile))"
@@ -444,15 +474,6 @@ struct BF3Session {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyyMMdd-HHmmss"
     return formatter.string(from: Date())
-  }
-
-  /// The main display's current mode in pixels (the desktop the game's full-screen mode matches).
-  static func mainDisplay() -> TextProfilePreset.Display {
-    let mode = CGDisplayCopyDisplayMode(CGMainDisplayID())
-    let refresh = Int((mode?.refreshRate ?? 0).rounded())
-    return TextProfilePreset.Display(
-      width: mode?.pixelWidth ?? 1920, height: mode?.pixelHeight ?? 1200,
-      refresh: refresh > 0 ? refresh : 60)
   }
 }
 
