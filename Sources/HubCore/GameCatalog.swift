@@ -748,7 +748,8 @@ package enum GameCatalog {
     for raw in rawPaths {
       var pathStr = raw.trimmingCharacters(in: .whitespaces)
 
-      // Convert Windows path to macOS path (e.g., `Z:\Volumes\ExT2\Steam` -> `/Volumes/ExT2/Steam`)
+      // Convert Windows path to macOS path
+      // (e.g., `Z:\Volumes\ExT2\GameHub\Library\Steam` -> `/Volumes/ExT2/GameHub/Library/Steam`)
       if pathStr.hasPrefix("Z:") || pathStr.hasPrefix("z:") {
         pathStr = pathStr.dropFirst(2).replacingOccurrences(of: "\\", with: "/")
       }

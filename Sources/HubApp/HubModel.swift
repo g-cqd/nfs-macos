@@ -69,17 +69,22 @@ final class HubModel {
   private(set) var spaceInfo: SpaceInfo?
   var pending: PendingInstance?
 
-  let layout: HubLayout
+  /// The Hub's locations: the data store and the runtime app, from the settings.
+  let locations: LocationsModel
   private var catalogGeneration = 0
 
-  init(layout: HubLayout = .standard()) {
-    self.layout = layout
+  /// The folders the Hub reads, derived from the settings; they change when the data store moves.
+  var layout: HubLayout { locations.layout }
+
+  init(locations: LocationsModel = LocationsModel()) {
+    self.locations = locations
   }
 
   // MARK: - Loading
 
   /// Load all data from disk.
   func reload() async {
+    await locations.refresh()
     await refreshCatalog()
     await refreshInstances()
     await refreshSpace()
@@ -87,12 +92,13 @@ final class HubModel {
 
   /// Refresh free space information.
   private func refreshSpace() async {
+    let hubFolder = layout.hub
     let (hubFree, homeFree) = await Task.detached { () -> (Int64?, Int64?) in
       // The probe walks up to the nearest existing folder, which for a missing drive is the system
       // volume: only ask when the Hub folder itself exists.
       let hub =
-        FileManager.default.fileExists(atPath: self.layout.hub.path)
-        ? SpaceProbe.freeBytes(at: self.layout.hub) : nil
+        FileManager.default.fileExists(atPath: hubFolder.path)
+        ? SpaceProbe.freeBytes(at: hubFolder) : nil
       let home = SpaceProbe.freeBytes(at: FileManager.default.homeDirectoryForCurrentUser)
       return (hub, home)
     }.value
@@ -104,7 +110,8 @@ final class HubModel {
   func refreshCatalog() async {
     let generation = catalogGeneration + 1
     catalogGeneration = generation
-    let entries = await Task.detached { GameCatalog.scan(layout: self.layout) }.value
+    let layout = self.layout
+    let entries = await Task.detached { GameCatalog.scan(layout: layout) }.value
     if generation == catalogGeneration {
       self.catalog = entries
     }
@@ -112,8 +119,9 @@ final class HubModel {
 
   /// Refresh the list of internal instances.
   private func refreshInstances() async {
+    let instancesFolder = layout.instances
     let summary = await Task.detached {
-      InstanceStore.list(instances: self.layout.instances)
+      InstanceStore.list(instances: instancesFolder)
     }.value
     self.instances = summary
   }
@@ -179,6 +187,7 @@ final class HubModel {
         return
       }
 
+      let instancesFolder = layout.instances
       let (plan, freeBytes) = try await Task.detached(priority: .userInitiated) {
         let recipe = InstanceRecipes.recipe(for: kind, prefix: prefix)
         guard let recipe = recipe else {
@@ -187,7 +196,7 @@ final class HubModel {
 
         let plan = try InstancePlanner.plan(prefix: prefix, recipe: recipe)
 
-        guard let free = SpaceProbe.freeBytes(at: self.layout.instances) else {
+        guard let free = SpaceProbe.freeBytes(at: instancesFolder) else {
           throw HubError.io("Could not determine free space")
         }
 
@@ -284,8 +293,9 @@ final class HubModel {
   /// Remove an instance.
   func removeInstance(_ instanceID: String) async {
     do {
+      let instancesFolder = layout.instances
       try await Task.detached {
-        try InstanceRemover.remove(instanceID: instanceID, instances: self.layout.instances)
+        try InstanceRemover.remove(instanceID: instanceID, instances: instancesFolder)
       }.value
       await refreshInstances()
       await refreshSpace()

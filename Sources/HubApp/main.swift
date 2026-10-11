@@ -15,10 +15,22 @@ final class GameHubAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    if model?.isCreatingInstance == true {
-      return .terminateCancel
+    let reason: String
+    if model?.locations.isBusy == true {
+      reason =
+        "The data store is being moved, copied or saved. "
+        + "Wait for it to finish, or cancel it in Settings."
+    } else if model?.isCreatingInstance == true {
+      reason = "An internal instance is being created. Wait for it to finish."
+    } else {
+      return .terminateNow
     }
-    return .terminateNow
+    let alert = NSAlert()
+    alert.messageText = "Game Hub is busy"
+    alert.informativeText = reason
+    alert.addButton(withTitle: "OK")
+    alert.runModal()
+    return .terminateCancel
   }
 }
 
@@ -35,5 +47,9 @@ struct GameHubApp: App {
         }
     }
     .defaultSize(width: 1200, height: 700)
+
+    Settings {
+      SettingsView(locations: model.locations)
+    }
   }
 }

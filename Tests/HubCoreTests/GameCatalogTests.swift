@@ -1009,7 +1009,9 @@ import Testing
 
   @Test(.enabled(if: ProcessInfo.processInfo.environment["HUB_LIVE_TEST"] != nil))
   func realLayoutScan() {
-    let layout = HubLayout.standard()
+    // The default settings (never the developer's saved ones): a home without a settings file.
+    let layout = HubLayout.standard(
+      home: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
 
     let entries = GameCatalog.scan(layout: layout)
 

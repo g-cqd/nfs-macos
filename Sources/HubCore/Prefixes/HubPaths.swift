@@ -9,8 +9,17 @@ package struct HubPaths: Equatable, Sendable {
     self.root = root
   }
 
-  package static func standard() -> HubPaths {
-    HubPaths(root: URL(fileURLWithPath: "/Volumes/ExT2/GameHub", isDirectory: true))
+  /// The paths of the data store the settings of `home` name. A settings file that cannot be
+  /// read gives the default data store; the app reads the settings itself to show the problem.
+  package static func standard(
+    home: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> HubPaths {
+    let settings = (try? HubSettings.load(home: home)) ?? HubSettings.defaults(home: home)
+    return HubPaths(settings: settings)
+  }
+
+  package init(settings: HubSettings) {
+    self.init(root: URL(fileURLWithPath: settings.dataStoreRoot, isDirectory: true))
   }
 
   // MARK: - Computed paths
@@ -28,6 +37,29 @@ package struct HubPaths: Equatable, Sendable {
   package var temp: URL { hub.appendingPathComponent("Temp", isDirectory: true) }
   package var userKnowledge: URL { hub.appendingPathComponent("Knowledge", isDirectory: true) }
   package var runtimes: URL { root.appendingPathComponent("Runtimes", isDirectory: true) }
+  /// The folder of game libraries (`Steam`, `Epic`, `Ubisoft`, `EA`, ...).
+  package var library: URL { root.appendingPathComponent("Library", isDirectory: true) }
+  package var backups: URL { root.appendingPathComponent("Backups", isDirectory: true) }
+  /// Where the built `GameHub.app` goes.
+  package var apps: URL { root.appendingPathComponent("Apps", isDirectory: true) }
+  /// Build intermediates (`swiftpm`).
+  package var build: URL { root.appendingPathComponent("Build", isDirectory: true) }
+  /// The shared Wine prefix when `hub.json` does not name one: `<root>/Prefix`.
+  package var defaultPrefix: URL { root.appendingPathComponent("Prefix", isDirectory: true) }
+
+  /// The shared Wine prefix: ``defaultPrefix`` when there is no `Hub/hub.json`, else the
+  /// `prefix` that file names.
+  /// - Throws: The errors of `HubConfig.read` when `hub.json` exists but cannot be used: a
+  ///   broken file never silently falls back to the default.
+  package func configuredPrefix() throws(HubError) -> URL {
+    var info = stat()
+    guard lstat(config.path, &info) == 0 else {
+      guard errno == ENOENT || errno == ENOTDIR else { throw posixFailure("lstat", config.path) }
+      return defaultPrefix
+    }
+    let configured = try HubConfig.read(config)
+    return URL(fileURLWithPath: configured.prefix, isDirectory: true)
+  }
 
   // MARK: - Runtime paths
 

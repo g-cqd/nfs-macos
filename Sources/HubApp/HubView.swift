@@ -37,6 +37,13 @@ struct HubView: View {
     }
     .frame(minWidth: 1000, minHeight: 600)
     .navigationSplitViewStyle(.balanced)
+    .safeAreaInset(edge: .top, spacing: 0) {
+      LocationsBanner(
+        status: model.locations.status, settingsProblem: model.locations.settingsProblemText)
+    }
+    .onChange(of: model.locations.generation) {
+      Task { await model.reload() }
+    }
     .sheet(item: $model.pending) { _ in
       PendingInstanceSheet(model: model)
     }
@@ -85,6 +92,52 @@ struct HubView: View {
       return "Volume missing: \(msg)"
     case let .blocked(msg):
       return "Operation blocked: \(msg)"
+    }
+  }
+}
+
+// MARK: - Locations banner
+
+/// Tells the user when the data store or the runtime cannot be used, and opens the Settings.
+private struct LocationsBanner: View {
+  let status: HubLocationsStatus?
+  let settingsProblem: String?
+
+  var body: some View {
+    if (status?.needsAttention ?? false) || settingsProblem != nil {
+      HStack(alignment: .top, spacing: 10) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(.orange)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          if let settingsProblem {
+            Text("Using default locations")
+              .font(.headline)
+            Text(
+              "Using default locations because settings.json could not be read: \(settingsProblem)"
+            )
+          }
+          if let status, !status.dataStore.status.isUsable {
+            Text("Data store: \(status.dataStore.status.title)")
+              .font(.headline)
+            Text(status.dataStore.status.message)
+          }
+          if let status, !status.runtime.isUsable {
+            Text("Runtime: \(status.runtime.title)")
+              .font(.headline)
+            Text(status.runtime.message)
+          }
+        }
+        .font(.callout)
+        Spacer(minLength: 12)
+        SettingsLink {
+          Text("Open Settings")
+        }
+      }
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(.orange.opacity(0.15))
+      .accessibilityElement(children: .contain)
     }
   }
 }
@@ -605,8 +658,6 @@ private struct PendingInstanceDetails: View {
 
 #Preview {
   let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
-  let layout = HubLayout(
-    hub: tempDir, bundles: tempDir, steam: tempDir, eaGames: tempDir,
-    epic: tempDir, ubisoft: tempDir, instances: tempDir)
-  return HubView(model: HubModel(layout: layout))
+  let locations = LocationsModel(home: tempDir, environment: ["HUB_ROOT": tempDir.path])
+  return HubView(model: HubModel(locations: locations))
 }

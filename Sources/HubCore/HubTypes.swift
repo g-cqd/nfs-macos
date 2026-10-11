@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// The shared vocabulary of the Game Hub: one catalog of games, one set of locations, and the
@@ -49,20 +50,20 @@ package struct CatalogEntry: Identifiable, Codable, Equatable, Sendable {
   }
 }
 
-/// The locations the Hub reads and writes. Every path can be moved with `HUB_ROOT` and friends so
-/// tests run in a temporary folder.
+/// The locations the Hub reads and writes, derived from ``HubSettings``. `HUB_ROOT` and
+/// `HUB_VOLUME` override the settings so tests run in a temporary folder.
 package struct HubLayout: Equatable, Sendable {
-  /// The Hub folder on the big drive, `/Volumes/ExT2/GameHub` by default.
+  /// The data store folder (``HubSettings/dataStoreRoot``).
   package var hub: URL
-  /// The folder of wrapped game apps, `/Volumes/ExT2/Bundles` by default.
+  /// The folder of wrapped game apps, `Bundles` on the data store's volume.
   package var bundles: URL
-  /// A Windows Steam install (its `steamapps` folder is scanned).
+  /// A Windows Steam install (its `steamapps` folder is scanned), `<hub>/Library/Steam`.
   package var steam: URL
-  /// Where the EA app installs games, `<hub>/EA Games` by default.
+  /// Where the EA app installs games, `<hub>/EA Games`.
   package var eaGames: URL
-  /// An Epic Games Store folder (its `Manifests` folder is scanned when present).
+  /// An Epic Games Store folder (its `Manifests` folder is scanned when present), `<hub>/Library/Epic`.
   package var epic: URL
-  /// A Ubisoft Connect folder (its `games` folder is scanned when present).
+  /// A Ubisoft Connect folder (its `games` folder is scanned when present), `<hub>/Library/Ubisoft`.
   package var ubisoft: URL
   /// Where internal-disk instances live, `~/Library/Application Support/GameHub/Instances`.
   package var instances: URL
@@ -79,23 +80,75 @@ package struct HubLayout: Equatable, Sendable {
     self.instances = instances
   }
 
+  /// The layout of the data store the settings name.
+  ///
+  /// The root is `HUB_ROOT`, else `<HUB_VOLUME>/GameHub`, else the settings' data store. The
+  /// volume (home of `Bundles` and of the legacy provider folders) is `HUB_VOLUME`, else the
+  /// `/Volumes/<name>` that holds the root, else the root's parent folder.
+  ///
+  /// A data store that was not migrated yet keeps its providers beside the Hub folder
+  /// (`<volume>/Steam`, `<volume>/EpicGamesStore`, `<volume>/Ubisoft Game Launcher`): such a
+  /// folder is used when the new one (`Library/Steam`, `Library/Epic`, `Library/Ubisoft`) does not
+  /// exist and the old one is a real folder.
+  ///
+  /// - Parameter resolvingLegacyFolders: Whether to look for the legacy provider folders. That
+  ///   asks the data store's drive, which may be slow or absent; pass false where no I/O is allowed
+  ///   and call again later.
+  package static func from(
+    settings: HubSettings,
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    home: URL = FileManager.default.homeDirectoryForCurrentUser,
+    resolvingLegacyFolders: Bool = true
+  ) -> HubLayout {
+    let rootPath: String
+    if let root = environment["HUB_ROOT"] {
+      rootPath = root
+    } else if let volume = environment["HUB_VOLUME"] {
+      rootPath = DatastorePath.join(
+        volume, DatastorePath.name(of: HubSettings.defaultDataStoreRoot))
+    } else {
+      rootPath = settings.dataStoreRoot
+    }
+    let hub = URL(fileURLWithPath: rootPath, isDirectory: true)
+    let volume = URL(
+      fileURLWithPath: environment["HUB_VOLUME"] ?? HubPaths.volumeRoot(of: hub.path)
+        ?? DatastorePath.parent(of: hub.path),
+      isDirectory: true)
+    let library = HubPaths(root: hub).library
+    return HubLayout(
+      hub: hub,
+      bundles: volume.appendingPathComponent("Bundles", isDirectory: true),
+      steam: provider(library, "Steam", legacy: volume, "Steam", resolving: resolvingLegacyFolders),
+      eaGames: hub.appendingPathComponent("EA Games", isDirectory: true),
+      epic: provider(
+        library, "Epic", legacy: volume, "EpicGamesStore", resolving: resolvingLegacyFolders),
+      ubisoft: provider(
+        library, "Ubisoft", legacy: volume, "Ubisoft Game Launcher",
+        resolving: resolvingLegacyFolders),
+      instances: HubSettings.fileURL(home: home).deletingLastPathComponent()
+        .appendingPathComponent("Instances", isDirectory: true))
+  }
+
+  /// The layout of the settings saved for `home` (the default settings when there are none or
+  /// they cannot be read; the app reads them itself to show the problem).
   package static func standard(
     environment: [String: String] = ProcessInfo.processInfo.environment,
     home: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> HubLayout {
-    let volume = URL(fileURLWithPath: environment["HUB_VOLUME"] ?? "/Volumes/ExT2", isDirectory: true)
-    let hub = URL(
-      fileURLWithPath: environment["HUB_ROOT"] ?? volume.appendingPathComponent("GameHub").path,
-      isDirectory: true)
-    return HubLayout(
-      hub: hub,
-      bundles: volume.appendingPathComponent("Bundles", isDirectory: true),
-      steam: volume.appendingPathComponent("Steam", isDirectory: true),
-      eaGames: hub.appendingPathComponent("EA Games", isDirectory: true),
-      epic: volume.appendingPathComponent("EpicGamesStore", isDirectory: true),
-      ubisoft: volume.appendingPathComponent("Ubisoft Game Launcher", isDirectory: true),
-      instances: home.appendingPathComponent(
-        "Library/Application Support/GameHub/Instances", isDirectory: true))
+    let settings = (try? HubSettings.load(home: home)) ?? HubSettings.defaults(home: home)
+    return from(settings: settings, environment: environment, home: home)
+  }
+
+  private static func provider(
+    _ library: URL, _ name: String, legacy volume: URL, _ legacyName: String, resolving: Bool
+  ) -> URL {
+    let current = library.appendingPathComponent(name, isDirectory: true)
+    guard resolving else { return current }
+    let old = volume.appendingPathComponent(legacyName, isDirectory: true)
+    var info = stat()
+    if lstat(current.path, &info) == 0 { return current }
+    if lstat(old.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR { return old }
+    return current
   }
 }
 
