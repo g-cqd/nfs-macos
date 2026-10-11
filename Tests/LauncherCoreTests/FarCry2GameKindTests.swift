@@ -33,6 +33,7 @@ struct FarCry2GameKindTests {
     case .farcry2: #expect(kind.rendererConfiguration == "bin/mtld3d.conf")
     // Not one of this test's arguments; NFS2015GameKindTests owns that contract.
     case .nfs2015: Issue.record("Need for Speed (2015) is not an argument of this test")
+    case .bf3: Issue.record("Battlefield 3 is not an argument of this test")
     }
   }
 

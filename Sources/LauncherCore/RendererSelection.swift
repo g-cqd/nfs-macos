@@ -48,7 +48,7 @@ package struct RendererSelection: Codable, Equatable, Sendable {
   }
 
   /// Whether a name is one plain Windows executable file name, such as `NFS16.exe`.
-  static func isExecutableName(_ name: String) -> Bool {
+  package static func isExecutableName(_ name: String) -> Bool {
     (1...64).contains(name.utf8.count) && name.hasSuffix(".exe")
       && name.utf8.allSatisfy({
         (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
@@ -57,7 +57,7 @@ package struct RendererSelection: Codable, Equatable, Sendable {
   }
 
   /// One compatibility-database rule line.
-  func rule(name: String) -> String {
+  package func rule(name: String) -> String {
     "name=\(name);exe=\(executable ?? "*");\(api)=\(backend)"
   }
 
@@ -65,7 +65,7 @@ package struct RendererSelection: Codable, Equatable, Sendable {
   ///
   /// A rule naming another program, such as the store client that starts the game, is a
   /// different process with different requirements and is judged separately.
-  func serves(_ executable: String) -> Bool {
+  package func serves(_ executable: String) -> Bool {
     guard let named = self.executable else { return true }
     return named.lowercased() == executable.lowercased()
   }

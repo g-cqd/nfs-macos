@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "gameID": "bf3",
+  "displayName": "Battlefield 3",
+  "bundleIdentifier": "local.bf3.mac",
+  "bundleVersion": "1",
+  "minimumMacOS": "15.0",
+  "category": "public.app-category.action-games",
+  "launcher": "BF3Launcher",
+  "session": "BF3Session",
+  "runtimeProfile": "bf3-tuned-0010-dsound0011-20261009",
+  "requiredRuntimeCapabilities": [
+    "trapFlagEmulation",
+    "dxmtDXGI",
+    "x87Sidecar"
+  ],
+  "editions": [
+    "bundled"
+  ],
+  "gameExecutable": "bf3.exe",
+  "runtimeTuning": {
+    "WINE_TF_EMULATION": "1",
+    "WINE_TF_MAX_STEPS": "0",
+    "WINE_TF_MAX_NS": "0"
+  },
+  "inputs": {
+    "tunedBundle": "/Volumes/ExT2/Bundles/Battlefield3-Tuned-20261009",
+    "packaging": "{project}/Packaging"
+  },
+  "prefixSeed": {
+    "input": "tunedBundle",
+    "source": "prefix",
+    "path": "Game",
+    "settingsProfile": "drive_c/users/crossover/Documents/Battlefield 3/settings/PROF_SAVE_profile",
+    "backgroundPrograms": [
+      "PnkBstrA.exe",
+      "PnkBstrB.exe"
+    ],
+    "reason": "Measured on the bring-up Mac: the EA app, Wine Gecko, the ShellWindows stand-in, the res:// handler, the Game Explorer registration and the d3d11 proxy only work together in the prefix they were brought up in; account, activation, machine and log state were removed from it"
+  },
+  "storeClient": {
+    "name": "EA app",
+    "installRoot": "Program Files/Electronic Arts/EA Desktop",
+    "clientExecutable": "EA Desktop/EADesktop.exe",
+    "clientArguments": [
+      "--in-process-gpu"
+    ],
+    "launcherExecutable": "EA Desktop/EALauncher.exe",
+    "launchURL": "origin2://game/launch/?offerIds={offer}",
+    "offerID": [
+      "70619",
+      "71067"
+    ],
+    "signInEvidence": [
+      "AppData/Local/Electronic Arts/EA Desktop"
+    ],
+    "readinessLog": "ProgramData/EA Desktop/Logs/EADesktop.log",
+    "startMarker": "[STARTUP]",
+    "readyEvents": [
+      "login",
+      "client.boot.ready"
+    ],
+    "readinessSeconds": 180,
+    "gameRoot": "Program Files/EA Games/Battlefield 3",
+    "launchChain": [
+      "BF3WebHelper.exe",
+      "bf3.exe"
+    ],
+    "leaseTarget": "bf3.exe",
+    "expectedPorts": [
+      3215
+    ]
+  },
+  "storeBrowser": {
+    "name": "Battlelog",
+    "pages": [
+      {
+        "name": "singleplayer",
+        "title": "Campaign",
+        "url": "https://battlelog.battlefield.com/bf3/campaign/"
+      },
+      {
+        "name": "multiplayer",
+        "title": "Multiplayer",
+        "url": "https://battlelog.battlefield.com/bf3/"
+      }
+    ],
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "browsers": [
+      "com.google.Chrome",
+      "com.google.Chrome.canary",
+      "org.chromium.Chromium",
+      "com.microsoft.edgemac",
+      "com.brave.Browser",
+      "com.vivaldi.Vivaldi"
+    ],
+    "profileFolder": "BrowserProfile",
+    "service": {
+      "url": "http://127.0.0.1:3215/ping",
+      "origin": "https://battlelog.battlefield.com",
+      "reply": "pong",
+      "seconds": 180,
+      "gameURL": "http://127.0.0.1:3215/game/status?masterTitleId=50182",
+      "gameReply": "\"state\":\"INSTALLED\""
+    }
+  },
+  "renderers": [
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "bf3.exe",
+      "reason": "Measured: the campaign ran windowed for 8+ minutes on DXMT with the d3d11 proxy"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "BF3WebHelper.exe",
+      "reason": "Measured: without a rule it failed to import dxgi and d3d11 and quit"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "EALaunchHelper.exe",
+      "reason": "Measured: without a rule it failed to import dxgi and d3d11"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "EAGEP.exe",
+      "reason": "As the other EA helpers: it imports dxgi, which only DXMT supplies here"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "EADesktop.exe",
+      "reason": "Measured with NFS 2015: renders the full client UI with none of the shared-handle failures D3DMetal logs"
+    },
+    {
+      "api": "dxgi",
+      "backend": "dxmt",
+      "executable": "EACefSubProcess.exe",
+      "reason": "Measured with NFS 2015: its libcef.dll imports dxgi.dll, which no other backend supplies here"
+    }
+  ],
+  "prefixRegistry": [
+    {
+      "hive": "system.reg",
+      "path": "Software\\Wow6432Node\\EA Games\\Battlefield 3",
+      "name": "Install Dir",
+      "reason": "The registration EA's installer wrote, so the EA app finds the packaged game"
+    },
+    {
+      "hive": "system.reg",
+      "path": "Software\\Wow6432Node\\EA Games\\Battlefield 3",
+      "name": "GDFBinary",
+      "reason": "Game Explorer registration that the game's finalize step (Touchup) checks"
+    },
+    {
+      "hive": "system.reg",
+      "path": "Software\\Classes\\CLSID\\{9BA05972-F6A8-11CF-A442-00A0C90A8F39}\\InprocServer32",
+      "reason": "CLSID_ShellWindows stand-in (shellwin.dll): Wine's ieframe lacks it and BF3WebHelper.exe and bf3.exe quit with 0x80040111"
+    },
+    {
+      "hive": "system.reg",
+      "path": "Software\\Classes\\PROTOCOLS\\Handler\\res",
+      "reason": "The res:// protocol handler the Game Explorer registration needs (provided by mshtml with Wine Gecko)"
+    },
+    {
+      "hive": "user.reg",
+      "path": "Software\\Wine\\AppDefaults\\bf3.exe\\DllOverrides",
+      "name": "d3d11",
+      "reason": "Loads the game-folder d3d11 proxy for bf3.exe only (native,builtin)"
+    },
+    {
+      "hive": "system.reg",
+      "path": "Software\\Wine\\AppDefaults\\bf3.exe\\DllOverrides",
+      "name": "d3d11",
+      "reason": "The same override in the machine hive, as the bring-up set it"
+    },
+    {
+      "hive": "system.reg",
+      "path": "System\\ControlSet001\\Services\\PnkBstrA",
+      "reason": "PunkBuster's service, present as EA's installer registered it; the app stops it with the prefix"
+    }
+  ],
+  "gameShims": [
+    {
+      "path": "d3d11.dll",
+      "sha256": "79a1aaf6fb3823d636e97888c6f5d8b5342f1af51bd7b20356812c1499727a57",
+      "reason": "32-bit proxy that forwards to DXMT and returns a view on a same-size texture when DXMT rejects a render-target view on a buffer (the game's DirectX Error); buffer contents are not preserved; source in Sources/bf3-prefix-src"
+    }
+  ],
+  "presets": [
+    {
+      "name": "fullscreen",
+      "title": "Full Screen",
+      "reason": "Full screen only, applied before each start at the main display's native pixel size and refresh (at least 60). Not verified: the Wine driver's native full screen is new and has not been run with this game yet",
+      "values": [
+        {
+          "key": "GstRender.FullscreenEnabled",
+          "value": "1"
+        },
+        {
+          "key": "GstRender.FullscreenScreen",
+          "value": "0"
+        },
+        {
+          "key": "GstRender.FullscreenRefreshRate",
+          "value": "{display.refresh.float}"
+        },
+        {
+          "key": "GstRender.ResolutionWidth",
+          "value": "{display.width}"
+        },
+        {
+          "key": "GstRender.ResolutionHeight",
+          "value": "{display.height}"
+        },
+        {
+          "key": "GstRender.ResolutionHertz",
+          "value": "{display.refresh}"
+        }
+      ]
+    }
+  ],
+  "runtimeRetention": [
+    "lib/wine/dxgi/dxmt"
+  ],
+  "thirdPartyLicenses": [
+    {
+      "component": "dxmt",
+      "version": "v0.80",
+      "licence": "MIT",
+      "path": "Licenses/dxmt.txt",
+      "source": "dxmt-v0.80-LICENSE.txt",
+      "sha256": "6b928413c6308c106f3e0080bd94b6427b56d587d400fd40e6cbfbab7d9c4ae1",
+      "url": "https://github.com/3Shain/dxmt/blob/v0.80/LICENSE",
+      "tagCommit": "589adb780354b461645b29999cefaf533594ee99",
+      "blobSHA1": "41dd6778e00185dffc2c66a13a541c9faa1ae93c"
+    }
+  ],
+  "runtimeSource": {
+    "input": "packaging",
+    "source": "NFS2015Runtime",
+    "path": "wine-nfs2015",
+    "repository": "https://github.com/athei/wine",
+    "branch": "cx-26-patched",
+    "baseRevision": "1a7b0c76",
+    "patchCount": 10,
+    "archive": "wine-nfs2015-source-0010.tar.gz"
+  },
+  "originalFiles": [
+    "bf3.exe",
+    "bf3.par",
+    "BF3WebHelper.exe",
+    "Engine.BuildInfo_Win32_Retail_dll.dll",
+    "GDFBinary_en_US.dll",
+    "pbsvc.exe",
+    "version.json"
+  ],
+  "originalDirectories": {
+    "Core": [],
+    "Data": [],
+    "pb": [],
+    "Support": [],
+    "Update": [],
+    "__Installer": []
+  },
+  "executableHashes": {
+    "bf3.exe": "7abf30cb4e4fe9c8296888816c2a7695025180db7aa82df73e657d0c0e506cd7",
+    "BF3WebHelper.exe": "e892e64175b709aed3a3552a4ab3326add6e111f6a5c39abf52cd541c4899a2a",
+    "pbsvc.exe": "73ede934a027b42ac1bc55f346142604841ec567b79078c296386beab486d80f",
+    "GDFBinary_en_US.dll": "0a894ed10fe76a3c78a425295085e05e554540565f1e55297286d86362807308"
+  },
+  "inventorySHA256": "2b49377130023985e2d726d5d231458ff4f4b1a11f79b59ce0a489a1966b471f",
+  "compatibility": [],
+  "defaults": [],
+  "supportsSP": true,
+  "supportsMP": false
+}

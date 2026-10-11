@@ -35,6 +35,15 @@ DENIED_BACKENDS = {
 }
 # The executable whose pinned digest proves which game build a bundled edition contains.
 GAME_EXECUTABLES = {'nfs2015': 'NFS16.exe'}
+# The PE machine types an import recipe may expect; i386 is what every shipped recipe declares.
+MACHINES = {'i386', 'x86_64'}
+EXECUTABLE_NAME = re.compile(r'[A-Za-z0-9._-]{1,64}(?i:\.exe)')
+MAX_OFFER_IDS = 32
+# Files that sit directly in the game folder, beside the copied directories (a 64-bit game's
+# launcher and executables); optional, so every recipe without the key validates as before.
+MAX_ROOT_FILES = 16
+ROOT_FILE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._ ()-]{0,63}')
+MAX_LAUNCH_REQUEST = 512
 GUEST_PATH = re.compile(r'[^/\\\x00]+(?:/[^/\\\x00]+)*')
 WINDOWS_PATH = re.compile(r'[A-Za-z]:(?:\\[A-Za-z0-9 ._()-]+)+\\?')
 
@@ -49,8 +58,8 @@ def validate_import_rules(rules):
     if not isinstance(rules, dict):
         raise ValueError('Import rules must be an object')
     safe_relative(rules.get('executable'))
-    if rules.get('machine') != 'i386':
-        raise ValueError('Only 32-bit executables are supported')
+    if not isinstance(rules.get('machine'), str) or rules['machine'] not in MACHINES:
+        raise ValueError('Only i386 and x86_64 executables are supported')
     required, directories = rules.get('required'), rules.get('directories')
     if not isinstance(required, list) or not 1 <= len(required) <= 64:
         raise ValueError('Import rules need 1-64 required files')
@@ -70,14 +79,29 @@ def validate_import_rules(rules):
             raise ValueError('Excluded suffixes must be lowercase extensions')
     if len(set(roots)) != len(roots):
         raise ValueError('Duplicate import directory')
+    root_files = []
+    if 'rootFiles' in rules:
+        listed = rules['rootFiles']
+        if not isinstance(listed, list) or not 1 <= len(listed) <= MAX_ROOT_FILES:
+            raise ValueError('Import rules need 1-%d root files when rootFiles is present' % MAX_ROOT_FILES)
+        for name in listed:
+            if not isinstance(name, str) or not ROOT_FILE_NAME.fullmatch(name):
+                raise ValueError('Invalid root file name')
+            root_files.append(name.lower())
+        if len(set(root_files)) != len(root_files):
+            raise ValueError('Duplicate root file')
+        if any(name in {root.split('/')[0] for root in roots} for name in root_files):
+            raise ValueError('A root file shares its name with a copied directory')
     names = []
     for item in required:
         path = safe_relative(item.get('path'))
         names.append(path.lower())
         if not isinstance(item.get('minimumSize'), int) or not 0 <= item['minimumSize'] <= 4_000_000_000:
             raise ValueError('Invalid required file size')
-        if not any(path.lower().startswith(root + '/') for root in roots):
+        if path.lower() not in root_files and not any(path.lower().startswith(root + '/') for root in roots):
             raise ValueError('Required file is outside every copied directory: ' + path)
+    if any(name not in names for name in root_files):
+        raise ValueError('Every root file must also be a required file')
     if rules['executable'].lower() not in names:
         raise ValueError('The executable must be a required file')
     for item in rules.get('pairings', []):
@@ -131,12 +155,54 @@ def validate_store_client(client):
             or not url.startswith(('origin2://', 'link2ea://')) \
             or any(ord(c) < 32 or ord(c) > 126 for c in url):
         raise ValueError('The store launch request must be a bounded store URL with an offer slot')
-    if not re.fullmatch(r'[0-9]{1,20}', str(client.get('offerID'))):
-        raise ValueError('The store offer identifier must be a decimal number')
+    offers = _offer_ids(client.get('offerID'))
+    if len(url.replace('{offer}', ','.join(offers))) > MAX_LAUNCH_REQUEST:
+        raise ValueError('The expanded store launch request is too long')
     if not isinstance(client.get('readinessSeconds'), int) \
             or not 5 <= client['readinessSeconds'] <= 600:
         raise ValueError('Invalid store client readiness wait')
+    _validate_launch_chain(client)
     return client
+
+
+def _offer_ids(value):
+    """One decimal offer id, or a bounded list of distinct ones, as the launch request joins them."""
+    ids = [value] if isinstance(value, str) else value
+    if not isinstance(ids, list) or not 1 <= len(ids) <= MAX_OFFER_IDS or not all(
+            isinstance(i, str) and re.fullmatch(r'[0-9]{1,20}', i) for i in ids):
+        raise ValueError('The store offer identifier must be a decimal number or a bounded list of them')
+    if len(set(ids)) != len(ids):
+        raise ValueError('Duplicate store offer identifier')
+    return ids
+
+
+def _validate_launch_chain(client):
+    """Optional description of a game that starts through helper processes before its own.
+
+    launchChain names the executables the store client's launch request starts, in order;
+    leaseTarget is the one the session lease follows, so it must be one of them; expectedPorts are
+    the loopback ports whose availability the launch checks beforehand.
+    """
+    chain = client.get('launchChain')
+    if chain is not None:
+        if not isinstance(chain, list) or not 1 <= len(chain) <= 8 or not all(
+                isinstance(n, str) and EXECUTABLE_NAME.fullmatch(n) for n in chain):
+            raise ValueError('The launch chain must be 1-8 plain executable names')
+        if len({n.casefold() for n in chain}) != len(chain):
+            raise ValueError('Duplicate launch chain executable')
+    target = client.get('leaseTarget')
+    if target is not None:
+        if chain is None:
+            raise ValueError('A lease target needs a launch chain')
+        if not isinstance(target, str) or target.casefold() not in {n.casefold() for n in chain}:
+            raise ValueError('The lease target must be one of the launch chain executables')
+    ports = client.get('expectedPorts')
+    if ports is not None:
+        if not isinstance(ports, list) or not 1 <= len(ports) <= 8 or not all(
+                isinstance(p, int) and not isinstance(p, bool) and 1024 <= p <= 65535 for p in ports):
+            raise ValueError('Expected ports must be 1-8 unprivileged port numbers')
+        if len(set(ports)) != len(ports):
+            raise ValueError('Duplicate expected port')
 
 
 def validate_runtime_tuning(tuning):
@@ -186,13 +252,56 @@ def validate_prefix_settings(settings):
     return settings
 
 
+def game_executable(recipe):
+    """The executable that identifies the game: the built-in one for a known game, else the recipe's.
+
+    A recipe cannot rename a known game's executable; it can only name one for a game the table
+    does not know, which is how a new game declares itself.
+    """
+    known = GAME_EXECUTABLES.get(recipe['gameID'])
+    declared = recipe.get('gameExecutable')
+    if declared is not None:
+        if not isinstance(declared, str) or not declared.lower().endswith('.exe') \
+                or len(declared) > 128 or safe_relative(declared) != declared:
+            raise ValueError('The game executable must be a relative path to an .exe')
+        if known is not None and declared.casefold() != known.casefold():
+            raise ValueError('The game executable of a known game cannot be changed')
+        return declared
+    return known or ''
+
+
+def denied_backends(recipe):
+    """(executable, {backend: reason}): the built-in denials stay, a recipe may only add its own."""
+    built_in = DENIED_BACKENDS.get(recipe['gameID'], {})
+    executable = built_in.get('executable', '')
+    denied = dict(built_in.get('backends', {}))
+    declared = recipe.get('deniedBackends')
+    if declared is None:
+        return executable, denied
+    if not isinstance(declared, dict) or set(declared) != {'executable', 'backends'}:
+        raise ValueError('Denied backends declare exactly an executable and a backends map')
+    if not isinstance(declared['executable'], str) or not EXECUTABLE_NAME.fullmatch(declared['executable']):
+        raise ValueError('Denied backends apply to one plain executable name')
+    if executable and declared['executable'].casefold() != executable.casefold():
+        raise ValueError('The denied-backend executable of a known game cannot be changed')
+    backends = declared['backends']
+    if not isinstance(backends, dict) or not 1 <= len(backends) <= 8:
+        raise ValueError('Denied backends need 1-8 entries')
+    for backend, reason in backends.items():
+        if not re.fullmatch('[a-z0-9]{1,32}', backend) or not isinstance(reason, str) \
+                or not 0 < len(reason) <= 200 or ';' in reason or any(ord(c) < 32 for c in reason):
+            raise ValueError('Unusable denied backend')
+        if backend in denied and denied[backend] != reason:
+            raise ValueError('A built-in denial cannot be reworded: ' + backend)
+        denied[backend] = reason
+    return declared['executable'], denied
+
+
 def validate_renderers(recipe, renderers):
     """Mirror of the native RendererSelection validation, plus the per-game denial list."""
     if not isinstance(renderers, list) or not 1 <= len(renderers) <= 16:
         raise ValueError('A recipe needs between one and sixteen renderer rules')
-    denial = DENIED_BACKENDS.get(recipe['gameID'], {})
-    executable = denial.get('executable', '')
-    denied = denial.get('backends', {})
+    executable, denied = denied_backends(recipe)
     for item in renderers:
         if not isinstance(item, dict) or item.get('api') not in RENDERER_APIS:
             raise ValueError('Unknown graphics API in a renderer rule')
@@ -333,6 +442,176 @@ def validate_client_layer(declared):
     return declared
 
 
+PAGE_NAME = re.compile(r'[a-z-]{1,32}')
+BUNDLE_ID = re.compile(r'[A-Za-z0-9.-]{3,128}')
+PLAIN_FOLDER = re.compile(r'[A-Za-z0-9_-]{1,64}')
+PRESET_KEY = re.compile(r'[A-Za-z0-9._]{1,96}')
+PRESET_VALUE = re.compile(r'[A-Za-z0-9.-]{1,32}')
+PRESET_PLACEHOLDERS = {'{display.width}', '{display.height}', '{display.refresh}',
+                       '{display.refresh.float}'}
+HIVES = {'system.reg', 'user.reg'}
+
+
+def _reason(value, limit=300):
+    if not isinstance(value, str) or not 0 < len(value) <= limit or any(ord(c) < 32 for c in value):
+        raise ValueError('A prepared-prefix entry needs a plain reason')
+
+
+def validate_store_browser(browser, client):
+    """Mirror of the native StoreBrowserPlan: a store web page that starts the game.
+
+    The page is opened in an installed Chromium-family browser with its own profile and the
+    identity the page accepts; its service must be one of the store client's expected ports.
+    """
+    if not isinstance(browser, dict) or set(browser) != {
+            'name', 'pages', 'userAgent', 'browsers', 'profileFolder', 'service'}:
+        raise ValueError('The store browser declares exactly name, pages, userAgent, browsers, '
+                         'profileFolder and service')
+    if not isinstance(browser['name'], str) or not 0 < len(browser['name']) <= 64:
+        raise ValueError('The store browser needs a plain name')
+    pages = browser['pages']
+    if not isinstance(pages, list) or not 1 <= len(pages) <= 8:
+        raise ValueError('The store browser needs 1-8 pages')
+    names = set()
+    for page in pages:
+        if not isinstance(page, dict) or set(page) != {'name', 'title', 'url'} \
+                or not PAGE_NAME.fullmatch(str(page['name'])) or page['name'] in names \
+                or not isinstance(page['title'], str) or not 0 < len(page['title']) <= 64 \
+                or not isinstance(page['url'], str) or len(page['url']) > 256 \
+                or not re.fullmatch(r'https://[A-Za-z0-9.-]+(?:/[!-~]*)?', page['url']):
+            raise ValueError('A store page is a short name, a title and a plain HTTPS address')
+        names.add(page['name'])
+    agent = browser['userAgent']
+    if not isinstance(agent, str) or not 16 <= len(agent) <= 256 \
+            or any(not 32 <= ord(c) <= 126 or c == '"' for c in agent):
+        raise ValueError('The store browser identity must be plain printable text')
+    ids = browser['browsers']
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 8 or len(set(ids)) != len(ids) \
+            or not all(isinstance(i, str) and BUNDLE_ID.fullmatch(i) for i in ids):
+        raise ValueError('The store browsers must be 1-8 distinct bundle identifiers')
+    if not isinstance(browser['profileFolder'], str) or browser['profileFolder'].startswith('.') \
+            or not PLAIN_FOLDER.fullmatch(browser['profileFolder']):
+        raise ValueError('The store browser profile must be one plain folder name')
+    service = browser['service']
+    if not isinstance(service, dict) or not {'url', 'origin', 'reply', 'seconds'} <= set(service) \
+            or not set(service) <= {'url', 'origin', 'reply', 'seconds', 'gameURL', 'gameReply'} \
+            or ('gameURL' in service) != ('gameReply' in service):
+        raise ValueError('The store service declares url, origin, reply and seconds, and optionally '
+                         'both gameURL and gameReply')
+    match = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,96}', str(service['url']))
+    if not match or not 1024 <= int(match.group(1)) <= 65535:
+        raise ValueError('The store service must be plain HTTP on 127.0.0.1 and an unprivileged port')
+    if int(match.group(1)) not in client.get('expectedPorts', []):
+        raise ValueError("The store service port must be one of the store client's expected ports")
+    if not re.fullmatch(r'https://[A-Za-z0-9.-]{1,120}', str(service['origin'])) \
+            or not isinstance(service['reply'], str) or not 0 < len(service['reply']) <= 64 \
+            or not isinstance(service['seconds'], int) or isinstance(service['seconds'], bool) \
+            or not 5 <= service['seconds'] <= 600:
+        raise ValueError('The store service needs an HTTPS origin, a reply and a bounded wait')
+    if 'gameURL' in service:
+        game = re.fullmatch(r'http://127\.0\.0\.1:([0-9]{4,5})/[!-~]{0,137}', str(service['gameURL']))
+        if not game or game.group(1) != match.group(1) or not isinstance(service['gameReply'], str) \
+                or not 0 < len(service['gameReply']) <= 64:
+            raise ValueError('The game state check must be on the same local service, with a reply')
+
+
+def validate_presets(presets):
+    """Named value sets for the game's own `Key value` settings profile."""
+    if not isinstance(presets, list) or len(presets) > 8:
+        raise ValueError('Presets must be a list of at most eight')
+    names = set()
+    for preset in presets:
+        if not isinstance(preset, dict) or set(preset) != {'name', 'title', 'values', 'reason'} \
+                or not PAGE_NAME.fullmatch(str(preset['name'])) or preset['name'] in names \
+                or not isinstance(preset['title'], str) or not 0 < len(preset['title']) <= 64:
+            raise ValueError('A preset declares a unique plain name, a title, values and a reason')
+        names.add(preset['name'])
+        _reason(preset['reason'])
+        values = preset['values']
+        if not isinstance(values, list) or not 1 <= len(values) <= 64:
+            raise ValueError('A preset needs 1-64 values')
+        keys = set()
+        for value in values:
+            if not isinstance(value, dict) or set(value) != {'key', 'value'} \
+                    or not PRESET_KEY.fullmatch(str(value['key'])) or value['key'] in keys \
+                    or not (value['value'] in PRESET_PLACEHOLDERS
+                            or PRESET_VALUE.fullmatch(str(value['value']))):
+                raise ValueError('Unusable preset value in ' + preset['name'])
+            keys.add(value['key'])
+
+
+def validate_prepared_prefix(recipe):
+    """A bundled edition that ships a whole prepared prefix, store client and game included.
+
+    Such a prefix cannot be rebuilt from Wine's defaults and a few registry values, so the app
+    carries it and the session places it once. The recipe lists what the prefix must hold and
+    why (registry records, game-folder files), the store page that starts the game and the
+    settings presets. It installs no managed runtime or client layer: both are in the prefix.
+    """
+    if recipe.get('editions') != ['bundled']:
+        raise ValueError('A prepared-prefix recipe produces the bundled edition only')
+    for key in ['referencesInstallation', 'importRules', 'managedRuntime', 'clientLayer',
+                'prefixSettings', 'bundledPrefixSettings', 'controllerDevices']:
+        if key in recipe:
+            raise ValueError('A prepared-prefix recipe does not declare ' + key)
+    if recipe['compatibility'] or recipe['defaults']:
+        raise ValueError('A prepared-prefix recipe ships no compatibility or default files')
+    seed = recipe['prefixSeed']
+    if not isinstance(seed, dict) or set(seed) != {
+            'input', 'source', 'path', 'settingsProfile', 'backgroundPrograms', 'reason'}:
+        raise ValueError('The prefix seed declares exactly input, source, path, settingsProfile, '
+                         'backgroundPrograms and reason')
+    if seed['input'] not in recipe['inputs']:
+        raise ValueError('Undeclared prefix seed input')
+    safe_relative(seed['source'])
+    safe_relative(seed['settingsProfile'])
+    if not PLAIN_FOLDER.fullmatch(str(seed['path'])):
+        raise ValueError('The prefix seed is one plain resource folder')
+    programs = seed['backgroundPrograms']
+    if not isinstance(programs, list) or len(programs) > 8 or not all(
+            isinstance(n, str) and EXECUTABLE_NAME.fullmatch(n) for n in programs):
+        raise ValueError('Background programs must be at most eight plain executable names')
+    _reason(seed['reason'])
+    if 'inventorySHA256' not in recipe:
+        raise ValueError('A prepared-prefix recipe must pin its game inventory')
+    client = validate_store_client(recipe.get('storeClient'))
+    if 'launchChain' not in client or 'leaseTarget' not in client or 'expectedPorts' not in client:
+        raise ValueError('A prepared-prefix game names its launch chain, lease target and ports')
+    executable = game_executable(recipe)
+    if not executable or not any(path.casefold() == executable.casefold()
+                                 for path in recipe['executableHashes']):
+        raise ValueError('A prepared-prefix recipe must pin its game executable')
+    if executable != client['leaseTarget']:
+        raise ValueError('The lease target is the game executable')
+    validate_store_browser(recipe.get('storeBrowser'), client)
+    validate_renderers(recipe, recipe.get('renderers', []))
+    records = recipe.get('prefixRegistry')
+    if not isinstance(records, list) or not 1 <= len(records) <= 64:
+        raise ValueError('A prepared-prefix recipe lists 1-64 registry records')
+    for record in records:
+        if not isinstance(record, dict) or not {'hive', 'path', 'reason'} <= set(record) \
+                or not set(record) <= {'hive', 'path', 'name', 'reason'} \
+                or record['hive'] not in HIVES or not isinstance(record['path'], str) \
+                or not 0 < len(record['path']) <= 256 or ']' in record['path'] \
+                or ('name' in record and (not isinstance(record['name'], str)
+                                          or not 0 < len(record['name']) <= 128)):
+            raise ValueError('Unusable prefix registry record')
+        _reason(record['reason'])
+    shims = recipe.get('gameShims', [])
+    if not isinstance(shims, list) or len(shims) > 16:
+        raise ValueError('Game-folder files must be a bounded list')
+    for shim in shims:
+        if not isinstance(shim, dict) or set(shim) != {'path', 'sha256', 'reason'} \
+                or not SHA256.fullmatch(str(shim['sha256'])):
+            raise ValueError('A game-folder file declares its path, SHA-256 pin and reason')
+        safe_relative(shim['path'])
+        _reason(shim['reason'])
+    validate_presets(recipe.get('presets', []))
+    if 'runtimeSource' in recipe:
+        if validate_runtime_source(recipe['runtimeSource'])['input'] not in recipe['inputs']:
+            raise ValueError('Undeclared runtime source input')
+
+
 def validate_recipe(recipe):
     if recipe.get('schemaVersion') != 1:
         raise ValueError('Unsupported bundle recipe version')
@@ -438,6 +717,8 @@ def validate_recipe(recipe):
     validate_runtime_tuning(recipe.get('runtimeTuning', {}))
     if 'winehost' in recipe:
         validate_winehost(recipe['winehost'], recipe['inputs'])
+    if recipe.get('referencesInstallation') and 'prefixSeed' in recipe:
+        raise ValueError('A prefix seed needs a recipe that does not reference an installation')
     if recipe.get('referencesInstallation'):
         # The import edition of a store-client recipe ships no game bytes at all, so it carries no
         # inventory. Its bundled edition, when the recipe declares one, ships the user's verified
@@ -453,7 +734,7 @@ def validate_recipe(recipe):
                 raise ValueError('A bundled store-client edition needs a game input')
             if 'inventorySHA256' not in recipe:
                 raise ValueError('A bundled store-client edition must pin its whole payload inventory')
-            if not any(path.casefold() == GAME_EXECUTABLES.get(recipe['gameID'], '').casefold()
+            if not any(path.casefold() == game_executable(recipe).casefold()
                        for path in recipe['executableHashes']):
                 raise ValueError('A bundled store-client edition must pin the game executable')
             validate_prefix_settings(recipe.get('bundledPrefixSettings', []))
@@ -466,6 +747,7 @@ def validate_recipe(recipe):
             if 'game' in recipe['inputs']:
                 raise ValueError('An import-only referencing recipe takes no game input')
         validate_store_client(recipe.get('storeClient'))
+        game_executable(recipe)
         validate_prefix_settings(recipe.get('prefixSettings', []))
         validate_renderers(recipe, recipe.get('renderers', []))
         if 'managedRuntime' in recipe:
@@ -488,9 +770,12 @@ def validate_recipe(recipe):
         if not isinstance(devices, list) or len(devices) > 32 or not all(
                 re.fullmatch('[0-9A-Fa-f]{4}/[0-9A-Fa-f]{4}', str(d)) for d in devices):
             raise ValueError('Invalid controller device')
+    elif 'prefixSeed' in recipe:
+        validate_prepared_prefix(recipe)
     else:
         for key in ['storeClient', 'controllerDevices', 'prefixSettings', 'renderers',
-                    'bundledPrefixSettings', 'managedRuntime', 'clientLayer']:
+                    'bundledPrefixSettings', 'managedRuntime', 'clientLayer', 'gameExecutable',
+                    'deniedBackends', 'storeBrowser', 'presets', 'prefixRegistry', 'gameShims']:
             if key in recipe:
                 # A bundle that owns its prefix imports Defaults/settings.reg during wineboot.
                 raise ValueError('Only a referencing recipe declares ' + key)
