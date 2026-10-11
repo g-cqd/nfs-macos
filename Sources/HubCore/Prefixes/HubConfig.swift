@@ -154,7 +154,7 @@ package struct HubConfig: Codable, Equatable, Sendable {
 
   // MARK: - Private validation
 
-  private func validate() throws(HubError) {
+  package func validate() throws(HubError) {
     // Validate schemaVersion
     guard schemaVersion == 1 else {
       throw .invalid("schemaVersion must be 1, got \(schemaVersion).")

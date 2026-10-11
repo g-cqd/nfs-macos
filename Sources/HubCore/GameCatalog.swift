@@ -693,6 +693,38 @@ package enum GameCatalog {
     return stack[0].section
   }
 
+  /// Whether `content` is well-formed Valve text: at least one block, every `{` has a key before
+  /// it, and every block is closed. The lenient parser above repairs such damage silently; this
+  /// strict view lets a caller reject a file that was cut off or edited into a broken shape.
+  package static func isWellFormedValveText(_ content: String) -> Bool {
+    var depth = 0
+    var blocks = 0
+    var previousWasKey = false
+    var expectsValue = false
+    for token in tokenizeVDF(content) {
+      switch token {
+      case .string:
+        if expectsValue {
+          expectsValue = false
+          previousWasKey = false
+        } else {
+          expectsValue = true
+          previousWasKey = true
+        }
+      case .open:
+        guard previousWasKey else { return false }
+        depth += 1
+        blocks += 1
+        expectsValue = false
+        previousWasKey = false
+      case .close:
+        guard depth > 0, !expectsValue else { return false }
+        depth -= 1
+      }
+    }
+    return depth == 0 && blocks > 0 && !expectsValue
+  }
+
   /// The library roots `libraryfolders.vdf` names that lie inside the Steam folder. Reads the
   /// numbered sections (`"0" { "path" "..." }`) and the older `"1" "path"` pairs; a `path` that
   /// is relative, or that resolves outside the Steam folder, is dropped. A `Z:` drive prefix (the

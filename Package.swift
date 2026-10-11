@@ -16,11 +16,13 @@ let package = Package(
     .executable(name: "BF3Launcher", targets: ["BF3Launcher"]),
     .executable(name: "BF3Session", targets: ["BF3Session"]),
     .executable(name: "GameHub", targets: ["HubApp"]),
+    .executable(name: "gamehub-cli", targets: ["HubCLI"]),
   ],
   targets: [
     .target(name: "LauncherCore"),
     .target(name: "HubCore", dependencies: ["LauncherCore"]),
     .executableTarget(name: "HubApp", dependencies: ["HubCore", "LauncherCore"]),
+    .executableTarget(name: "HubCLI", dependencies: ["HubCore"]),
     .target(name: "SharedLauncher", dependencies: ["LauncherCore"]),
     .target(name: "CoD4Core", dependencies: ["LauncherCore"]),
     .target(name: "FarCry2Core", dependencies: ["LauncherCore"]),
