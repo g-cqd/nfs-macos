@@ -257,97 +257,75 @@ package enum GameCatalog {
     return root
   }
 
-  private static func scanEA(_ layout: HubLayout) -> [CatalogEntry] {
-    var entries: [CatalogEntry] = []
-    let manager = FileManager.default
+  /// How many folder levels below an EA Games child may still hold games: the child itself
+  /// (depth 0) and the two levels under it, so `EA Games/Game`, `EA Games/Container/Game` and
+  /// `EA Games/Publisher/Container/Game` are all found.
+  private static let eaMaxDepth = 2
 
-    guard let publishers = contents(of: layout.eaGames) else {
+  private static func scanEA(_ layout: HubLayout) -> [CatalogEntry] {
+    guard let children = contents(of: layout.eaGames) else {
       return []
     }
 
-    for publisherURL in publishers {
-      guard isDirectory(publisherURL) else { continue }
-
-      guard let games = contents(of: publisherURL) else {
-        continue
-      }
-
-      for gameURL in games {
-        guard isDirectory(gameURL) else { continue }
-
-        let entry = findEAGame(at: gameURL, depth: 0)
-        if let entry = entry {
-          entries.append(entry)
-        }
-      }
+    // `scan` orders the entries, so the order the folders are listed in does not matter here.
+    var entries: [CatalogEntry] = []
+    for childURL in children where isVisibleDirectory(childURL) {
+      entries.append(contentsOf: findEAGames(at: childURL, depth: 0))
     }
-
     return entries
   }
 
-  private static func findEAGame(at url: URL, depth: Int) -> CatalogEntry? {
-    let manager = FileManager.default
+  /// Every game at `url` or in the folders under it, down to `eaMaxDepth` levels.
+  ///
+  /// A folder with the installer marker is a game and is never searched further. A folder that
+  /// only holds an `.exe` (an uninstaller, say) is a game unless a folder under it carries the
+  /// installer marker: then the games with the marker are returned instead of the folder.
+  private static func findEAGames(at url: URL, depth: Int) -> [CatalogEntry] {
     let folderName = url.lastPathComponent
-
-    // Check if this folder is a game
-    if isEAGameFolder(url) {
-      let title = titleFromEAGame(url) ?? folderName
-      let id = "ea-\(slugify(folderName))"
-
-      return CatalogEntry(
-        id: GameID(id),
-        title: title,
+    func gameEntry() -> CatalogEntry {
+      CatalogEntry(
+        id: GameID("ea-\(slugify(folderName))"),
+        title: titleFromEAGame(url) ?? folderName,
         source: .ea,
         root: url,
         detail: folderName
       )
     }
 
-    // If not a game and depth < 1, look one level deeper
-    if depth < 1 {
-      guard let subfolders = contents(of: url) else {
-        return nil
-      }
+    if hasEAInstallerMarker(url) {
+      return [gameEntry()]
+    }
 
-      for subfolder in subfolders {
-        guard isDirectory(subfolder) else { continue }
-
-        if let entry = findEAGame(at: subfolder, depth: depth + 1) {
-          return entry
-        }
+    var nested: [CatalogEntry] = []
+    if depth < eaMaxDepth, let subfolders = contents(of: url) {
+      for subfolder in subfolders where isVisibleDirectory(subfolder) {
+        nested.append(contentsOf: findEAGames(at: subfolder, depth: depth + 1))
       }
     }
 
-    return nil
+    guard hasExecutable(url) else { return nested }
+    let marked = nested.filter { hasEAInstallerMarker($0.root) }
+    return marked.isEmpty ? [gameEntry()] : marked
   }
 
-  private static func isEAGameFolder(_ url: URL) -> Bool {
+  /// Whether `url` names a folder (following links) whose name does not start with a dot.
+  private static func isVisibleDirectory(_ url: URL) -> Bool {
+    !url.lastPathComponent.hasPrefix(".") && isDirectory(url)
+  }
+
+  /// Whether the folder has an `__Installer` folder or an `installerdata.xml`.
+  private static func hasEAInstallerMarker(_ url: URL) -> Bool {
     let manager = FileManager.default
+    return manager.fileExists(atPath: url.appendingPathComponent("__Installer", isDirectory: true).path)
+      || manager.fileExists(atPath: url.appendingPathComponent("installerdata.xml").path)
+  }
 
-    // Check for __Installer folder
-    let installerPath = url.appendingPathComponent("__Installer", isDirectory: true)
-    if manager.fileExists(atPath: installerPath.path) {
-      return true
-    }
-
-    // Check for installerdata.xml
-    let installerDataPath = url.appendingPathComponent("installerdata.xml")
-    if manager.fileExists(atPath: installerDataPath.path) {
-      return true
-    }
-
-    // Check for .exe files
-    do {
-      let contents = try manager.contentsOfDirectory(atPath: url.path)
-      for item in contents {
-        if item.hasSuffix(".exe") {
-          return true
-        }
-      }
-      return false
-    } catch {
+  /// Whether the folder holds an `.exe` directly.
+  private static func hasExecutable(_ url: URL) -> Bool {
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else {
       return false
     }
+    return names.contains { $0.hasSuffix(".exe") }
   }
 
   private static func titleFromEAGame(_ url: URL) -> String? {

@@ -516,6 +516,109 @@ import Testing
     #expect(entries[0].source == .ea)
   }
 
+  /// Writes `<root>/<name>/__Installer/installerdata.xml` titled `title`, the mark of an EA game.
+  private func writeEAGame(_ name: String, title: String, in root: URL) throws {
+    let xml = """
+      <?xml version='1.0' encoding='utf-8'?>
+      <DiPManifest version="4.0">
+        <gameTitles>
+          <gameTitle locale="en_US">\(title)</gameTitle>
+        </gameTitles>
+      </DiPManifest>
+      """
+    try write(xml, to: root.appendingPathComponent("\(name)/__Installer/installerdata.xml"))
+  }
+
+  @Test func eaFlatLayoutYieldsOneEntryPerGame() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let eaGamesDir = tempDir.appendingPathComponent("EA Games", isDirectory: true)
+    // Folder name, XML title and the id the folder name slugs to. One title differs from its folder.
+    let games: [(folder: String, title: String, id: String)] = [
+      ("Battlefield 3", "Battlefield 3", "ea-battlefield-3"),
+      ("Battlefield 4", "Battlefield 4", "ea-battlefield-4"),
+      ("Crysis 3", "Crysis 3", "ea-crysis-3"),
+      ("F1 24", "F1 24", "ea-f1-24"),
+      ("Need for Speed", "Need for Speed (2015)", "ea-need-for-speed"),
+    ]
+    for game in games {
+      try writeEAGame(game.folder, title: game.title, in: eaGamesDir)
+    }
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.count == 5)
+    #expect(entries.allSatisfy { $0.source == .ea })
+    for game in games {
+      let entry = entries.first { $0.id.rawValue == game.id }
+      #expect(entry?.title == game.title)
+      #expect(entry?.root.path == eaGamesDir.appendingPathComponent(game.folder).path)
+    }
+  }
+
+  @Test func eaContainerFolderYieldsEveryGameInside() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let container = tempDir.appendingPathComponent("EA Games/BF4", isDirectory: true)
+    let names = ["Battlefield 4", "Crysis 3", "F1 24"]
+    for name in names {
+      try writeEAGame(name, title: name, in: container)
+    }
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(Set(entries.map(\.title)) == Set(names))
+    #expect(entries.count == 3)
+    for name in names {
+      #expect(
+        entries.first { $0.title == name }?.root.path
+          == container.appendingPathComponent(name).path)
+    }
+  }
+
+  @Test func eaDeepestLayoutFound() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let eaGamesDir = tempDir.appendingPathComponent("EA Games", isDirectory: true)
+    try writeEAGame("Game", title: "Game", in: eaGamesDir.appendingPathComponent("Pub/Box"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.map(\.id.rawValue) == ["ea-game"])
+    #expect(entries.first?.root.path == eaGamesDir.appendingPathComponent("Pub/Box/Game").path)
+  }
+
+  @Test func eaInstallerMarkerBeatsStrayExecutableAbove() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let eaGamesDir = tempDir.appendingPathComponent("EA Games", isDirectory: true)
+    try write("exe", to: eaGamesDir.appendingPathComponent("EA/Uninstall.exe"))
+    try writeEAGame("BF4", title: "Battlefield 4", in: eaGamesDir.appendingPathComponent("EA"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.map(\.title) == ["Battlefield 4"])
+    #expect(entries.first?.root.path == eaGamesDir.appendingPathComponent("EA/BF4").path)
+  }
+
+  @Test func eaHiddenFoldersSkipped() throws {
+    let tempDir = try makeTempDir()
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let eaGamesDir = tempDir.appendingPathComponent("EA Games", isDirectory: true)
+    try writeEAGame("Hidden", title: "Hidden", in: eaGamesDir.appendingPathComponent(".Trashes"))
+    try writeEAGame(".Backup", title: "Backup", in: eaGamesDir.appendingPathComponent("Box"))
+    try writeEAGame("Shown", title: "Shown", in: eaGamesDir.appendingPathComponent("Box"))
+
+    let entries = GameCatalog.scan(layout: makeLayout(tempDir))
+
+    #expect(entries.map(\.title) == ["Shown"])
+  }
+
   // MARK: - Epic tests
 
   @Test func epicGameByExe() throws {
