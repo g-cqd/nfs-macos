@@ -107,6 +107,7 @@ package enum Location: Codable, Equatable, Sendable {
   case windowsPath(path: String)
   case registry(hive: String, key: String, name: String)
   case hostPath(path: String)
+  case versionedWindowsPath(path: String, child: String)
 
   /// Validates this location.
   package func validate() throws(HubError) {
@@ -195,6 +196,52 @@ package enum Location: Codable, Equatable, Sendable {
           throw HubError.invalid("Location.hostPath: may not contain .. component")
         }
       }
+
+    case .versionedWindowsPath(let path, let child):
+      guard (3...240).contains(path.utf8.count) else {
+        throw HubError.invalid("Location.versionedWindowsPath.path: must be 3 to 240 bytes")
+      }
+      guard path.utf8.count >= 3 && Check.ascii(String(path.prefix(1)), 1...1, first: { b in
+        (b >= 0x43 && b <= 0x5A) || (b >= 0x63 && b <= 0x7A)  // C-Z or c-z
+      }, rest: { _ in false }) && path.dropFirst().starts(with: ":\\") else {
+        throw HubError.invalid("Location.versionedWindowsPath.path: must start with drive letter")
+      }
+      for scalar in path.unicodeScalars {
+        let v = scalar.value
+        if (v >= 0x0000 && v <= 0x001f) || v == 0x007f {
+          throw HubError.invalid("Location.versionedWindowsPath.path: may not contain control characters")
+        }
+      }
+      let backslashComponents = path.split(separator: "\\", omittingEmptySubsequences: false)
+      for component in backslashComponents {
+        let forwardSlashComponents = component.split(separator: "/", omittingEmptySubsequences: false)
+        for subComponent in forwardSlashComponents {
+          guard subComponent != ".." else {
+            throw HubError.invalid("Location.versionedWindowsPath.path: may not contain .. component")
+          }
+        }
+      }
+      guard (1...120).contains(child.utf8.count) else {
+        throw HubError.invalid("Location.versionedWindowsPath.child: must be 1 to 120 bytes")
+      }
+      let childComponents = child.split(separator: "\\", omittingEmptySubsequences: false)
+      guard !childComponents.isEmpty else {
+        throw HubError.invalid("Location.versionedWindowsPath.child: must not be empty")
+      }
+      for component in childComponents {
+        guard !component.isEmpty else {
+          throw HubError.invalid("Location.versionedWindowsPath.child: may not have empty components")
+        }
+        guard component != ".." else {
+          throw HubError.invalid("Location.versionedWindowsPath.child: may not contain .. component")
+        }
+      }
+      for scalar in child.unicodeScalars {
+        let v = scalar.value
+        if (v >= 0x0000 && v <= 0x001f) || v == 0x007f {
+          throw HubError.invalid("Location.versionedWindowsPath.child: may not contain control characters")
+        }
+      }
     }
   }
 
@@ -226,6 +273,13 @@ package enum Location: Codable, Equatable, Sendable {
       let path = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "path"))
       self = .hostPath(path: path)
 
+    case "versionedWindowsPath":
+      let allowed: Set<String> = ["kind", "path", "child"]
+      try rejectUnknownKeys(decoder, allowed: allowed, type: "Location.versionedWindowsPath")
+      let path = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "path"))
+      let child = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "child"))
+      self = .versionedWindowsPath(path: path, child: child)
+
     default:
       throw HubError.invalid("Location: unknown kind \(kind)")
     }
@@ -245,6 +299,10 @@ package enum Location: Codable, Equatable, Sendable {
     case .hostPath(let path):
       try container.encode("hostPath", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(path, forKey: AnyCodingKey(stringValue: "path"))
+    case .versionedWindowsPath(let path, let child):
+      try container.encode("versionedWindowsPath", forKey: AnyCodingKey(stringValue: "kind"))
+      try container.encode(path, forKey: AnyCodingKey(stringValue: "path"))
+      try container.encode(child, forKey: AnyCodingKey(stringValue: "child"))
     }
   }
 }
@@ -702,6 +760,151 @@ package struct Setting: Codable, Equatable, Sendable {
   }
 }
 
+// MARK: - Launch stages
+
+/// A probe that checks the state of the runtime during launch.
+package enum Probe: Codable, Equatable, Sendable {
+  case log(log: String, contains: String, holdSeconds: Int?)
+  case port(port: Int)
+  case process(exe: String, present: Bool)
+
+  /// Validates this probe.
+  package func validate() throws(HubError) {
+    switch self {
+    case .log(let log, let contains, let holdSeconds):
+      try validateLog(log, field: "Probe.log")
+      try Check.text(contains, field: "Probe.contains", max: 200)
+      if let holdSeconds = holdSeconds {
+        guard (0...600).contains(holdSeconds) else {
+          throw HubError.invalid("Probe.log.holdSeconds: must be 0 to 600")
+        }
+      }
+    case .port(let port):
+      guard (1...65535).contains(port) else {
+        throw HubError.invalid("Probe.port: must be 1 to 65535")
+      }
+    case .process(let exe, _):
+      try Check.exe(exe, field: "Probe.process.exe")
+    }
+  }
+
+  package init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: AnyCodingKey.self)
+    guard let kindKey = container.allKeys.first(where: { $0.stringValue == "kind" }) else {
+      throw HubError.invalid("Probe: missing kind field")
+    }
+    let kind = try container.decode(String.self, forKey: kindKey)
+
+    switch kind {
+    case "log":
+      let allowed: Set<String> = ["kind", "log", "contains", "holdSeconds"]
+      try rejectUnknownKeys(decoder, allowed: allowed, type: "Probe.log")
+      let log = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "log"))
+      let contains = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "contains"))
+      let holdSeconds = try container.decodeIfPresent(
+        Int.self, forKey: AnyCodingKey(stringValue: "holdSeconds"))
+      self = .log(log: log, contains: contains, holdSeconds: holdSeconds)
+
+    case "port":
+      let allowed: Set<String> = ["kind", "port"]
+      try rejectUnknownKeys(decoder, allowed: allowed, type: "Probe.port")
+      let port = try container.decode(Int.self, forKey: AnyCodingKey(stringValue: "port"))
+      self = .port(port: port)
+
+    case "process":
+      let allowed: Set<String> = ["kind", "exe", "present"]
+      try rejectUnknownKeys(decoder, allowed: allowed, type: "Probe.process")
+      let exe = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "exe"))
+      let present = try container.decode(Bool.self, forKey: AnyCodingKey(stringValue: "present"))
+      self = .process(exe: exe, present: present)
+
+    default:
+      throw HubError.invalid("Probe: unknown kind \(kind)")
+    }
+  }
+
+  package func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: AnyCodingKey.self)
+    switch self {
+    case .log(let log, let contains, let holdSeconds):
+      try container.encode("log", forKey: AnyCodingKey(stringValue: "kind"))
+      try container.encode(log, forKey: AnyCodingKey(stringValue: "log"))
+      try container.encode(contains, forKey: AnyCodingKey(stringValue: "contains"))
+      try container.encodeIfPresent(holdSeconds, forKey: AnyCodingKey(stringValue: "holdSeconds"))
+    case .port(let port):
+      try container.encode("port", forKey: AnyCodingKey(stringValue: "kind"))
+      try container.encode(port, forKey: AnyCodingKey(stringValue: "port"))
+    case .process(let exe, let present):
+      try container.encode("process", forKey: AnyCodingKey(stringValue: "kind"))
+      try container.encode(exe, forKey: AnyCodingKey(stringValue: "exe"))
+      try container.encode(present, forKey: AnyCodingKey(stringValue: "present"))
+    }
+  }
+}
+
+/// A launch stage in the provider's startup sequence.
+package struct LaunchStage: Codable, Equatable, Sendable {
+  package let id: String
+  package let title: String
+  package let passWhen: [Probe]
+  package let failWhen: [Probe]
+  package let timeoutSeconds: Int
+  package let scope: String
+
+  package init(
+    id: String, title: String, passWhen: [Probe], failWhen: [Probe],
+    timeoutSeconds: Int, scope: String = "client"
+  ) {
+    self.id = id
+    self.title = title
+    self.passWhen = passWhen
+    self.failWhen = failWhen
+    self.timeoutSeconds = timeoutSeconds
+    self.scope = scope
+  }
+
+  /// Validates this launch stage.
+  package func validate() throws(HubError) {
+    try Check.id(id, field: "LaunchStage.id")
+    try Check.text(title, field: "LaunchStage.title", max: 80)
+    guard (1...4).contains(passWhen.count) else {
+      throw HubError.invalid("LaunchStage.passWhen: must have 1 to 4 probes")
+    }
+    for probe in passWhen {
+      try probe.validate()
+    }
+    guard (0...4).contains(failWhen.count) else {
+      throw HubError.invalid("LaunchStage.failWhen: must have 0 to 4 probes")
+    }
+    for probe in failWhen {
+      try probe.validate()
+    }
+    guard (1...900).contains(timeoutSeconds) else {
+      throw HubError.invalid("LaunchStage.timeoutSeconds: must be 1 to 900")
+    }
+    guard scope == "client" || scope == "game" else {
+      throw HubError.invalid("LaunchStage.scope: must be client or game")
+    }
+  }
+
+  package init(from decoder: any Decoder) throws {
+    try rejectUnknownKeys(
+      decoder, allowed: ["id", "title", "passWhen", "failWhen", "timeoutSeconds", "scope"],
+      type: "LaunchStage")
+    let container = try decoder.container(keyedBy: AnyCodingKey.self)
+    self.id = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "id"))
+    self.title = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "title"))
+    self.passWhen = try container.decode(
+      [Probe].self, forKey: AnyCodingKey(stringValue: "passWhen"))
+    self.failWhen = try container.decode(
+      [Probe].self, forKey: AnyCodingKey(stringValue: "failWhen"))
+    self.timeoutSeconds = try container.decode(
+      Int.self, forKey: AnyCodingKey(stringValue: "timeoutSeconds"))
+    self.scope = try container.decodeIfPresent(
+      String.self, forKey: AnyCodingKey(stringValue: "scope")) ?? "client"
+  }
+}
+
 /// A recipe for a game or provider.
 package struct Recipe: Codable, Equatable, Sendable {
   package let schemaVersion: Int
@@ -725,6 +928,7 @@ package struct Recipe: Codable, Equatable, Sendable {
   package let settings: [Setting]
   package let install: Install?
   package let legacyWrapper: String?
+  package let launchStages: [LaunchStage]
 
   package init(
     schemaVersion: Int, id: String, kind: RecipeKind, title: String,
@@ -733,7 +937,7 @@ package struct Recipe: Codable, Equatable, Sendable {
     architecture: Architecture? = nil, processes: [String] = [], leaseTarget: String? = nil,
     launchChain: [String]? = nil, launch: Launch, stop: Stop? = nil,
     readiness: Readiness? = nil, fixes: [String] = [], settings: [Setting] = [],
-    install: Install? = nil, legacyWrapper: String? = nil
+    install: Install? = nil, legacyWrapper: String? = nil, launchStages: [LaunchStage] = []
   ) {
     self.schemaVersion = schemaVersion
     self.id = id
@@ -756,6 +960,7 @@ package struct Recipe: Codable, Equatable, Sendable {
     self.settings = settings
     self.install = install
     self.legacyWrapper = legacyWrapper
+    self.launchStages = launchStages
   }
 
   /// Validates this recipe.
@@ -854,6 +1059,18 @@ package struct Recipe: Codable, Equatable, Sendable {
       }
       fixIDs.insert(fixID)
     }
+
+    guard (0...12).contains(launchStages.count) else {
+      throw HubError.invalid("Recipe.launchStages: must have 0 to 12 stages")
+    }
+    var launchStageIDs = Set<String>()
+    for stage in launchStages {
+      try stage.validate()
+      guard !launchStageIDs.contains(stage.id) else {
+        throw HubError.invalid("Recipe.launchStages: duplicate id")
+      }
+      launchStageIDs.insert(stage.id)
+    }
   }
 
   package init(from decoder: any Decoder) throws {
@@ -862,7 +1079,8 @@ package struct Recipe: Codable, Equatable, Sendable {
       allowed: [
         "schemaVersion", "id", "kind", "title", "status", "evidence", "provider", "ids",
         "location", "executable", "architecture", "processes", "leaseTarget", "launchChain",
-        "launch", "stop", "readiness", "fixes", "settings", "install", "legacyWrapper"
+        "launch", "stop", "readiness", "fixes", "settings", "install", "legacyWrapper",
+        "launchStages"
       ],
       type: "Recipe")
     let container = try decoder.container(keyedBy: AnyCodingKey.self)
@@ -905,5 +1123,7 @@ package struct Recipe: Codable, Equatable, Sendable {
       Install.self, forKey: AnyCodingKey(stringValue: "install"))
     self.legacyWrapper = try container.decodeIfPresent(
       String.self, forKey: AnyCodingKey(stringValue: "legacyWrapper"))
+    self.launchStages = try container.decodeIfPresent(
+      [LaunchStage].self, forKey: AnyCodingKey(stringValue: "launchStages")) ?? []
   }
 }

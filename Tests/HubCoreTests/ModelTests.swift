@@ -35,7 +35,7 @@ package func expectInvalid(_ fieldFragment: String, _ body: () throws -> Void) {
       "actions": [
         {"kind": "env", "name": "TEST_VAR", "value": "test_value", "scope": "session"},
         {"kind": "renderer", "exe": "*", "api": "d3d9", "backend": "mtld3d"},
-        {"kind": "companion", "exe": "helper.exe", "after": "ready", "readiness": {"log": "test.log", "startMarker": null, "events": [], "ports": [8080], "timeoutSeconds": 10}}
+        {"kind": "companion", "exe": "helper.exe", "after": "ready", "readiness": {"log": "{prefix}/test.log", "startMarker": null, "events": [], "ports": [8080], "timeoutSeconds": 10}}
       ],
       "parameters": [
         {"id": "test-param", "title": "Test Param", "type": "bool", "default": "true", "binds": "actions[0].value"}
@@ -121,7 +121,7 @@ package func expectInvalid(_ fieldFragment: String, _ body: () throws -> Void) {
         "taskkill": ["eadesktop.exe"]
       },
       "readiness": {
-        "log": "log.txt",
+        "log": "{prefix}/log.txt",
         "startMarker": null,
         "events": [],
         "ports": [8080],

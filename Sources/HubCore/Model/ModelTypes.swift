@@ -42,6 +42,7 @@ package struct Condition: Codable, Equatable, Sendable {
     case provider
     case runtimeHas
     case target
+    case always
   }
 
   package let kind: Kind
@@ -93,6 +94,10 @@ package struct Condition: Codable, Equatable, Sendable {
       }
     case "target":
       try Check.id(value, field: "Condition.target")
+    case "always":
+      guard value == "" else {
+        throw HubError.invalid("Condition.always: value must be empty string")
+      }
     default:
       throw HubError.invalid("Condition.kind: unknown kind")
     }
@@ -375,11 +380,13 @@ package struct ReadinessEvent: Codable, Equatable, Sendable {
   package let state: ProviderState
   package let contains: String
   package let log: String?
+  package let holdSeconds: Int?
 
-  package init(state: ProviderState, contains: String, log: String?) {
+  package init(state: ProviderState, contains: String, log: String?, holdSeconds: Int? = nil) {
     self.state = state
     self.contains = contains
     self.log = log
+    self.holdSeconds = holdSeconds
   }
 
   /// Validates this readiness event.
@@ -390,19 +397,39 @@ package struct ReadinessEvent: Codable, Equatable, Sendable {
     }
     try Check.text(contains, field: "ReadinessEvent.contains", max: 200)
     if let log = log {
-      try Check.relativePath(log, field: "ReadinessEvent.log")
+      try validateLog(log, field: "ReadinessEvent.log")
+    }
+    if let holdSeconds = holdSeconds {
+      guard (0...600).contains(holdSeconds) else {
+        throw HubError.invalid("ReadinessEvent.holdSeconds: must be 0 to 600")
+      }
     }
   }
 
   package init(from decoder: any Decoder) throws {
     try rejectUnknownKeys(
-      decoder, allowed: ["state", "contains", "log"], type: "ReadinessEvent")
+      decoder, allowed: ["state", "contains", "log", "holdSeconds"], type: "ReadinessEvent")
     let container = try decoder.container(keyedBy: AnyCodingKey.self)
     self.state = try container.decode(
       ProviderState.self, forKey: AnyCodingKey(stringValue: "state"))
     self.contains = try container.decode(
       String.self, forKey: AnyCodingKey(stringValue: "contains"))
     self.log = try container.decodeIfPresent(String.self, forKey: AnyCodingKey(stringValue: "log"))
+    self.holdSeconds = try container.decodeIfPresent(
+      Int.self, forKey: AnyCodingKey(stringValue: "holdSeconds"))
+  }
+}
+
+/// Helper to validate logs that must start with {prefix}/ or {providerRoot}/ followed by a relative path.
+package func validateLog(_ log: String, field: String) throws(HubError) {
+  if log.hasPrefix("{prefix}/") {
+    let rest = String(log.dropFirst(9))
+    try Check.relativePath(rest, field: field)
+  } else if log.hasPrefix("{providerRoot}/") {
+    let rest = String(log.dropFirst(15))
+    try Check.relativePath(rest, field: field)
+  } else {
+    throw HubError.invalid("\(field): must start with {prefix}/ or {providerRoot}/")
   }
 }
 
@@ -427,7 +454,7 @@ package struct Readiness: Codable, Equatable, Sendable {
 
   /// Validates this readiness configuration.
   package func validate() throws(HubError) {
-    try Check.relativePath(log, field: "Readiness.log")
+    try validateLog(log, field: "Readiness.log")
     if let startMarker = startMarker {
       try Check.text(startMarker, field: "Readiness.startMarker", max: 200)
     }
