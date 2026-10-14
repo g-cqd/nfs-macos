@@ -7,7 +7,7 @@ Status of 2026-10-08. The inventory is [THIRD_PARTY.md](../THIRD_PARTY.md), the 
 ## Decided
 
 * `rosetta3` (translator, CPU backend, loader, tools, `r3wow64.dll`): **MIT**, Copyright (c) 2026 g-cqd.
-* The Wine patches we carry (`arm64-macos`, `wow64-cpu`, `development`, `nfsmw-macos`, the NFS2015
+* The Wine patches we carry (`arm64-macos`, `wow64-cpu`, `main`, `nfsmw-macos`, the NFS2015
   patch series) stay **LGPL-2.1-or-later**, because they are part of Wine. `r3wow64.dll` is a separate
   MIT module that Wine loads through its public WoW64 CPU interface.
 

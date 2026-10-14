@@ -78,7 +78,7 @@ All local paths below are on the current developer Mac; another developer must c
 | mtld3d fork / upstream | `https://github.com/g-cqd/mtld3d` / `https://github.com/athei/mtld3d` |
 | x87sidecar source | `~/Developer/x87sidecar` |
 | x87sidecar fork / upstream | `https://github.com/g-cqd/x87sidecar` / `https://github.com/athei/x87sidecar` |
-| Runtime fork branches | `development` in both forks; `origin` is g-cqd, `upstream` is athei |
+| Runtime fork branches | `main` in both forks; `origin` is g-cqd, `upstream` is athei |
 | Cursor-corrected Wine source fork | `https://github.com/g-cqd/wine/tree/nfsmw-macos` |
 | Original NFSMW installation | `~/Games/NFSMW` |
 | Original CoD4 installation and original Gigi profile | `~/Games/CoD4`; `players/profiles/Gigi` beneath it |
@@ -265,7 +265,7 @@ Measure CPU frame work, GPU duration, presentation cadence, median and slow-tail
 
 The retained renderer passed 923 tests with zero failures and 11 ignored benchmark cases. Prior CoD4 samples observed higher FPS with x87sidecar, but background activity contaminated the comparison. Do not turn those observations or upstream microbenchmark multipliers into a guaranteed game speedup.
 
-Keep source branches and artifacts traceable. Both runtime forks already use `development` with `upstream` configured. Integrate upstream updates on an appropriate separate branch, resolve and test deliberately, then update artifact pins. Never reset another developer's worktree or silently replace a shared working runtime.
+Keep source branches and artifacts traceable. Both runtime forks use `main` (fetch and rebase before pushing). Integrate upstream updates on main, resolve and test deliberately, then update artifact pins. Never reset another developer's worktree or silently replace a shared working runtime. Never force-push.
 
 ## 11. Future expansion: temporal upscaling and frame generation
 

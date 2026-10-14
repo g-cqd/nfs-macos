@@ -3,7 +3,7 @@
 ## Phase 1: preserve and pin
 
 - Preserve the original game folders, saves, and delivered Most Wanted v5 apps.
-- Pin the updated development branches of mtld3d and x87sidecar to tested binaries and matching source.
+- Pin the updated main branches of mtld3d and x87sidecar to tested binaries and matching source.
 - Keep NFS 2015 diagnostics paused.
 
 ## Phase 2: native configuration and profiles

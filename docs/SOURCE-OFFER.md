@@ -41,7 +41,7 @@ notice: [`Licenses/Wine-LICENSE.txt`](../Licenses/Wine-LICENSE.txt).
   `cx-26-patched`. Its history has been rewritten at least once, so we keep the exact commit we built
   from as a tag on our fork: `athei-cx-26-patched-1a7b0c76` = `1a7b0c766262276e7e7bb50c80abe5ccd08e292b`
   on https://github.com/g-cqd/wine. The later tip `d23b3977452` (Wine 11.0 stable + 15 commits) is the
-  base of our `development` branch.
+  base of our `main` branch.
 
 ### What each app was built from
 
@@ -50,10 +50,10 @@ notice: [`Licenses/Wine-LICENSE.txt`](../Licenses/Wine-LICENSE.txt).
 | Need for Speed Most Wanted (x86_64 / Rosetta) | `g-cqd/wine` `nfsmw-macos` `f064add996bbf4819acf49f48bab263735279800` | https://github.com/g-cqd/wine/tree/nfsmw-macos; archive in the app | `git log db11d0fe6a16..f064add996bb`: 13 commits (CrossOver 26.2.0 / 26.3.0 source changes, macOS driver and cursor fixes, integration notes in `UPSTREAM.md`) |
 | Need for Speed (2015) (x86_64 / Rosetta) | `athei/wine` `1a7b0c766262276e7e7bb50c80abe5ccd08e292b` + the 4 patches below, tree `1e98e299ad2900fce2ab4f103cc1f98608fc7bfa` | [`Packaging/NFS2015Runtime/`](../Packaging/NFS2015Runtime/); archive `wine-nfs2015-source.tar.gz` in the app | [`patches/0001`..`0004`](../Packaging/NFS2015Runtime/patches/) (execution-breakpoint delivery by trap-flag emulation, its budgets, `PUSHF`/`POPF` prefixes, a regression fixture), applied with `git am` |
 | Call of Duty 4, Far Cry 2 (x86_64 / Rosetta, profile `cod4-tested`) | **Not recorded**: described as CX26.3 / Wine 11.0 with the cooperative x87 handshake. The `nfsmw-macos` source above is the same lineage, but the match of the shipped binaries is unverified | see the open item in [LICENSING.md](LICENSING.md) | |
-| Native arm64 (not yet shipped) | `g-cqd/wine` `arm64-macos` `89a212b2895086361159e5a38036bf70f4d13267` | https://github.com/g-cqd/wine/tree/arm64-macos | 12 commits on `development` `9bd6d74b3745e5755657afeec333cdcbba14f4da` (below) |
+| Native arm64 (not yet shipped) | `g-cqd/wine` `arm64-macos` `89a212b2895086361159e5a38036bf70f4d13267` | https://github.com/g-cqd/wine/tree/arm64-macos | 12 commits on `main` `9bd6d74b3745e5755657afeec333cdcbba14f4da` (below) |
 | Native arm64 with the translator as the x86 CPU (not yet shipped) | `g-cqd/wine` `wow64-cpu` `c92ef791ef93c6e177821278c89769e2ead02be9` | https://github.com/g-cqd/wine/tree/wow64-cpu | `arm64-macos` + 1 commit |
 
-The `g-cqd/wine` `development` branch (`9bd6d74b3745`) is `cx-26-patched` `d23b3977452` plus 9 commits:
+The `g-cqd/wine` `main` branch (`9bd6d74b3745`) is `cx-26-patched` `d23b3977452` plus 9 commits:
 the four execution-breakpoint commits above (as `8ae387826`, `b9092a790`, `c2b26552a`, `f7f4dfe32`), a
 macOS cursor fix, `get_thread_times()` on macOS, a vkd3d MSL cache change, an x86_64 build helper and
 integration notes. `arm64-macos` adds, in this order: the arm64 loader links with the default 4 GiB soft
@@ -65,7 +65,7 @@ for syscalls with more than eight arguments (`f1938cfc1`); host address-space li
 (`c99e04773`); page-permission faults reported as `SIGBUS` are routed by ESR (`f8bf2bae0`); RWX memory
 mapped RW and toggled on execute faults (`de9dfb24c`); and no `x87sidecar` lookup on arm64
 (`89a212b28`). `wow64-cpu` adds `c92ef791e`, which makes `r3wow64.dll` the x86 CPU module of arm64 WoW64
-prefixes. `git log development..arm64-macos` lists them with their full messages.
+prefixes. `git log main..arm64-macos` lists them with their full messages.
 
 > **NFS2015 runtime source, published:** `g-cqd/wine` branch `nfs2015-runtime-0005` holds the base commit
 > `1a7b0c766262276e7e7bb50c80abe5ccd08e292b` plus the NFS patches, with two tags. `nfs2015-runtime-20261008`

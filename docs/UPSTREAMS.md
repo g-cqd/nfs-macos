@@ -2,8 +2,8 @@
 
 | Component | Fork branch | Pinned revision |
 |---|---|---|
-| mtld3d | [g-cqd/mtld3d: development](https://github.com/g-cqd/mtld3d/tree/development) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
-| x87sidecar | [g-cqd/x87sidecar: development](https://github.com/g-cqd/x87sidecar/tree/development) | `c3969379750531fb124859ae742ab4f727f54f9c` |
+| mtld3d | [g-cqd/mtld3d: main](https://github.com/g-cqd/mtld3d/tree/main) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
+| x87sidecar | [g-cqd/x87sidecar: main](https://github.com/g-cqd/x87sidecar/tree/main) | `c3969379750531fb124859ae742ab4f727f54f9c` |
 | NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
 | NFS (2015) Wine, from 2026-10-08 | local patched tree, not published: `athei/wine` `cx-26-patched` `1a7b0c76` plus ten patches | HEAD `be47ba540e2d2a0f5034f5fbd191a94f3dae227e` (base + 10 commits; profile `nfs2015-tf-cx11-rebuild-0010-20261008`; NFS2015.md §28) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
@@ -14,7 +14,7 @@ app together. Old -> new:
 | Pin | Was | Now |
 |---|---|---|
 | mtld3d revision | `845b6c914a55633cbe099a076432d2dbe3656d1d` | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
-| x87sidecar revision | `c3969379750531fb124859ae742ab4f727f54f9c` | unchanged (`c396937` is still the tip of `development`) |
+| x87sidecar revision | `c3969379750531fb124859ae742ab4f727f54f9c` | unchanged (`c396937` is reachable from main) |
 | `sidecarSHA256` | `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5` | unchanged at that date; **moved on 2026-10-08 to `3ca9cc724b2e4685c271ed6af187f73f147b38ae3e4521793b978c9f09d3a628`, same revision (NFS2015.md §22.2)** |
 | `rendererSourceManifestSHA256` | `2fa01910...2e23` | `fd47420c1ba3c0c51b9b9c2fcb6c4f5efcf94c9acf6894bc6df3ef1683fd445f` |
 | `d3d9/mtld3d/i386-windows/d3d8.dll` | `24493c04...b27a` | `e2ad9398...4344` |
@@ -25,7 +25,7 @@ app together. Old -> new:
 | `i386-windows/d3d9.dll` | `22f0d972...e0cb` | `2ae214f2...73d5` |
 | `i386-windows/mtld3d.dll` | `4b6db9df...1c72` | `82280e97...56e1` |
 
-mtld3d `development` is `7d108a4`: `845b6c9` merged with upstream through `b93e752`, with the 1.99 clippy lints
+mtld3d main `7d108a4`: `845b6c9` merged with upstream through `b93e752`, with the 1.99 clippy lints
 satisfied. It was built from a scratch `git clone --local` of the developer checkout, detached at exactly that
 commit, `PROD=1 PERF=0 FP=0 CRUMB=0`, non-telemetry, Rust 1.99.0 and nightly-2026-10-02, with the same recipe as
 the `d5fc324` build (`pentium4` for i686, `x86-64-v2` for x86_64, the read-only xwin sysroot and Wine SDK). 631
@@ -56,9 +56,9 @@ Direct3D 9 use by either was observed, and none was looked for on this build. Th
 `XtendedInput` entries inherited from the same base app are unchanged and still describe the Most Wanted base, not
 the Need for Speed (2015) runtime, whose own source is `runtimeSource`; correcting those is a follow-up.
 
-**Repin of 2026-10-02 (second).** mtld3d `development` is now `845b6c9` (`d5fc324` plus the unpublished upstream
+**Repin of 2026-10-02 (second).** mtld3d main is now `845b6c9` (`d5fc324` plus the unpublished upstream
 commits through `5287496` and a built-in Far Cry 2 profile that reports an NVIDIA adapter, which makes tree leaves
-cut out under anti-aliasing and alpha to coverage) and x87sidecar `development` is `c396937` (`12afdc2` plus the
+cut out under anti-aliasing and alpha to coverage) and x87sidecar main is `c396937` (`12afdc2` plus the
 `fld_gap_fstp` fusion: a float copy through the x87 stack with up to four independent instructions between the load
 and the store becomes one plain copy; 13x faster than the isolated path in probes, 1059 of 1059 tests passing).
 Both were published to GitHub as plain fast-forwards. The renderer was built `PROD=1 PERF=0` with Rust 1.99.0 from a
@@ -68,10 +68,10 @@ binary is `160e06be2c8ef21ac40cfddcbf408494cc08ae517997c10240aa450b5498bae5`
 and the sidecar suite. **Not verified:** neither change has run in a game; the mtld3d `unix/` tests and end-to-end
 suite were not run.
 
-Both development forks are clean at the revisions above as of 2026-10-02, and each one
+Both forks are clean at the revisions above as of 2026-10-02, and each one
 already contains its upstream's tip: mtld3d's `d5fc324` descends from `athei/mtld3d`
 `main` at `f4b18f4` through `b22073b`, and x87sidecar's `12afdc2` contains
-`athei/x87sidecar` `master` at `4048fcf` through `8aa4d30`. Neither fork has been pushed
+`athei/x87sidecar` `main` at `4048fcf` through `8aa4d30`. Neither fork has been pushed
 from this machine.
 
 Both pins moved by their own repositories' dependency work, not by anything in this one.
