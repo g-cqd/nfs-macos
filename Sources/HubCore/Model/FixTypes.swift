@@ -11,12 +11,13 @@ package enum FixAction: Codable, Equatable, Sendable {
   case registry(hive: String, key: String, name: String, type: String, value: String)
   case file(asset: String, destination: String, sha256: String)
   case ini(file: String, section: String, key: String, value: String)
-  case drive(letter: String, target: String)
+  case drive(letter: String, target: String, lifetime: String)
   case arguments(exe: String, append: [String])
   case sidecar(enabled: Bool)
-  case window(mode: String, size: String?, enabled: Bool?)
+  case window(mode: String, size: String?, enabled: Bool?, exe: String?)
   case prerequisite(id: String)
   case companion(exe: String, after: String, readiness: Readiness)
+  case xmlAttribute(file: String, element: String, attribute: String, value: String)
 
   /// Validates this action.
   package func validate() throws(HubError) {
@@ -60,8 +61,12 @@ package enum FixAction: Codable, Equatable, Sendable {
       guard validModes.contains(mode) else {
         throw HubError.invalid("FixAction.dllOverride.mode: invalid mode")
       }
-      if let exe = exe {
-        try Check.exe(exe, field: "FixAction.dllOverride.exe")
+      if exe == nil {
+        guard mode == "disabled" && dll.lowercased().hasSuffix(".exe") else {
+          throw HubError.invalid("FixAction.dllOverride: exe-less override only allowed with mode disabled and dll ending .exe")
+        }
+      } else {
+        try Check.exe(exe!, field: "FixAction.dllOverride.exe")
       }
       guard Check.ascii(dll, 1...64, first: { b in
         (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || (b >= 0x30 && b <= 0x39) || b == 0x5f || b == 0x2e || b == 0x2d
@@ -153,7 +158,7 @@ package enum FixAction: Codable, Equatable, Sendable {
         }
       }
 
-    case .drive(let letter, let target):
+    case .drive(let letter, let target, let lifetime):
       guard Check.ascii(letter, 1...1, first: { b in
         b >= 0x64 && b <= 0x79  // d-y (lowercase only)
       }, rest: { _ in false }) else {
@@ -161,6 +166,9 @@ package enum FixAction: Codable, Equatable, Sendable {
       }
       guard target == "{hubRoot}" || target == "{gameRoot}" else {
         throw HubError.invalid("FixAction.drive.target: must be {hubRoot} or {gameRoot}")
+      }
+      guard lifetime == "session" || lifetime == "persistent" else {
+        throw HubError.invalid("FixAction.drive.lifetime: must be session or persistent")
       }
 
     case .arguments(let exe, let append):
@@ -184,7 +192,7 @@ package enum FixAction: Codable, Equatable, Sendable {
     case .sidecar:
       break
 
-    case .window(let mode, let size, let enabled):
+    case .window(let mode, let size, let enabled, let exe):
       if mode == "virtualDesktop" {
         guard let size = size else {
           throw HubError.invalid("FixAction.window: virtualDesktop requires size")
@@ -192,6 +200,10 @@ package enum FixAction: Codable, Equatable, Sendable {
         guard enabled == nil else {
           throw HubError.invalid("FixAction.window: virtualDesktop must not have enabled")
         }
+        guard let exe = exe else {
+          throw HubError.invalid("FixAction.window: virtualDesktop requires exe")
+        }
+        try Check.exe(exe, field: "FixAction.window.exe")
         // Validate size format: ^\d{3,4}x\d{3,4}$
         let parts = size.split(separator: "x", omittingEmptySubsequences: false)
         guard parts.count == 2 else {
@@ -215,6 +227,9 @@ package enum FixAction: Codable, Equatable, Sendable {
         guard size == nil else {
           throw HubError.invalid("FixAction.window: retina must not have size")
         }
+        guard exe == nil else {
+          throw HubError.invalid("FixAction.window: retina must not have exe")
+        }
       } else {
         throw HubError.invalid("FixAction.window.mode: must be virtualDesktop or retina")
       }
@@ -228,6 +243,32 @@ package enum FixAction: Codable, Equatable, Sendable {
         throw HubError.invalid("FixAction.companion.after: must be 'ready'")
       }
       try readiness.validate()
+
+    case .xmlAttribute(let file, let element, let attribute, let value):
+      try Check.destination(file, field: "FixAction.xmlAttribute.file")
+      guard Check.ascii(element, 1...64, first: { b in
+        (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || b == 0x5f  // A-Z, a-z, _
+      }, rest: { b in
+        (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || (b >= 0x30 && b <= 0x39) || b == 0x5f || b == 0x2e || b == 0x2d  // A-Z, a-z, 0-9, _, ., -
+      }) else {
+        throw HubError.invalid("FixAction.xmlAttribute.element: must match ^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
+      }
+      guard Check.ascii(attribute, 1...64, first: { b in
+        (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || b == 0x5f  // A-Z, a-z, _
+      }, rest: { b in
+        (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || (b >= 0x30 && b <= 0x39) || b == 0x5f || b == 0x2e || b == 0x2d  // A-Z, a-z, 0-9, _, ., -
+      }) else {
+        throw HubError.invalid("FixAction.xmlAttribute.attribute: must match ^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
+      }
+      guard (1...256).contains(value.utf8.count) else {
+        throw HubError.invalid("FixAction.xmlAttribute.value: must be 1 to 256 bytes")
+      }
+      for scalar in value.unicodeScalars {
+        let v = scalar.value
+        if (v >= 0x0000 && v <= 0x001f) || v == 0x007f {
+          throw HubError.invalid("FixAction.xmlAttribute.value: may not contain control characters")
+        }
+      }
     }
   }
 
@@ -294,11 +335,12 @@ package enum FixAction: Codable, Equatable, Sendable {
       self = .ini(file: file, section: section, key: key, value: value)
 
     case "drive":
-      let allowed: Set<String> = ["kind", "letter", "target"]
+      let allowed: Set<String> = ["kind", "letter", "target", "lifetime"]
       try rejectUnknownKeys(decoder, allowed: allowed, type: "FixAction.drive")
       let letter = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "letter"))
       let target = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "target"))
-      self = .drive(letter: letter, target: target)
+      let lifetime = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "lifetime"))
+      self = .drive(letter: letter, target: target, lifetime: lifetime)
 
     case "arguments":
       let allowed: Set<String> = ["kind", "exe", "append"]
@@ -314,12 +356,13 @@ package enum FixAction: Codable, Equatable, Sendable {
       self = .sidecar(enabled: enabled)
 
     case "window":
-      let allowed: Set<String> = ["kind", "mode", "size", "enabled"]
+      let allowed: Set<String> = ["kind", "mode", "size", "enabled", "exe"]
       try rejectUnknownKeys(decoder, allowed: allowed, type: "FixAction.window")
       let mode = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "mode"))
       let size = try container.decodeIfPresent(String.self, forKey: AnyCodingKey(stringValue: "size"))
       let enabled = try container.decodeIfPresent(Bool.self, forKey: AnyCodingKey(stringValue: "enabled"))
-      self = .window(mode: mode, size: size, enabled: enabled)
+      let exe = try container.decodeIfPresent(String.self, forKey: AnyCodingKey(stringValue: "exe"))
+      self = .window(mode: mode, size: size, enabled: enabled, exe: exe)
 
     case "prerequisite":
       let allowed: Set<String> = ["kind", "id"]
@@ -335,6 +378,15 @@ package enum FixAction: Codable, Equatable, Sendable {
       let readiness = try container.decode(
         Readiness.self, forKey: AnyCodingKey(stringValue: "readiness"))
       self = .companion(exe: exe, after: after, readiness: readiness)
+
+    case "xmlAttribute":
+      let allowed: Set<String> = ["kind", "file", "element", "attribute", "value"]
+      try rejectUnknownKeys(decoder, allowed: allowed, type: "FixAction.xmlAttribute")
+      let file = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "file"))
+      let element = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "element"))
+      let attribute = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "attribute"))
+      let value = try container.decode(String.self, forKey: AnyCodingKey(stringValue: "value"))
+      self = .xmlAttribute(file: file, element: element, attribute: attribute, value: value)
 
     default:
       throw HubError.invalid("FixAction: unknown kind \(kind)")
@@ -377,10 +429,11 @@ package enum FixAction: Codable, Equatable, Sendable {
       try container.encode(section, forKey: AnyCodingKey(stringValue: "section"))
       try container.encode(key, forKey: AnyCodingKey(stringValue: "key"))
       try container.encode(value, forKey: AnyCodingKey(stringValue: "value"))
-    case .drive(let letter, let target):
+    case .drive(let letter, let target, let lifetime):
       try container.encode("drive", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(letter, forKey: AnyCodingKey(stringValue: "letter"))
       try container.encode(target, forKey: AnyCodingKey(stringValue: "target"))
+      try container.encode(lifetime, forKey: AnyCodingKey(stringValue: "lifetime"))
     case .arguments(let exe, let append):
       try container.encode("arguments", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(exe, forKey: AnyCodingKey(stringValue: "exe"))
@@ -388,11 +441,12 @@ package enum FixAction: Codable, Equatable, Sendable {
     case .sidecar(let enabled):
       try container.encode("sidecar", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(enabled, forKey: AnyCodingKey(stringValue: "enabled"))
-    case .window(let mode, let size, let enabled):
+    case .window(let mode, let size, let enabled, let exe):
       try container.encode("window", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(mode, forKey: AnyCodingKey(stringValue: "mode"))
       try container.encodeIfPresent(size, forKey: AnyCodingKey(stringValue: "size"))
       try container.encodeIfPresent(enabled, forKey: AnyCodingKey(stringValue: "enabled"))
+      try container.encodeIfPresent(exe, forKey: AnyCodingKey(stringValue: "exe"))
     case .prerequisite(let id):
       try container.encode("prerequisite", forKey: AnyCodingKey(stringValue: "kind"))
       try container.encode(id, forKey: AnyCodingKey(stringValue: "id"))
@@ -401,6 +455,12 @@ package enum FixAction: Codable, Equatable, Sendable {
       try container.encode(exe, forKey: AnyCodingKey(stringValue: "exe"))
       try container.encode(after, forKey: AnyCodingKey(stringValue: "after"))
       try container.encode(readiness, forKey: AnyCodingKey(stringValue: "readiness"))
+    case .xmlAttribute(let file, let element, let attribute, let value):
+      try container.encode("xmlAttribute", forKey: AnyCodingKey(stringValue: "kind"))
+      try container.encode(file, forKey: AnyCodingKey(stringValue: "file"))
+      try container.encode(element, forKey: AnyCodingKey(stringValue: "element"))
+      try container.encode(attribute, forKey: AnyCodingKey(stringValue: "attribute"))
+      try container.encode(value, forKey: AnyCodingKey(stringValue: "value"))
     }
   }
 }
@@ -631,11 +691,12 @@ package struct Fix: Codable, Equatable, Sendable {
   package let requires: [Capability]
   package let actions: [FixAction]
   package let parameters: [FixParameter]
+  package let optIn: Bool
 
   package init(
     id: String, title: String, reason: String, status: FixStatus, evidence: [String],
     appliesWhen: Predicate, requires: [Capability], actions: [FixAction],
-    parameters: [FixParameter] = []
+    parameters: [FixParameter] = [], optIn: Bool = false
   ) {
     self.id = id
     self.title = title
@@ -646,6 +707,7 @@ package struct Fix: Codable, Equatable, Sendable {
     self.requires = requires
     self.actions = actions
     self.parameters = parameters
+    self.optIn = optIn
   }
 
   /// Validates this fix.
@@ -701,6 +763,8 @@ package struct Fix: Codable, Equatable, Sendable {
         field == "value"
       case .registry:
         field == "value"
+      case .xmlAttribute:
+        field == "value"
       default:
         false
       }
@@ -715,7 +779,7 @@ package struct Fix: Codable, Equatable, Sendable {
       decoder,
       allowed: [
         "id", "title", "reason", "status", "evidence", "appliesWhen", "requires", "actions",
-        "parameters"
+        "parameters", "optIn"
       ],
       type: "Fix")
     let container = try decoder.container(keyedBy: AnyCodingKey.self)
@@ -734,5 +798,7 @@ package struct Fix: Codable, Equatable, Sendable {
       [FixAction].self, forKey: AnyCodingKey(stringValue: "actions"))
     self.parameters = try container.decodeIfPresent(
       [FixParameter].self, forKey: AnyCodingKey(stringValue: "parameters")) ?? []
+    self.optIn = try container.decodeIfPresent(
+      Bool.self, forKey: AnyCodingKey(stringValue: "optIn")) ?? false
   }
 }

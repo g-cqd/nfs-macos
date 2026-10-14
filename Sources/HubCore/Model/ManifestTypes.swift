@@ -111,6 +111,7 @@ package struct RuntimeManifest: Codable, Equatable, Sendable {
   package let manifestSHA256: String
   package let keyFiles: [String: String]
   package let capabilities: [CapabilityEvidence]
+  /// Helper binaries, keyed by name; paths are relative to the Runtimes directory.
   package let helpers: [String: Helper]
 
   package init(

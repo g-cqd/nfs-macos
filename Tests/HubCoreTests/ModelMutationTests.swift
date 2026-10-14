@@ -172,7 +172,7 @@ import Testing
   // MARK: - Port validation tests
   @Test func rejectsOutOfRangePort() throws {
     let readiness = Readiness(
-      log: "test.log",
+      log: "{prefix}/test.log",
       startMarker: nil,
       events: [],
       ports: [0],
@@ -185,7 +185,7 @@ import Testing
 
   @Test func rejectsTooManyPorts() throws {
     let readiness = Readiness(
-      log: "test.log",
+      log: "{prefix}/test.log",
       startMarker: nil,
       events: [],
       ports: [1, 2, 3, 4, 5],
@@ -553,21 +553,21 @@ import Testing
 
   // MARK: - Window mode tests
   @Test func rejectsWindowModeWithoutSize() throws {
-    let action = FixAction.window(mode: "virtualDesktop", size: nil, enabled: nil)
+    let action = FixAction.window(mode: "virtualDesktop", size: nil, enabled: nil, exe: "game.exe")
     expectInvalid("FixAction.window") {
       try action.validate()
     }
   }
 
   @Test func rejectsRetinaWithSize() throws {
-    let action = FixAction.window(mode: "retina", size: "1920x1080", enabled: true)
+    let action = FixAction.window(mode: "retina", size: "1920x1080", enabled: true, exe: nil)
     expectInvalid("FixAction.window") {
       try action.validate()
     }
   }
 
   @Test func rejectsRetinaWithoutEnabled() throws {
-    let action = FixAction.window(mode: "retina", size: nil, enabled: nil)
+    let action = FixAction.window(mode: "retina", size: nil, enabled: nil, exe: nil)
     expectInvalid("FixAction.window") {
       try action.validate()
     }
@@ -585,14 +585,14 @@ import Testing
 
   // Drive letter validation
   @Test func rejectsDriveLetterInvalid() throws {
-    let action = FixAction.drive(letter: "a", target: "{hubRoot}")
+    let action = FixAction.drive(letter: "a", target: "{hubRoot}", lifetime: "session")
     expectInvalid("drive.letter") {
       try action.validate()
     }
   }
 
   @Test func rejectsDriveLetterZ() throws {
-    let action = FixAction.drive(letter: "z", target: "{hubRoot}")
+    let action = FixAction.drive(letter: "z", target: "{hubRoot}", lifetime: "session")
     expectInvalid("drive.letter") {
       try action.validate()
     }
@@ -685,7 +685,7 @@ import Testing
       "title": "Test",
       "status": "unverified",
       "launch": {"method": "direct", "arguments": []},
-      "readiness": {"log": "test.log", "ports": [8080], "events": [], "timeoutSeconds": 10, "unknown": "key"}
+      "readiness": {"log": "{prefix}/test.log", "ports": [8080], "events": [], "timeoutSeconds": 10, "unknown": "key"}
     }
     """
     let data = json.data(using: .utf8)!
@@ -704,7 +704,7 @@ import Testing
       "title": "Test",
       "status": "unverified",
       "launch": {"method": "direct", "arguments": []},
-      "readiness": {"log": "test.log", "ports": [8080], "events": [{"state": "ready", "unknown": "key"}], "timeoutSeconds": 10}
+      "readiness": {"log": "{prefix}/test.log", "ports": [8080], "events": [{"state": "ready", "unknown": "key"}], "timeoutSeconds": 10}
     }
     """
     let data = json.data(using: .utf8)!
@@ -1163,7 +1163,7 @@ import Testing
 
   // FixAction.drive validation: letter D (uppercase, invalid)
   @Test func rejectsFixActionDriveLetterUppercaseD() throws {
-    let action = FixAction.drive(letter: "D", target: "{hubRoot}")
+    let action = FixAction.drive(letter: "D", target: "{hubRoot}", lifetime: "session")
     expectInvalid("FixAction.drive.letter: must be d-y") {
       try action.validate()
     }
@@ -1353,7 +1353,7 @@ import Testing
       executable: "test.exe",
       launch: Launch(method: .provider),
       stop: Stop(taskkill: ["test.exe"]),
-      readiness: Readiness(log: "test.log", startMarker: nil, events: [], ports: [], timeoutSeconds: 10)
+      readiness: Readiness(log: "{prefix}/test.log", startMarker: nil, events: [], ports: [], timeoutSeconds: 10)
     )
     try recipe.validate()
   }
@@ -1370,7 +1370,7 @@ import Testing
       "executable": "test.exe",
       "launch": {"method": "provider", "arguments": []},
       "stop": {"taskkill": ["test.exe"]},
-      "readiness": {"log": "test.log", "startMarker": null, "events": [], "timeoutSeconds": 10}
+      "readiness": {"log": "{prefix}/test.log", "startMarker": null, "events": [], "timeoutSeconds": 10}
     }
     """
     let data = json.data(using: .utf8)!
@@ -1419,7 +1419,7 @@ import Testing
 
   @Test func roundTripReadiness() throws {
     let readiness = Readiness(
-      log: "test.log",
+      log: "{prefix}/test.log",
       startMarker: "Started",
       events: [ReadinessEvent(state: .ready, contains: "ready", log: nil)],
       ports: [8080],
