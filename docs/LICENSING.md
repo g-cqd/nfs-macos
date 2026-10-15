@@ -31,7 +31,7 @@ Status of 2026-10-08. The inventory is [THIRD_PARTY.md](../THIRD_PARTY.md), the 
    `-0010` were removed; their commits remain as tags): `nfs2015-runtime-20261008`, `nfs2015-runtime-0005-20261008` and `nfs2015-runtime-0007-20261008` to `nfs2015-runtime-0010-20261008`
    (see [SOURCE-OFFER.md](SOURCE-OFFER.md)).
 5. **The native arm64 build scripts are not published.** `scripts/build-arm64.sh` and the bring-up notes
-   are in the unpublished *wine-arm64* working repository. Publish it, or move the scripts into
+   are now in the published wine repository (`macos-arm64/` of g-cqd/wine; merged 2026-10-15).
    `g-cqd/wine` next to the branches, before an arm64 app is distributed.
 6. **`athei/wine-build` has no licence file.** The build scripts we used (and the retained
    `wine-build-source.tar.gz` that the Most Wanted app ships) are therefore

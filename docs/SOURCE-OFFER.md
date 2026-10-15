@@ -107,7 +107,7 @@ stay under the LGPL-2.1-or-later with the rest of the Wine they modify.
 * **Native arm64 runtime:** configure `--enable-archs=aarch64,i386 --with-mingw=llvm-mingw` with the same
   `--without-*` list as above and `CC="/usr/bin/clang -arch arm64"`, with llvm-mingw 20261006
   (https://github.com/mstorsjo/llvm-mingw, Apache-2.0 with LLVM exceptions) for the PE side. The build
-  script and notes live in the *wine-arm64* bring-up repository (`scripts/build-arm64.sh`,
+  script and notes live in the wine repository's arm64 workspace (`macos-arm64/scripts/build-arm64.sh`,
   `docs/BRINGUP.md`, `SOURCES.md`), **which is not published yet**; the flags above are the complete
   set it uses. Publishing it is an open item.
 * **Replacing a library:** Wine loads GnuTLS, FreeType, SDL, libpng and the other libraries in
