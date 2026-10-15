@@ -7,8 +7,8 @@ Status of 2026-10-08. The inventory is [THIRD_PARTY.md](../THIRD_PARTY.md), the 
 ## Decided
 
 * `rosetta3` (translator, CPU backend, loader, tools, `r3wow64.dll`): **MIT**, Copyright (c) 2026 g-cqd.
-* The Wine patches we carry (`arm64-macos`, `wow64-cpu`, `main`, `nfsmw-macos`, the NFS2015
-  patch series) stay **LGPL-2.1-or-later**, because they are part of Wine. `r3wow64.dll` is a separate
+* The Wine patches we carry (the arm64, `wow64-cpu` and NFSMW lineages, which now live as archive
+  tags on `g-cqd/wine`, plus `main` and the NFS2015 patch series) stay **LGPL-2.1-or-later**, because they are part of Wine. `r3wow64.dll` is a separate
   MIT module that Wine loads through its public WoW64 CPU interface.
 
 ## Open
@@ -27,8 +27,8 @@ Status of 2026-10-08. The inventory is [THIRD_PARTY.md](../THIRD_PARTY.md), the 
    profile (`Packaging/runtime-inputs.json`), and no recipe records which commit it was built from.
    Their corresponding source is therefore not established. Either find and publish the tree, or
    rebuild those apps from a published commit.
-4. **The Need for Speed (2015) Wine tree: resolved.** Published as `g-cqd/wine` branch `nfs2015-runtime-0005` with tags
-   `nfs2015-runtime-20261008`, `nfs2015-runtime-0005-20261008` and `nfs2015-runtime-0007-20261008` to `nfs2015-runtime-0010-20261008`
+4. **The Need for Speed (2015) Wine tree: resolved.** Published as tags on `g-cqd/wine` (the branches `nfs2015-runtime-0005` and
+   `-0010` were removed; their commits remain as tags): `nfs2015-runtime-20261008`, `nfs2015-runtime-0005-20261008` and `nfs2015-runtime-0007-20261008` to `nfs2015-runtime-0010-20261008`
    (see [SOURCE-OFFER.md](SOURCE-OFFER.md)).
 5. **The native arm64 build scripts are not published.** `scripts/build-arm64.sh` and the bring-up notes
    are in the unpublished *wine-arm64* working repository. Publish it, or move the scripts into

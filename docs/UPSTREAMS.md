@@ -4,7 +4,7 @@
 |---|---|---|
 | mtld3d | [g-cqd/mtld3d: main](https://github.com/g-cqd/mtld3d/tree/main) | `7d108a4a7bf983cb0f993ffae2aa39ca159f2c6f` |
 | x87sidecar | [g-cqd/x87sidecar: main](https://github.com/g-cqd/x87sidecar/tree/main) | `c3969379750531fb124859ae742ab4f727f54f9c` |
-| NFS Wine | [g-cqd/wine: nfsmw-macos](https://github.com/g-cqd/wine/tree/nfsmw-macos) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
+| NFS Wine | [g-cqd/wine: archive/nfsmw-macos-20261011](https://github.com/g-cqd/wine/tree/archive/nfsmw-macos-20261011) (formerly branch `nfsmw-macos`) | `f064add996bbf4819acf49f48bab263735279800` (CX26.3 / Wine11.0, cursor recovery) |
 | NFS (2015) Wine, from 2026-10-08 | local patched tree, not published: `athei/wine` `cx-26-patched` `1a7b0c76` plus ten patches | HEAD `be47ba540e2d2a0f5034f5fbd191a94f3dae227e` (base + 10 commits; profile `nfs2015-tf-cx11-rebuild-0010-20261008`; NFS2015.md §28) |
 | WidescreenFixesPack | [ThirteenAG/WidescreenFixesPack](https://github.com/ThirteenAG/WidescreenFixesPack) | Reference `e9550ff793a50744b6569f3cace8ca551680b861`; retained NFS compatibility patch |
 
